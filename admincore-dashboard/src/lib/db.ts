@@ -566,40 +566,13 @@ export function subscribeVIPConfig(cb: (configs: VIPConfig[]) => void) {
 }
 
 export async function updateVIPConfig(tier: number, data: Partial<VIPConfig>) {
-  try {
-    const client = getAdminSupabase() || supabase
-    const payload = { tier, ...toSnakeCase(data as Record<string, unknown>) }
-
-    const existing = await getTableColumns(client, 'vip_config')
-    const filtered: Record<string, unknown> = {}
-    for (const key of Object.keys(payload)) {
-      if (existing.has(key)) {
-        filtered[key] = payload[key]
-      }
-    }
-
-    console.log('VIP save payload keys:', Object.keys(filtered))
-    const { error } = await client.from('vip_config').upsert(filtered)
-    if (error) console.error('VIP save error:', error)
-  } catch (e) {
-    console.warn('updateVIPConfig failed:', e)
-  }
-}
-
-async function getTableColumns(client: any, table: string): Promise<Set<string>> {
-  try {
-    const { data } = await client.from(table).select('*').limit(1)
-    if (data && data.length > 0) {
-      return new Set(Object.keys(data[0]))
-    }
-  } catch {}
-  return new Set([
-    'tier', 'name', 'min_spend', 'price', 'color', 'image_url', 'bg_url', 'logo_url',
-    'medal_url', 'medal_img_url', 'benefits',
-    'headwear_url', 'headwear_img_url',
-    'entrance_url', 'entrance_img_url',
-    'bubble_url', 'bubble_img_url',
-  ])
+  const client = getAdminSupabase() || supabase
+  // Firestore is schemaless — write the full payload. Do NOT filter keys
+  // against an existing doc: new fields would be silently dropped.
+  const payload = { tier, ...toSnakeCase(data as Record<string, unknown>) }
+  console.log('VIP save payload keys:', Object.keys(payload))
+  const { error } = await client.from('vip_config').upsert(payload)
+  if (error) throw new Error(`VIP save failed: ${error.message}`)
 }
 
 // ---- Badges ----

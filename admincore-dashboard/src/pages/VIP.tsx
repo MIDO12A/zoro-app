@@ -54,7 +54,12 @@ export default function VIPPage() {
   const handleSave = async () => {
     if (!editing) return;
     const benefits = items.map(i => i.name).filter(Boolean);
-    await updateVIPConfig(editing.tier, { ...form, benefits });
+    try {
+      await updateVIPConfig(editing.tier, { ...form, benefits });
+    } catch (e: any) {
+      alert(`فشل حفظ VIP ${editing.tier}: ${e?.message || e}\n\nلو الخطأ صلاحيات (permissions): حسابك محتاج يكون أدمن في Firestore (admin_users).`);
+      return;
+    }
     setEditing(null);
     setConfigs(await getVIPConfig());
   };
@@ -62,10 +67,15 @@ export default function VIPPage() {
   const handleAdd = async () => {
     const lastTier = configs.length > 0 ? Math.max(...configs.map(c => c.tier)) : 0;
     const newTier = lastTier + 1;
-    await updateVIPConfig(newTier, {
-      tier: newTier, name: `VIP ${newTier}`, minSpend: newTier * 1000, color: '#DE880F',
-      benefits: [`Access to VIP ${newTier} features`],
-    });
+    try {
+      await updateVIPConfig(newTier, {
+        tier: newTier, name: `VIP ${newTier}`, minSpend: newTier * 1000, color: '#DE880F',
+        benefits: [`Access to VIP ${newTier} features`],
+      });
+    } catch (e: any) {
+      alert(`فشل إضافة VIP: ${e?.message || e}`);
+      return;
+    }
     setConfigs(await getVIPConfig());
   };
 
