@@ -64,7 +64,7 @@ Social audio app (Flutter + Supabase + admin dashboard) with voice rooms, gifts,
 
 ### الرفع يعود إلى Cloudinary (بدل Firebase Storage) ✅
 - **السبب**: `zeroappzero-e1b4a` بدون فواتير (billing) → Firebase Storage لم يُفعّل والـ bucket غير موجود إطلاقاً (`firebase deploy --only storage:rules` يفشل بـ "Storage has not been set up"، وGCS API ترفض إنشاءه بـ `billing ... disabled in state absent`). لا يمكن حل CORS لأن لا يوجد bucket من الأساس.
-- **الحل**: `admincore-dashboard/src/lib/storage.ts` أُعيدت كتابته ليرفع إلى **Cloudinary** بنفس حساب التطبيق Flutter (`cloudName dl30muiuc`, `apiKey 865669713469485`, `apiSecret mnxgBf0IUGLH5UqJaQ4D3TjlHHs`, `upload_preset zero_app`, signed SHA-1). دوال `uploadAny/uploadGiftIcon/...` بنفس التواقيع، ترجع `secure_url`. التطبيق يقرأها عبر `R.cachedImage()` عادياً.
+- **الحل**: `admincore-dashboard/src/lib/storage.ts` أُعيدت كتابته ليرفع إلى **Cloudinary** بنفس حساب التطبيق Flutter (`cloudName dl30muiuc`, `upload_preset zero_app`, unsigned � ??? API Secret ?? ??? hardcoded: ??????? ????? ?? `--dart-define=CLOUDINARY_API_SECRET` ??????? ?? ???? Settings/localStorage). دوال `uploadAny/uploadGiftIcon/...` بنفس التواقيع، ترجع `secure_url`. التطبيق يقرأها عبر `R.cachedImage()` عادياً.
 - ملاحظة: `upload_preset=zero_app` unsigned يُستخدم في التطبيق Flutter عبر `CloudinaryService` — الرفع من اللوحة signed بنفس الـ preset.
 - **إن كان سيفعّل Storage مستقبلاً** (من Firebase Console → Storage → Get Started مع billing): يمكن الرجوع للرفع عبر Firebase Storage بجعل `uploadAny` يستخدم `uploadBytesResumable` مجدداً.
 

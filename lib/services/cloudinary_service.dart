@@ -12,7 +12,10 @@ class CloudinaryService {
 
   static const String _cloudName = 'dl30muiuc';
   static const String _apiKey = '865669713469485';
-  static const String _apiSecret = 'mnxgBf0IUGLH5UqJaQ4D3TjlHHs';
+  // Secret is injected at build time via:
+  //   flutter build apk --dart-define=CLOUDINARY_API_SECRET=<secret>
+  // Never hardcode it here — this repo is public.
+  static const String _apiSecret = String.fromEnvironment('CLOUDINARY_API_SECRET');
 
   String _uploadUrl(CloudinaryResourceType type) {
     final t = type == CloudinaryResourceType.auto ? 'auto' : type.name;
@@ -69,9 +72,10 @@ class CloudinaryService {
     };
     if (publicId != null) params['public_id'] = publicId;
 
-    final signature = _generateSignature(params);
-    params['api_key'] = _apiKey;
-    params['signature'] = signature;
+    if (_apiSecret.isNotEmpty) {
+      params['api_key'] = _apiKey;
+      params['signature'] = _generateSignature(params);
+    }
 
     final url = _uploadUrl(type);
     final request = http.MultipartRequest('POST', Uri.parse(url));

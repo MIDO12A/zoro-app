@@ -3,8 +3,8 @@
 // The returned URL is a secure_url that the app reads normally via R.cachedImage().
 
 const CLOUD_NAME = 'dl30muiuc';
-const API_KEY = '865669713469485';
-const API_SECRET = 'mnxgBf0IUGLH5UqJaQ4D3TjlHHs';
+// Uploads are unsigned (upload_preset only) — no API secret is needed or stored.
+// Configure cloudName/apiKey/apiSecret per-browser from the Settings page if needed.
 const UPLOAD_PRESET = 'zero_app';
 
 interface CloudinaryConfig {
@@ -24,14 +24,14 @@ function getCloudinaryConfig(): CloudinaryConfig {
   }
   return {
     cloudName: localStorage.getItem('cloudinary_cloud_name') || CLOUD_NAME,
-    apiKey: localStorage.getItem('cloudinary_api_key') || API_KEY,
-    apiSecret: localStorage.getItem('cloudinary_api_secret') || API_SECRET,
+    apiKey: localStorage.getItem('cloudinary_api_key') || '',
+    apiSecret: localStorage.getItem('cloudinary_api_secret') || '',
   };
 }
 
 export function getCloudinaryStatus(): { configured: boolean; cloudName: string } {
   const cfg = getCloudinaryConfig();
-  return { configured: !!(cfg.cloudName && cfg.apiKey), cloudName: cfg.cloudName || '' };
+  return { configured: !!cfg.cloudName, cloudName: cfg.cloudName || '' };
 }
 
 export function saveCloudinaryConfig(cloudName: string, apiKey: string, apiSecret: string): void {
