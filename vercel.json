@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npx -y pnpm@10 install --dir admincore-dashboard",
+  "buildCommand": "cd admincore-dashboard && npm run build",
+  "outputDirectory": "admincore-dashboard/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
