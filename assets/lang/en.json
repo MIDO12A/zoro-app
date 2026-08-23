@@ -1,0 +1,17 @@
+{
+  "title": "Rules",
+  "tab1": "Revenue Description",
+  "tab2": "Basic Description",
+  "salaryTitle": "The guild leader's salary is <span class=\"highlight\">divided into two parts</span>:",
+  "salaryPart1": "1. <span class=\"highlight\">Guild's own commission</span>: The guild will calculate the first 30% of the diamonds received by the host on the next day. On the settlement day, the guild's final commission rate will be calculated according to the policy, and the remaining diamond commission will be issued;",
+  "salaryPart2": "2. <span class=\"highlight\">Sub-guild commission</span>: The guild will receive sub-guild commission according to the sub-guild commission policy, and the sub-guild commission diamonds will be automatically issued on the 1st and 16th of each month;",
+  "calculationExample": "Calculation example: Assuming I am Guild S, I have invited 3 guilds A, B, and C. The diamond income of the corresponding hosts (excluding system gifts) are S1, A1, B1, C1. The commission rates of A, B, and C are 30%, 40%, and 50% respectively. Then my sub-guild's commission rate = Level (S1+A1+B1+C1) = 80%. So my sub-guild's commission = A1*(80%-30%)+B1*(80%-40%)+C1*(80%-50%)",
+  "reminder": "<span class=\"highlight\">Reminder: If you do not log in for more than 15 days, you will not receive sub-guild commission</span>",
+  "durationTitle": "Term Explanation:",
+  "durationItem1": "Microphone usage time: Calculated in minutes as the smallest unit. Usage time less than 1 minute is not counted;",
+  "durationItem2": "Active day: If the microphone's timer rate reaches or exceeds 60 minutes on the same day, that day is considered an active day for the host;",
+  "durationItem3": "Active days: The number of times a host has reached an active day within a certain period;",
+  "durationItem4": "Active hosts: A host who completes 1 active day in a day, 4 active days in a week, and 16 active days in a month;",
+  "instructionsTitle": "Member management rules:",
+  "instructionsContent": "On the 4th and 18th of each month, the guild leader can perform the removal operation on the host;"
+}

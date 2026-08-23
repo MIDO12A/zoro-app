@@ -1,0 +1,858 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:restart_app/restart_app.dart' show Restart;
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import '../models/app_asset_model.dart';
+
+class DynamicConfigService extends ChangeNotifier {
+  static final DynamicConfigService _instance = DynamicConfigService._();
+  factory DynamicConfigService() => _instance;
+  DynamicConfigService._();
+
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  StreamSubscription? _authSub;
+  
+  // App Configurations
+  String _appName = 'Zero';
+  String _logoUrl = '';
+  String _splashUrl = '';
+  Color _splashNameColor = const Color(0xFF16151A);
+
+  // VIP global asset overrides
+  String _vipCardBgImgUrl = '';
+  String _vipPurchaseBarImgUrl = '';
+  String _vipCoinImgUrl = '';
+  String _vipBuyBtnImgUrl = '';
+  
+  // Theme colors
+  Color _primaryBg = const Color(0xFFFFFFFF);
+  Color _textPrimary = const Color(0xFF16151A);
+  Color _textSecondary = const Color(0xFF9BA1B6);
+  Color _goldColor = const Color(0xFFDE880F);
+  Color _buttonColor = const Color(0xFF6366F1);
+  Color _buttonTextColor = const Color(0xFFFFFFFF);
+  Color _headerColor = const Color(0xFFFFFFFF);
+  Color _tabBarColor = const Color(0xFFFFFFFF);
+  
+  // Typography & Shape
+  String _fontFamily = 'system';
+  int _borderRadius = 8;
+  
+  // Tab/Page names
+  String _discoverTitle = 'استكشاف';
+  String _messageTitle = 'الرسائل';
+  String _profileTitle = 'حسابي';
+  Map<String, String> _screenTitles = {};
+  
+  // CP WebView URL
+  String _cpWebUrl = 'https://app.ayomet.com/cp.html';
+
+  // Audio configurations
+  String _audioCompany = 'agora'; // Updated to use Agora
+  final int _zegoAppId = 1614503125;
+  final String _agoraAppId = 'eb1f5fe3800f430582a3e07140c27143';
+  final String _agoraToken = '';
+  
+  // Easemob (Chat) configurations
+  final String _easemobAppKey = '61200033730#200046947';
+  final String _easemobOrgName = '61200033730';
+  final String _easemobAppName = '200046947';
+  final String _easemobWsUrl = 'msync-api-61.chat.agora.io';
+  final String _easemobRestUrl = 'a61.chat.agora.io';
+  final String _easemobPrimaryCert = '164d7c36fcd2494ca22a64539be1afb8';
+  final String _easemobSecondaryCert = 'd40ad1b7130241c9968b17e776cd4642';
+
+  // Assets override map (from app_config)
+  Map<String, String> _assetsOverride = {};
+
+  // App assets from app_assets table (primary source for remote_url)
+  Map<String, AppAssetModel> _appAssets = {};
+
+  // Assets size overrides: { "assets_mipmap-xxhdpi_xxx_webp": {"width": 100, "height": 200} }
+  Map<String, Map<String, dynamic>> _assetSizes = {};
+
+  // Raw config map for dynamic access
+  final Map<String, dynamic> _rawConfig = {};
+
+  // Last System message
+  Map<String, dynamic> _lastSystemMessage = {};
+
+  // VIP card colors
+  Color _vipCardBgColor = const Color(0xFF1A3D1A);
+  Color _vipCardBorderColor = const Color(0xFFC9A84C);
+
+  // Level config
+  int _coinsPerRechargeXp = 10;
+
+  // Diamond-to-coin exchange rate (e.g. 2 means 2 diamonds = 1 coin)
+  int _diamondToCoinRate = 2;
+
+  // Room theme gradients (from app_config.roomGradients)
+  Map<String, List<Color>> _roomGradients = {};
+
+  // Chat bubble colors (from app_config.chatColors)
+  Color _chatBubbleSelf = const Color(0x33FFC525);
+  Color _chatBubbleOther = const Color(0x1AFFFFFF);
+  Color _chatBubbleSelfBorder = const Color(0x33FFC525);
+  Color _chatBubbleOtherBorder = const Color(0x1AFFFFFF);
+  Color _chatBubbleSelfText = const Color(0xFFFFC525);
+  Color _chatBubbleOtherText = const Color(0xFFFFFFFF);
+
+  // Screen visuals config (from app_config.screenVisuals)
+  Map<String, dynamic> _screenVisuals = {};
+
+  // Icon overrides: { "Icons.close": "https://cloudinary.url/close.svga", ... }
+  Map<String, String> _iconOverrides = {};
+
+  // Ranking screen config
+  String _rankBg = '';
+  String _rankGoldColor = '#FFD700';
+  String _rankSilverColor = '#C0C0C0';
+  String _rankBronzeColor = '#CD7F32';
+  String _rankPointsColor = '#FFD700';
+  String _rankTrophyIcon = 'emoji_events';
+  String _rankEmptyText = 'No rankings yet';
+  String _rankTextColor = '#FFFFFF';
+  String _rankSubTextColor = '#FFFFFF99';
+
+  // Per-category ranking configs
+  final Map<String, Map<String, String>> _rankCategoryConfigs = {};
+
+  Color rankGoldColorFor(String category) {
+    final cat = _rankCategoryConfigs[category];
+    if (cat != null && cat['goldColor'] != null) return _parseColor(cat['goldColor']!, const Color(0xFFFFD700));
+    return _parseColor(_rankGoldColor, const Color(0xFFFFD700));
+  }
+  Color rankSilverColorFor(String category) {
+    final cat = _rankCategoryConfigs[category];
+    if (cat != null && cat['silverColor'] != null) return _parseColor(cat['silverColor']!, const Color(0xFFC0C0C0));
+    return _parseColor(_rankSilverColor, const Color(0xFFC0C0C0));
+  }
+  Color rankBronzeColorFor(String category) {
+    final cat = _rankCategoryConfigs[category];
+    if (cat != null && cat['bronzeColor'] != null) return _parseColor(cat['bronzeColor']!, const Color(0xFFCD7F32));
+    return _parseColor(_rankBronzeColor, const Color(0xFFCD7F32));
+  }
+  Color rankPointsColorFor(String category) {
+    final cat = _rankCategoryConfigs[category];
+    if (cat != null && cat['pointsColor'] != null) return _parseColor(cat['pointsColor']!, const Color(0xFFFFD700));
+    return _parseColor(_rankPointsColor, const Color(0xFFFFD700));
+  }
+  Color rankTextColorFor(String category) {
+    final cat = _rankCategoryConfigs[category];
+    if (cat != null && cat['textColor'] != null) return _parseColor(cat['textColor']!, Colors.white);
+    return _parseColor(_rankTextColor, Colors.white);
+  }
+  Color rankSubTextColorFor(String category) {
+    final cat = _rankCategoryConfigs[category];
+    if (cat != null && cat['subTextColor'] != null) return _parseColor(cat['subTextColor']!, Colors.white60);
+    return _parseColor(_rankSubTextColor, Colors.white60);
+  }
+  String rankBgFor(String category) {
+    final cat = _rankCategoryConfigs[category];
+    if (cat != null && cat['bg'] != null && cat['bg']!.isNotEmpty) return cat['bg']!;
+    return _rankBg;
+  }
+
+  // Getters (kept for backwards compatibility)
+  String get rankBg => _rankBg;
+  Color get rankGoldColor => _parseColor(_rankGoldColor, const Color(0xFFFFD700));
+  Color get rankSilverColor => _parseColor(_rankSilverColor, const Color(0xFFC0C0C0));
+  Color get rankBronzeColor => _parseColor(_rankBronzeColor, const Color(0xFFCD7F32));
+  Color get rankPointsColor => _parseColor(_rankPointsColor, const Color(0xFFFFD700));
+  String get rankTrophyIcon => _rankTrophyIcon;
+  String get rankEmptyText => _rankEmptyText;
+  Color get rankTextColor => _parseColor(_rankTextColor, Colors.white);
+  Color get rankSubTextColor => _parseColor(_rankSubTextColor, Colors.white60);
+
+  // Getters
+  String get appName => _appName;
+  String get logoUrl => _logoUrl;
+  String get splashUrl => _splashUrl;
+  Color get splashNameColor => _splashNameColor;
+  Color get primaryBg => _primaryBg;
+  Color get textPrimary => _textPrimary;
+  Color get textSecondary => _textSecondary;
+  Color get goldColor => _goldColor;
+  Color get buttonColor => _buttonColor;
+  Color get buttonTextColor => _buttonTextColor;
+  Color get headerColor => _headerColor;
+  Color get tabBarColor => _tabBarColor;
+  String get fontFamily => _fontFamily;
+  int get borderRadius => _borderRadius;
+  String get discoverTitle => _discoverTitle;
+  String get messageTitle => _messageTitle;
+  String get profileTitle => _profileTitle;
+  Map<String, String> get screenTitles => _screenTitles;
+  String getScreenTitle(String key, String fallback) => _screenTitles[key] ?? fallback;
+  String get cpWebUrl => _cpWebUrl;
+  String get audioCompany => _audioCompany;
+  int get zegoAppId => _zegoAppId;
+  String get agoraAppId => _agoraAppId;
+  String get agoraToken => _agoraToken;
+  String get easemobAppKey => _easemobAppKey;
+  String get easemobOrgName => _easemobOrgName;
+  String get easemobAppName => _easemobAppName;
+  String get easemobWsUrl => _easemobWsUrl;
+  String get easemobRestUrl => _easemobRestUrl;
+  String get easemobPrimaryCert => _easemobPrimaryCert;
+  String get easemobSecondaryCert => _easemobSecondaryCert;
+  Map<String, String> get assetsOverride => _assetsOverride;
+  Map<String, AppAssetModel> get appAssets => _appAssets;
+  Map<String, Map<String, dynamic>> get assetSizes => _assetSizes;
+  Map<String, dynamic> get lastSystemMessage => _lastSystemMessage;
+  Color get vipCardBgColor => _vipCardBgColor;
+  Color get vipCardBorderColor => _vipCardBorderColor;
+  String get vipCardBgImgUrl => _vipCardBgImgUrl;
+  String get vipPurchaseBarImgUrl => _vipPurchaseBarImgUrl;
+  String get vipCoinImgUrl => _vipCoinImgUrl;
+  String get vipBuyBtnImgUrl => _vipBuyBtnImgUrl;
+  int get coinsPerRechargeXp => _coinsPerRechargeXp;
+  int get diamondToCoinRate => _diamondToCoinRate;
+
+  // Room gradient getter (returns gradient if found, null otherwise)
+  List<Color>? getRoomGradient(String key) => _roomGradients[key];
+
+  // Chat bubble color getters
+  Color get chatBubbleSelf => _chatBubbleSelf;
+  Color get chatBubbleOther => _chatBubbleOther;
+  Color get chatBubbleSelfBorder => _chatBubbleSelfBorder;
+  Color get chatBubbleOtherBorder => _chatBubbleOtherBorder;
+  Color get chatBubbleSelfText => _chatBubbleSelfText;
+  Color get chatBubbleOtherText => _chatBubbleOtherText;
+
+  // Screen visuals getter
+  Map<String, dynamic> get screenVisuals => _screenVisuals;
+
+  // Icon override getter + lookup
+  Map<String, String> get iconOverrides => _iconOverrides;
+  String? getIconOverride(String iconKey) => _iconOverrides[iconKey];
+
+  // Helper: get a value from a specific screen in screenVisuals
+  String _screenStr(String screen, String field, String fallback) {
+    final s = _screenVisuals[screen];
+    if (s is Map) {
+      final v = s[field];
+      if (v != null) return v.toString();
+    }
+    return fallback;
+  }
+
+  Color _screenColor(String screen, String field, Color fallback) {
+    final s = _screenVisuals[screen];
+    if (s is Map) {
+      final v = s[field];
+      if (v != null) return _parseColor(v.toString(), fallback);
+    }
+    return fallback;
+  }
+
+  // Agency screen visuals
+  Color get agencyHeaderBg => _screenColor('agency', 'headerBgColor', const Color(0xFF1a1a2e));
+  Color get agencyHeaderText => _screenColor('agency', 'headerTextColor', Colors.white);
+  Color get agencyCardBg => _screenColor('agency', 'cardBgColor', const Color(0xFF16213e));
+  Color get agencyCardBorder => _screenColor('agency', 'cardBorderColor', const Color(0xFF0f3460));
+  Color get agencyTextColor => _screenColor('agency', 'textColor', Colors.white);
+  Color get agencySubText => _screenColor('agency', 'subTextColor', const Color(0xFFa0a0b0));
+  Color get agencyAccent => _screenColor('agency', 'accentColor', const Color(0xFFe94560));
+  String get agencyBackgroundImage => _screenStr('agency', 'backgroundImage', '');
+  String get agencyCheckboxChecked => _screenStr('agency', 'checkboxCheckedImage', '');
+  String get agencyCheckboxUnchecked => _screenStr('agency', 'checkboxUncheckedImage', '');
+  String get agencyCoinIcon => _screenStr('agency', 'coinIcon', '');
+  String get agencyDiamondIcon => _screenStr('agency', 'diamondIcon', '');
+  String get agencyRankIcon => _screenStr('agency', 'rankIcon', '');
+  Color get agencyTabActive => _screenColor('agency', 'tabActiveColor', const Color(0xFFe94560));
+  Color get agencyTabInactive => _screenColor('agency', 'tabInactiveColor', const Color(0xFF555555));
+
+  // Badges screen visuals
+  Color get badgesHeaderBg => _screenColor('badges', 'headerBgColor', const Color(0xFF1a1a2e));
+  String get badgesHeaderBgImage => _screenStr('badges', 'headerBgImage', '');
+  Color get badgesHeaderText => _screenColor('badges', 'headerTextColor', Colors.white);
+  String get badgesHeaderTextImage => _screenStr('badges', 'headerTextImage', '');
+  Color get badgesCardBg => _screenColor('badges', 'cardBgColor', const Color(0xFF16213e));
+  String get badgesCardBgImage => _screenStr('badges', 'cardBgImage', '');
+  Color get badgesCardBorder => _screenColor('badges', 'cardBorderColor', const Color(0xFF0f3460));
+  String get badgesCardBorderImage => _screenStr('badges', 'cardBorderImage', '');
+  Color get badgesTextColor => _screenColor('badges', 'textColor', Colors.white);
+  String get badgesTextImage => _screenStr('badges', 'textImage', '');
+  Color get badgesSubText => _screenColor('badges', 'subTextColor', const Color(0xFFa0a0b0));
+  String get badgesSubTextImage => _screenStr('badges', 'subTextImage', '');
+  Color get badgesAccent => _screenColor('badges', 'accentColor', const Color(0xFFf0c724));
+  String get badgesAccentImage => _screenStr('badges', 'accentImage', '');
+  String get badgesBackgroundImage => _screenStr('badges', 'backgroundImage', '');
+  Color get badgesSectionBg => _screenColor('badges', 'sectionBgColor', const Color(0xFF0d0d12));
+  String get badgesSectionBgImage => _screenStr('badges', 'sectionBgImage', '');
+  Color get badgesBorderColor => _screenColor('badges', 'badgeBorderColor', const Color(0xFFf0c724));
+  String get badgesBorderImage => _screenStr('badges', 'badgeBorderImage', '');
+  Color get badgesItemBg => _screenColor('badges', 'badgeBgColor', const Color(0xFF1a1a2e));
+  String get badgesItemBgImage => _screenStr('badges', 'badgeBgImage', '');
+  String get badgesLockImage => _screenStr('badges', 'lockImage', '');
+
+  // Necklaces screen visuals
+  Color get necklacesHeaderBg => _screenColor('necklaces', 'headerBgColor', const Color(0xFF1a1a2e));
+  String get necklacesHeaderBgImage => _screenStr('necklaces', 'headerBgImage', '');
+  Color get necklacesHeaderText => _screenColor('necklaces', 'headerTextColor', Colors.white);
+  String get necklacesHeaderTextImage => _screenStr('necklaces', 'headerTextImage', '');
+  Color get necklacesCardBg => _screenColor('necklaces', 'cardBgColor', const Color(0xFF16213e));
+  String get necklacesCardBgImage => _screenStr('necklaces', 'cardBgImage', '');
+  Color get necklacesCardBorder => _screenColor('necklaces', 'cardBorderColor', const Color(0xFF0f3460));
+  String get necklacesCardBorderImage => _screenStr('necklaces', 'cardBorderImage', '');
+  Color get necklacesTextColor => _screenColor('necklaces', 'textColor', Colors.white);
+  String get necklacesTextImage => _screenStr('necklaces', 'textImage', '');
+  Color get necklacesSubText => _screenColor('necklaces', 'subTextColor', const Color(0xFFa0a0b0));
+  String get necklacesSubTextImage => _screenStr('necklaces', 'subTextImage', '');
+  Color get necklacesAccent => _screenColor('necklaces', 'accentColor', const Color(0xFFe94560));
+  String get necklacesAccentImage => _screenStr('necklaces', 'accentImage', '');
+  String get necklacesBackgroundImage => _screenStr('necklaces', 'backgroundImage', '');
+  Color get necklacesSectionBg => _screenColor('necklaces', 'sectionBgColor', const Color(0xFF0d0d12));
+  String get necklacesSectionBgImage => _screenStr('necklaces', 'sectionBgImage', '');
+  Color get necklacesBorderColor => _screenColor('necklaces', 'necklaceBorderColor', const Color(0xFFe94560));
+  String get necklacesBorderImage => _screenStr('necklaces', 'necklaceBorderImage', '');
+  Color get necklacesItemBg => _screenColor('necklaces', 'necklaceBgColor', const Color(0xFF1a1a2e));
+  String get necklacesItemBgImage => _screenStr('necklaces', 'necklaceBgImage', '');
+  String get necklacesLockImage => _screenStr('necklaces', 'lockImage', '');
+
+  // CP screen visuals
+  Color get cpPrimaryColor => _screenColor('cp', 'primaryColor', const Color(0xFFE91E8C));
+  Color get cpGradientStart => _screenColor('cp', 'gradientStart', const Color(0xFFE91E8C));
+  Color get cpGradientEnd => _screenColor('cp', 'gradientEnd', const Color(0xFFFF4FA3));
+  Color get cpHeaderBg => _screenColor('cp', 'headerBgColor', const Color(0xFFE91E8C));
+  Color get cpHeaderText => _screenColor('cp', 'headerTextColor', Colors.white);
+  Color get cpCardBg => _screenColor('cp', 'cardBgColor', Colors.white);
+  Color get cpCardBorder => _screenColor('cp', 'cardBorderColor', const Color(0xFFE91E8C));
+  Color get cpTextColor => _screenColor('cp', 'textColor', const Color(0xFF5D1A3A));
+  Color get cpSubText => _screenColor('cp', 'subTextColor', const Color(0xFFa0a0b0));
+  Color get cpAccent => _screenColor('cp', 'accentColor', const Color(0xFFFF4FA3));
+  Color get cpGold => _screenColor('cp', 'goldColor', const Color(0xFFFFD700));
+  Color get cpSilver => _screenColor('cp', 'silverColor', const Color(0xFFC0C0C0));
+  Color get cpBronze => _screenColor('cp', 'bronzeColor', const Color(0xFFCD7F32));
+  Color get cpSectionBg => _screenColor('cp', 'sectionBgColor', const Color(0xFFFCE4EC));
+  Color get cpTabActiveColor => _screenColor('cp', 'tabActiveColor', const Color(0xFFE91E8C));
+  Color get cpTabInactiveColor => _screenColor('cp', 'tabInactiveColor', const Color(0xFFFFFFFF));
+  Color get cpTabBgColor => _screenColor('cp', 'tabBgColor', const Color(0xFFE91E8C));
+  String get cpTabBgImage => _screenStr('cp', 'tabBgImage', '');
+  Color get cpCountdownTextColor => _screenColor('cp', 'countdownTextColor', const Color(0xFFE91E8C));
+  Color get cpCountdownLabelColor => _screenColor('cp', 'countdownLabelColor', const Color(0xFF000000));
+  Color get cpInvitationBgColor => _screenColor('cp', 'invitationBgColor', Colors.white);
+  Color get cpButtonColor => _screenColor('cp', 'buttonColor', const Color(0xFFE91E8C));
+  Color get cpButtonTextColor => _screenColor('cp', 'buttonTextColor', Colors.white);
+  Color get cpButtonOutlineColor => _screenColor('cp', 'buttonOutlineColor', const Color(0xFFE91E8C));
+  Color get cpGiftGradientStart => _screenColor('cp', 'giftButtonGradientStart', const Color(0xFFFF4FA3));
+  Color get cpGiftGradientEnd => _screenColor('cp', 'giftButtonGradientEnd', const Color(0xFFE91E8C));
+  Color get cpSectionHeaderColor => _screenColor('cp', 'sectionHeaderColor', const Color(0xFFE91E8C));
+  Color get cpAvatarBorderColor => _screenColor('cp', 'avatarBorderColor', const Color(0xFFE91E8C));
+  Color get cpScoreTokenColor => _screenColor('cp', 'scoreTokenColor', const Color(0xFFFFD700));
+  Color get cpScoreTokenLabelColor => _screenColor('cp', 'scoreTokenLabelColor', Colors.white70);
+  Color get cpScoreTokenBgColor => _screenColor('cp', 'scoreTokenBgColor', const Color(0xFFE91E8C));
+  Color get cpPodiumBgStart => _screenColor('cp', 'podiumBgStart', const Color(0xFFFCE4EC));
+  Color get cpPodiumBgEnd => _screenColor('cp', 'podiumBgEnd', Colors.white);
+  Color get cpPeriodButtonActiveBg => _screenColor('cp', 'periodButtonActiveBg', const Color(0xFFE91E8C));
+  Color get cpPeriodButtonActiveText => _screenColor('cp', 'periodButtonActiveText', Colors.white);
+  Color get cpPeriodButtonInactiveBg => _screenColor('cp', 'periodButtonInactiveBg', const Color(0xFF00000D));
+  Color get cpPeriodButtonInactiveText => _screenColor('cp', 'periodButtonInactiveText', const Color(0xFF00000073));
+  Color get cpRankItemBg => _screenColor('cp', 'rankItemBg', Colors.white);
+  Color get cpRankShadowColor => _screenColor('cp', 'rankShadowColor', const Color(0xFFE91E8C));
+  Color get cpMyRankPillGradientStart => _screenColor('cp', 'myRankPillGradientStart', const Color(0xFFFF4FA3));
+  Color get cpMyRankPillGradientEnd => _screenColor('cp', 'myRankPillGradientEnd', const Color(0xFFE91E8C));
+  Color get cpMyRankPillText => _screenColor('cp', 'myRankPillText', Colors.white70);
+  Color get cpMyRankScoreColor => _screenColor('cp', 'myRankScoreColor', const Color(0xFFFFD700));
+  String get cpBackgroundImage => _screenStr('cp', 'backgroundImage', '');
+  String get cpCabinBg => _screenStr('cp', 'cabinBg', '');
+  String get cpCabinDefaultBg => _screenStr('cp', 'cabinDefaultBg', '');
+  String get cpLeftFrame => _screenStr('cp', 'leftFrame', '');
+  String get cpRightFrame => _screenStr('cp', 'rightFrame', '');
+  String get cpHeartImage => _screenStr('cp', 'heartImage', '');
+  String get cpNoCpHeartSvg => _screenStr('cp', 'noCpHeartSvg', '');
+  String get cpTokenBg => _screenStr('cp', 'tokenBg', '');
+  String get cpMineBg => _screenStr('cp', 'mineBg', '');
+  String get cpCountdownDaySvg => _screenStr('cp', 'countdownDaySvg', '');
+  String get cpCountdownHourSvg => _screenStr('cp', 'countdownHourSvg', '');
+  String get cpCountdownMinSvg => _screenStr('cp', 'countdownMinSvg', '');
+  String get cpCountdownSecSvg => _screenStr('cp', 'countdownSecSvg', '');
+  String get cpRankTagGoldSvg => _screenStr('cp', 'rankTagGoldSvg', '');
+  String get cpRankTagSilverSvg => _screenStr('cp', 'rankTagSilverSvg', '');
+  String get cpRankTagBronzeSvg => _screenStr('cp', 'rankTagBronzeSvg', '');
+  String get cpHistoryCardSvg => _screenStr('cp', 'historyCardSvg', '');
+  String get cpGiftsBannerSvg => _screenStr('cp', 'giftsBannerSvg', '');
+  String get cpInvitationBgImage => _screenStr('cp', 'invitationBgImage', '');
+  String get cpFullScreenBg => _screenStr('cp', 'fullScreenBg', '');
+  String get cpHeaderBgImage => _screenStr('cp', 'headerBgImage', '');
+  // Profile CP card colors (used in user_profile_screen CP section)
+  Color get cpProfileDaysBadgeBg => _screenColor('cp', 'profileDaysBadgeBg', const Color(0xFF260105));
+  Color get cpProfileDaysBadgeBorder => _screenColor('cp', 'profileDaysBadgeBorder', const Color(0xFF81050f));
+  Color get cpProfileDaysBadgeBg2 => _screenColor('cp', 'profileDaysBadgeBg2', const Color(0xFFa40b25));
+  Color get cpProfileDaysBadgeBorder2 => _screenColor('cp', 'profileDaysBadgeBorder2', const Color(0xFFe73d46));
+  Color get cpProfileDaysText => _screenColor('cp', 'profileDaysText', const Color(0xFFb3b3b3));
+  Color get cpProfileDaysTogetherText => _screenColor('cp', 'profileDaysTogetherText', const Color(0xFFcccccc));
+  Color get cpProfileLevelGradientStart => _screenColor('cp', 'profileLevelGradientStart', const Color(0xFFfff19f));
+  Color get cpProfileLevelGradientEnd => _screenColor('cp', 'profileLevelGradientEnd', const Color(0xFFffb565));
+  String get cpProfileHeartIcon => _screenStr('cp', 'profileHeartIcon', 'assets/cp/ic_cp_val_heart.png');
+  String get cpProfileLevelBg => _screenStr('cp', 'profileLevelBg', 'assets/cp/ic_rs_lv_bg_cp.png');
+  String get cpProfileNameFrame => _screenStr('cp', 'profileNameFrame', 'assets/cp/ic_send_invitation_name_frame.png');
+  String get cpProfileTopBgSvga => _screenStr('cp', 'profileTopBgSvga', 'assets/svga/relationship_act_top_bg.svga');
+
+  // Sign-in screen visuals
+  String get signinBackgroundImage => _screenStr('signin', 'backgroundImage', '');
+  Color get signinHeaderBgColor => _screenColor('signin', 'headerBgColor', const Color(0xFF2e0d15));
+  String get signinHeaderBgImage => _screenStr('signin', 'headerBgImage', '');
+  Color get signinHeaderTextColor => _screenColor('signin', 'headerTextColor', const Color(0xFFFFD700));
+  String get signinHeaderTextImage => _screenStr('signin', 'headerTextImage', '');
+  Color get signinCardBgColor => _screenColor('signin', 'cardBgColor', const Color(0xFF3d1520));
+  String get signinCardBgImage => _screenStr('signin', 'cardBgImage', '');
+  Color get signinCardBorderColor => _screenColor('signin', 'cardBorderColor', const Color(0xFFDE880F));
+  String get signinCardBorderImage => _screenStr('signin', 'cardBorderImage', '');
+  Color get signinTextColor => _screenColor('signin', 'textColor', const Color(0xFFFFFFFF));
+  String get signinTextImage => _screenStr('signin', 'textImage', '');
+  Color get signinSubTextColor => _screenColor('signin', 'subTextColor', const Color(0xFFB8A88A));
+  String get signinSubTextImage => _screenStr('signin', 'subTextImage', '');
+  Color get signinAccentColor => _screenColor('signin', 'accentColor', const Color(0xFFFFD700));
+  String get signinAccentImage => _screenStr('signin', 'accentImage', '');
+  Color get signinGoldColor => _screenColor('signin', 'goldColor', const Color(0xFFFFD700));
+  Color get signinButtonColor => _screenColor('signin', 'buttonColor', const Color(0xFFDE880F));
+  Color get signinButtonTextColor => _screenColor('signin', 'buttonTextColor', const Color(0xFFFFFFFF));
+  Color get signinButtonGradientStart => _screenColor('signin', 'buttonGradientStart', const Color(0xFFFFD700));
+  Color get signinButtonGradientEnd => _screenColor('signin', 'buttonGradientEnd', const Color(0xFFDE880F));
+  Color get signinDayBgColor => _screenColor('signin', 'dayBgColor', const Color(0xFF3d1520));
+  Color get signinDayActiveColor => _screenColor('signin', 'dayActiveColor', const Color(0xFF5a2030));
+  Color get signinDayClaimedColor => _screenColor('signin', 'dayClaimedColor', const Color(0xFF1a4a1a));
+  Color get signinDayLockedColor => _screenColor('signin', 'dayLockedColor', const Color(0xFF2a1018));
+  Color get signinDayBorderColor => _screenColor('signin', 'dayBorderColor', const Color(0xFFDE880F));
+  Color get signinDayClaimedBorderColor => _screenColor('signin', 'dayClaimedBorderColor', const Color(0xFF4CAF50));
+  String get signinCheckmarkImage => _screenStr('signin', 'checkmarkImage', '');
+  String get signinLockImage => _screenStr('signin', 'lockImage', '');
+  String get signinStreakIcon => _screenStr('signin', 'streakIcon', '');
+  String get signinTopBgSvga => _screenStr('signin', 'topBgSvga', '');
+  String get signinButtonImage => _screenStr('signin', 'buttonImage', '');
+  Color get signinSectionBgColor => _screenColor('signin', 'sectionBgColor', const Color(0xFF2e0d15));
+  String get signinSectionBgImage => _screenStr('signin', 'sectionBgImage', '');
+
+  // Rank screen visuals
+
+  // Checkbox images
+  String get checkboxChecked => _screenStr('checkbox', 'checkedImage', '');
+  String get checkboxUnchecked => _screenStr('checkbox', 'uncheckedImage', '');
+
+  // Store screen visuals
+  String get storeBackgroundImage => _screenStr('store', 'backgroundImage', '');
+  Color get storeHeaderBgColor => _screenColor('store', 'headerBgColor', const Color(0xFF1a1a2e));
+  String get storeHeaderBgImage => _screenStr('store', 'headerBgImage', '');
+  Color get storeHeaderTextColor => _screenColor('store', 'headerTextColor', Colors.white);
+  String get storeHeaderTextImage => _screenStr('store', 'headerTextImage', '');
+  Color get storeCardBgColor => _screenColor('store', 'cardBgColor', const Color(0xFF16151A));
+  String get storeCardBgImage => _screenStr('store', 'cardBgImage', '');
+  Color get storeCardBorderColor => _screenColor('store', 'cardBorderColor', Colors.white);
+  String get storeCardBorderImage => _screenStr('store', 'cardBorderImage', '');
+  Color get storeTextColor => _screenColor('store', 'textColor', Colors.white);
+  String get storeTextImage => _screenStr('store', 'textImage', '');
+  Color get storeSubTextColor => _screenColor('store', 'subTextColor', const Color(0xFF9BA1B6));
+  String get storeSubTextImage => _screenStr('store', 'subTextImage', '');
+  Color get storeAccentColor => _screenColor('store', 'accentColor', const Color(0xFFDE880F));
+  String get storeAccentImage => _screenStr('store', 'accentImage', '');
+  String get storeLockImage => _screenStr('store', 'lockImage', '');
+  Color get storeSectionBgColor => _screenColor('store', 'sectionBgColor', const Color(0xFF0d0d12));
+  String get storeSectionBgImage => _screenStr('store', 'sectionBgImage', '');
+
+  // Backpack screen visuals
+  String get backpackBackgroundImage => _screenStr('backpack', 'backgroundImage', '');
+  Color get backpackHeaderBgColor => _screenColor('backpack', 'headerBgColor', const Color(0xFF1a1a2e));
+  String get backpackHeaderBgImage => _screenStr('backpack', 'headerBgImage', '');
+  Color get backpackHeaderTextColor => _screenColor('backpack', 'headerTextColor', Colors.white);
+  String get backpackHeaderTextImage => _screenStr('backpack', 'headerTextImage', '');
+  Color get backpackCardBgColor => _screenColor('backpack', 'cardBgColor', const Color(0xFF16151A));
+  String get backpackCardBgImage => _screenStr('backpack', 'cardBgImage', '');
+  Color get backpackCardBorderColor => _screenColor('backpack', 'cardBorderColor', Colors.white);
+  String get backpackCardBorderImage => _screenStr('backpack', 'cardBorderImage', '');
+  Color get backpackTextColor => _screenColor('backpack', 'textColor', Colors.white);
+  String get backpackTextImage => _screenStr('backpack', 'textImage', '');
+  Color get backpackSubTextColor => _screenColor('backpack', 'subTextColor', const Color(0xFF9BA1B6));
+  String get backpackSubTextImage => _screenStr('backpack', 'subTextImage', '');
+  Color get backpackAccentColor => _screenColor('backpack', 'accentColor', const Color(0xFFDE880F));
+  String get backpackAccentImage => _screenStr('backpack', 'accentImage', '');
+  String get backpackLockImage => _screenStr('backpack', 'lockImage', '');
+  Color get backpackSectionBgColor => _screenColor('backpack', 'sectionBgColor', const Color(0xFF0d0d12));
+  String get backpackSectionBgImage => _screenStr('backpack', 'sectionBgImage', '');
+
+  // Wallet screen visuals
+  String get walletBackgroundImage => _screenStr('wallet', 'backgroundImage', '');
+  Color get walletHeaderBgColor => _screenColor('wallet', 'headerBgColor', const Color(0xFF1a1a2e));
+  String get walletHeaderBgImage => _screenStr('wallet', 'headerBgImage', '');
+  Color get walletHeaderTextColor => _screenColor('wallet', 'headerTextColor', Colors.white);
+  String get walletHeaderTextImage => _screenStr('wallet', 'headerTextImage', '');
+  Color get walletCardBgColor => _screenColor('wallet', 'cardBgColor', const Color(0xFF16151A));
+  String get walletCardBgImage => _screenStr('wallet', 'cardBgImage', '');
+  Color get walletCardBorderColor => _screenColor('wallet', 'cardBorderColor', Colors.white);
+  String get walletCardBorderImage => _screenStr('wallet', 'cardBorderImage', '');
+  Color get walletTextColor => _screenColor('wallet', 'textColor', Colors.white);
+  String get walletTextImage => _screenStr('wallet', 'textImage', '');
+  Color get walletSubTextColor => _screenColor('wallet', 'subTextColor', const Color(0xFF9BA1B6));
+  String get walletSubTextImage => _screenStr('wallet', 'subTextImage', '');
+  Color get walletAccentColor => _screenColor('wallet', 'accentColor', const Color(0xFFDE880F));
+  String get walletAccentImage => _screenStr('wallet', 'accentImage', '');
+  String get walletLockImage => _screenStr('wallet', 'lockImage', '');
+  Color get walletSectionBgColor => _screenColor('wallet', 'sectionBgColor', const Color(0xFF0d0d12));
+  String get walletSectionBgImage => _screenStr('wallet', 'sectionBgImage', '');
+
+  // Level screen visuals
+  String get levelBackgroundImage => _screenStr('level', 'backgroundImage', '');
+  Color get levelHeaderBgColor => _screenColor('level', 'headerBgColor', const Color(0xFF1a1a2e));
+  String get levelHeaderBgImage => _screenStr('level', 'headerBgImage', '');
+  Color get levelHeaderTextColor => _screenColor('level', 'headerTextColor', Colors.white);
+  String get levelHeaderTextImage => _screenStr('level', 'headerTextImage', '');
+  Color get levelCardBgColor => _screenColor('level', 'cardBgColor', const Color(0xFF1a1a2e));
+  String get levelCardBgImage => _screenStr('level', 'cardBgImage', '');
+  Color get levelCardBorderColor => _screenColor('level', 'cardBorderColor', const Color(0xFF0f3460));
+  String get levelCardBorderImage => _screenStr('level', 'cardBorderImage', '');
+  Color get levelTextColor => _screenColor('level', 'textColor', Colors.white);
+  String get levelTextImage => _screenStr('level', 'textImage', '');
+  Color get levelSubTextColor => _screenColor('level', 'subTextColor', const Color(0xFFa0a0b0));
+  String get levelSubTextImage => _screenStr('level', 'subTextImage', '');
+  Color get levelAccentColor => _screenColor('level', 'accentColor', const Color(0xFFf0c724));
+  String get levelAccentImage => _screenStr('level', 'accentImage', '');
+  String get levelLockImage => _screenStr('level', 'lockImage', '');
+  Color get levelSectionBgColor => _screenColor('level', 'sectionBgColor', const Color(0xFF0d0d12));
+  String get levelSectionBgImage => _screenStr('level', 'sectionBgImage', '');
+
+  int _assetVersion = 0;
+  int get assetVersion => _assetVersion;
+
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _configSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _appAssetsSub;
+  Completer<void>? _initCompleter;
+  Completer<void>? _initAssetsCompleter;
+
+  bool get hasValidSession => _auth.currentUser != null;
+
+  // Initialize and listen to app_config
+  Future<void> init() async {
+    _initCompleter = Completer<void>();
+    // Cancel any existing subscriptions (safety for hot restart)
+    _configSub?.cancel();
+    _appAssetsSub?.cancel();
+    _authSub?.cancel();
+    // Re-subscribe when auth state changes (Firestore streams handle their own auth)
+    _authSub = _auth.authStateChanges().listen((user) {
+      if (user == null) {
+        debugPrint('DynamicConfigService: signed out, cancelling subscriptions');
+        _configSub?.cancel();
+        _appAssetsSub?.cancel();
+      } else {
+        debugPrint('DynamicConfigService: signed in, reconnecting subscriptions...');
+        _configSub?.cancel();
+        _appAssetsSub?.cancel();
+        _setupConfigStream();
+        _setupAppAssetsStream();
+      }
+    });
+
+    _setupConfigStream();
+    _initAssetsCompleter = Completer<void>();
+    _setupAppAssetsStream();
+
+    // Wait for both config and assets first data, or timeout after 10s.
+    // Never throw here: a timeout (offline / signed-out) must not block startup.
+    try {
+      await Future.any([
+        _initCompleter!.future.timeout(const Duration(seconds: 10)),
+        _initAssetsCompleter!.future.timeout(const Duration(seconds: 10)),
+      ]);
+    } catch (e) {
+      debugPrint('DynamicConfigService: init timed out, continuing with defaults: $e');
+    }
+  }
+
+  void _setupAppAssetsStream() {
+    _appAssetsSub = _db.collection('app_assets').snapshots().listen((snap) {
+      final assets = <String, AppAssetModel>{};
+      for (final doc in snap.docs) {
+        final row = doc.data();
+        if (row['is_active'] != false) {
+          final asset = AppAssetModel.fromJson(row);
+          if (asset.key.isNotEmpty) {
+            assets[asset.key] = asset;
+            final old = _appAssets[asset.key];
+            if (old != null && old.remoteUrl != null) {
+              final oldUrl = old.remoteUrl!;
+              final newUrl = asset.remoteUrl ?? '';
+              if (oldUrl != newUrl && newUrl.isNotEmpty) {
+                imageCache.evict(CachedNetworkImageProvider(oldUrl));
+                DefaultCacheManager().removeFile(oldUrl);
+                debugPrint('DynamicConfigService: evicted cache for ${asset.key}');
+              }
+            }
+          }
+        }
+      }
+      _appAssets = assets;
+      _assetVersion++;
+      if (_initAssetsCompleter != null && !_initAssetsCompleter!.isCompleted) {
+        _initAssetsCompleter!.complete();
+      }
+      notifyListeners();
+    }, onError: (error) {
+      debugPrint('DynamicConfigService: app_assets stream error: $error');
+      if (_initAssetsCompleter != null && !_initAssetsCompleter!.isCompleted) {
+        _initAssetsCompleter!.complete();
+      }
+      final errorStr = error.toString();
+      if (errorStr.contains('permission-denied') || errorStr.contains('Unauthenticated')) {
+        debugPrint('DynamicConfigService: permissions error detected, stopping retry. Waiting for sign-in...');
+        return;
+      }
+      Future.delayed(const Duration(seconds: 5), () {
+        debugPrint('DynamicConfigService: reconnecting app_assets stream...');
+        _appAssetsSub?.cancel();
+        _setupAppAssetsStream();
+      });
+    });
+  }
+
+  void _setupConfigStream() {
+    _configSub = _db.collection('app_config').snapshots().listen((snap) {
+      final config = <String, dynamic>{};
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final k = doc.id;
+        final v = data['value'];
+        if (v is String) {
+          final parsed = _tryParseJson(v);
+          config[k] = parsed ?? v;
+        } else {
+          config[k] = v;
+        }
+      }
+
+      _rawConfig.clear();
+      _rawConfig.addAll(config);
+
+      _appName = config['appName'] as String? ?? _appName;
+      _logoUrl = config['logoUrl'] as String? ?? _logoUrl;
+      _splashUrl = config['splashGifUrl'] as String? ?? _splashUrl;
+      _splashNameColor = _parseColor(config['splashNameColor'], _splashNameColor);
+
+      _primaryBg = _parseColor(config['primaryBg'], _primaryBg);
+      _textPrimary = _parseColor(config['textPrimary'], _textPrimary);
+      _textSecondary = _parseColor(config['textSecondary'], _textSecondary);
+      _goldColor = _parseColor(config['goldColor'], _goldColor);
+      _buttonColor = _parseColor(config['buttonColor'], _buttonColor);
+      _buttonTextColor = _parseColor(config['buttonTextColor'], _buttonTextColor);
+      _headerColor = _parseColor(config['headerColor'], _headerColor);
+      _tabBarColor = _parseColor(config['tabBarColor'], _tabBarColor);
+
+      _fontFamily = config['fontFamily'] as String? ?? _fontFamily;
+      _borderRadius = (config['borderRadius'] as num?)?.toInt() ?? _borderRadius;
+
+      _vipCardBgColor = _parseColor(config['vipCardBgColor'], _vipCardBgColor);
+      _vipCardBorderColor = _parseColor(config['vipCardBorderColor'], _vipCardBorderColor);
+
+      _vipCardBgImgUrl = config['vipCardBgImgUrl'] as String? ?? _vipCardBgImgUrl;
+      _vipPurchaseBarImgUrl = config['vipPurchaseBarImgUrl'] as String? ?? _vipPurchaseBarImgUrl;
+      _vipCoinImgUrl = config['vipCoinImgUrl'] as String? ?? _vipCoinImgUrl;
+      _vipBuyBtnImgUrl = config['vipBuyBtnImgUrl'] as String? ?? _vipBuyBtnImgUrl;
+
+      _discoverTitle = config['discoverTitle'] as String? ?? _discoverTitle;
+      _messageTitle = config['messageTitle'] as String? ?? _messageTitle;
+      _profileTitle = config['profileTitle'] as String? ?? _profileTitle;
+      final titles = config['screenTitles'];
+      if (titles is Map) {
+        _screenTitles = titles.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+
+      _cpWebUrl = config['cpWebUrl'] as String? ?? _cpWebUrl;
+      _audioCompany = config['audioProvider'] as String? ?? _audioCompany;
+
+      final overrides = config['assetsOverrides'];
+      if (overrides is Map) {
+        _assetsOverride = overrides.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+
+      final sizes = config['assetSizes'];
+      if (sizes is Map) {
+        _assetSizes = sizes.map((k, v) {
+          final entry = v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+          return MapEntry(k.toString(), entry);
+        });
+      }
+
+      final msg = config['lastSystemMessage'];
+      if (msg is Map) {
+        _lastSystemMessage = msg.cast<String, dynamic>();
+      }
+
+      _coinsPerRechargeXp = (config['coinsPerRechargeXp'] as num?)?.toInt() ?? _coinsPerRechargeXp;
+      _diamondToCoinRate = (config['diamondToCoinRate'] as num?)?.toInt() ?? _diamondToCoinRate;
+
+      final rc = config['rankConfig'];
+      if (rc is Map) {
+        _rankBg = rc['bg']?.toString() ?? _rankBg;
+        _rankGoldColor = rc['goldColor']?.toString() ?? _rankGoldColor;
+        _rankSilverColor = rc['silverColor']?.toString() ?? _rankSilverColor;
+        _rankBronzeColor = rc['bronzeColor']?.toString() ?? _rankBronzeColor;
+        _rankPointsColor = rc['pointsColor']?.toString() ?? _rankPointsColor;
+        _rankTrophyIcon = rc['trophyIcon']?.toString() ?? _rankTrophyIcon;
+        _rankEmptyText = rc['emptyText']?.toString() ?? _rankEmptyText;
+        _rankTextColor = rc['textColor']?.toString() ?? _rankTextColor;
+        _rankSubTextColor = rc['subTextColor']?.toString() ?? _rankSubTextColor;
+
+        for (final cat in ['wealth', 'charm', 'room']) {
+          final catCfg = <String, String>{};
+          final bgKey = '${cat}_bg';
+          if (rc[bgKey] != null) catCfg['bg'] = rc[bgKey].toString();
+          for (final field in ['goldColor', 'silverColor', 'bronzeColor', 'pointsColor', 'textColor', 'subTextColor']) {
+            final key = '${cat}_$field';
+            if (rc[key] != null) catCfg[field] = rc[key].toString();
+          }
+          if (catCfg.isNotEmpty) _rankCategoryConfigs[cat] = catCfg;
+        }
+      }
+
+      final rgs = config['roomGradients'];
+      if (rgs is Map) {
+        _roomGradients = rgs.map((k, v) {
+          final colors = <Color>[];
+          if (v is List) {
+            for (final c in v) {
+              colors.add(_parseColor(c.toString(), Colors.transparent));
+            }
+          }
+          return MapEntry(k.toString(), colors);
+        });
+      }
+
+      final cc = config['chatColors'];
+      if (cc is Map) {
+        _chatBubbleSelf = _parseColor(cc['bubbleSelf'], _chatBubbleSelf);
+        _chatBubbleOther = _parseColor(cc['bubbleOther'], _chatBubbleOther);
+        _chatBubbleSelfBorder = _parseColor(cc['bubbleSelfBorder'], _chatBubbleSelfBorder);
+        _chatBubbleOtherBorder = _parseColor(cc['bubbleOtherBorder'], _chatBubbleOtherBorder);
+        _chatBubbleSelfText = _parseColor(cc['bubbleSelfText'], _chatBubbleSelfText);
+        _chatBubbleOtherText = _parseColor(cc['bubbleOtherText'], _chatBubbleOtherText);
+      }
+
+      final sv = config['screenVisuals'];
+      if (sv is Map) {
+        _screenVisuals = sv.map((k, v) => MapEntry(k.toString(), v));
+      }
+
+      final io = config['iconOverrides'];
+      if (io is Map) {
+        _iconOverrides = io.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+
+      final restartFlag = config['restartApp'];
+      if (restartFlag == true || restartFlag == 'true') {
+        debugPrint('DynamicConfigService: restartApp flag detected, restarting...');
+        _db.collection('app_config').doc('restartApp').set({'value': false}, SetOptions(merge: true));
+        Restart.restartApp();
+      }
+
+      _assetVersion++;
+      if (_initCompleter != null && !_initCompleter!.isCompleted) {
+        _initCompleter!.complete();
+      }
+      notifyListeners();
+    }, onError: (error) {
+      debugPrint('DynamicConfigService: error loading config: $error');
+      final errorStr = error.toString();
+      if (errorStr.contains('JWT expired') || errorStr.contains('PGRST303') || errorStr.contains('Unauthorized')) {
+      }
+      if (_initCompleter != null && !_initCompleter!.isCompleted) {
+        _initCompleter!.complete();
+      }
+    });
+  }
+
+  // Parse color from string (e.g. #FFFFFF or 0xFFFFFFFF or color name)
+  Color _parseColor(dynamic val, Color fallback) {
+    if (val == null) return fallback;
+    String str = val.toString().trim().replaceAll('#', '');
+    if (str.startsWith('0x')) {
+      str = str.substring(2);
+    }
+    if (str.length == 6) {
+      str = 'FF$str'; // Add alpha
+    }
+    final intValue = int.tryParse(str, radix: 16);
+    if (intValue != null) {
+      return Color(intValue);
+    }
+    return fallback;
+  }
+
+  // Try parsing a string as JSON, return parsed value or null
+  dynamic _tryParseJson(String source) {
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is Map || decoded is List) return decoded;
+    } catch (_) {}
+    return null;
+  }
+
+  // Dynamic config accessors (for profile etc.)
+  dynamic getConfig(String key) => _rawConfig[key];
+
+  Color? getColorConfig(String key) {
+    final val = _rawConfig[key];
+    if (val == null) return null;
+    return _parseColor(val, Colors.transparent);
+  }
+
+  String _normalizeKey(String path) {
+    return path.replaceAll('/', '_').replaceAll('.', '_');
+  }
+
+  // Helper to resolve network asset override
+  // Priority: app_assets.remote_url > app_config.assetsOverrides
+  // Tries multiple key formats:
+  //   - fullKey:  assets_mipmap-xxhdpi_file_webp  (hyphens preserved)
+  //   - shortKey: file_webp
+  //   - legacyKey: mipmap-xxhdpi_file_webp
+  //   - undFullKey: assets_mipmap_xxhdpi_file_webp (hyphens→underscores for legacy DB entries)
+  String? getAssetOverride(String assetPath) {
+    final fullKey = _normalizeKey(assetPath);
+    final shortKey = assetPath.split('/').last.replaceAll('.', '_');
+    final legacyKey = fullKey.startsWith('assets_') ? fullKey.substring(7) : null;
+    final undFullKey = fullKey.replaceAll('-', '_');
+    final undLegacyKey = legacyKey?.replaceAll('-', '_');
+    final appAsset = _appAssets[fullKey] ?? _appAssets[shortKey] ?? 
+        (legacyKey != null ? _appAssets[legacyKey] : null) ??
+        _appAssets[undFullKey] ?? (undLegacyKey != null ? _appAssets[undLegacyKey] : null);
+    if (appAsset != null && appAsset.remoteUrl != null && appAsset.remoteUrl!.isNotEmpty) {
+      return appAsset.remoteUrl;
+    }
+    return _assetsOverride[fullKey] ?? _assetsOverride[shortKey] ?? _assetsOverride[undFullKey];
+  }
+
+  // Lookup remote URL directly by asset key
+  String? getAssetUrl(String key) {
+    final asset = _appAssets[key];
+    if (asset != null && asset.remoteUrl != null && asset.remoteUrl!.isNotEmpty) {
+      return asset.remoteUrl;
+    }
+    return _assetsOverride[key];
+  }
+
+  // Helper to get asset size override, returns Size if both width and height are set
+  // Priority: app_assets width/height > app_config assetSizes
+  Size? getAssetSize(String assetPath) {
+    final fullKey = _normalizeKey(assetPath);
+    final shortKey = assetPath.split('/').last.replaceAll('.', '_');
+    final undFullKey = fullKey.replaceAll('-', '_');
+    final appAsset = _appAssets[fullKey] ?? _appAssets[shortKey] ?? _appAssets[undFullKey];
+    if (appAsset != null && appAsset.width != null && appAsset.height != null) {
+      return Size(appAsset.width!.toDouble(), appAsset.height!.toDouble());
+    }
+    final entry = _assetSizes[fullKey] ?? _assetSizes[shortKey] ?? _assetSizes[undFullKey];
+    if (entry == null) return null;
+    final w = entry['width'];
+    final h = entry['height'];
+    if (w is num && h is num) {
+      return Size(w.toDouble(), h.toDouble());
+    }
+    return null;
+  }
+}

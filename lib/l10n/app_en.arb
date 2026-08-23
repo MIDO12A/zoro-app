@@ -1,0 +1,48 @@
+{
+  "@@locale": "en",
+  
+  "tabDiscover": "Discover",
+  "tabMessage": "Message",
+  "tabProfile": "Profile",
+  
+  "profileUserName": "User Name",
+  "profileUserId": "ID:",
+  "profileFollowing": "Following",
+  "profileFollowers": "Followers",
+  "profileVisitors": "Visitors",
+  
+  "profileWallet": "Wallet",
+  "profileRecharge": "Recharge now",
+  "profileLevel": "Level",
+  "profileMall": "Mall",
+  "profileBackpack": "Backpack",
+  "profileFeedback": "Feedback",
+  "profileSetting": "Setting",
+  "profileUnion": "Union",
+  
+  "levelTitle": "Level",
+  "levelExperience": "Experience: {current}/{max}",
+  "@levelExperience": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "levelNext": "Next Levels",
+  "levelUnlockReward": "Unlock reward",
+  
+  "mallTitle": "Mall",
+  "mallHeadwear": "Headwear",
+  "mallBubble": "Bubble",
+  "mallCar": "Car",
+  "mallEntrance": "Entrance",
+  "mallBuy": "Buy",
+  
+  "walletTitle": "Wallet",
+  "walletCoinBalance": "Coin Balance",
+  "walletItems": "Wallet items"
+}

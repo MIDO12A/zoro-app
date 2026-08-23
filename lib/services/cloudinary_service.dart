@@ -1,0 +1,110 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
+
+enum CloudinaryResourceType { image, video, auto, raw }
+
+class CloudinaryService {
+  static final CloudinaryService _instance = CloudinaryService._();
+  factory CloudinaryService() => _instance;
+  CloudinaryService._();
+
+  static const String _cloudName = 'dl30muiuc';
+  static const String _apiKey = '865669713469485';
+  static const String _apiSecret = 'mnxgBf0IUGLH5UqJaQ4D3TjlHHs';
+
+  String _uploadUrl(CloudinaryResourceType type) {
+    final t = type == CloudinaryResourceType.auto ? 'auto' : type.name;
+    return 'https://api.cloudinary.com/v1_1/$_cloudName/$t/upload';
+  }
+
+  static int _timeOffset = 0;
+
+  int _getCorrectedTimestamp() {
+    return ((DateTime.now().millisecondsSinceEpoch + _timeOffset * 1000) / 1000).round();
+  }
+
+  Future<int> _syncTime() async {
+    for (final url in [
+      'https://api.cloudinary.com/v1_1/$_cloudName',
+      'https://google.com',
+    ]) {
+      try {
+        final response = await http.head(Uri.parse(url));
+        final serverDate = response.headers['date'];
+        if (serverDate != null) {
+          final serverTime = HttpDate.parse(serverDate).millisecondsSinceEpoch;
+          final localTime = DateTime.now().millisecondsSinceEpoch;
+          _timeOffset = ((serverTime - localTime) / 1000).round();
+          print('CloudinaryService: time synced, offset=$_timeOffset s (from $url)');
+          break;
+        }
+      } catch (e) {
+        print('CloudinaryService: time sync failed for $url: $e');
+      }
+    }
+    return _getCorrectedTimestamp();
+  }
+
+  Future<String> upload(
+    File file, {
+    String? publicId,
+    CloudinaryResourceType type = CloudinaryResourceType.auto,
+  }) async {
+    await _syncTime();
+    return _doUpload(file, publicId: publicId, type: type, retriesLeft: 1);
+  }
+
+  Future<String> _doUpload(
+    File file, {
+    String? publicId,
+    CloudinaryResourceType type = CloudinaryResourceType.auto,
+    int retriesLeft = 0,
+  }) async {
+    final timestamp = _getCorrectedTimestamp();
+    final params = <String, String>{
+      'timestamp': timestamp.toString(),
+      'upload_preset': 'zero_app',
+    };
+    if (publicId != null) params['public_id'] = publicId;
+
+    final signature = _generateSignature(params);
+    params['api_key'] = _apiKey;
+    params['signature'] = signature;
+
+    final url = _uploadUrl(type);
+    final request = http.MultipartRequest('POST', Uri.parse(url));
+    request.fields.addAll(params);
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return data['secure_url'] as String;
+    }
+
+    if (retriesLeft > 0 && response.body.contains('Stale request')) {
+      await _syncTime();
+      return _doUpload(file, publicId: publicId, type: type, retriesLeft: retriesLeft - 1);
+    }
+
+    throw Exception('Cloudinary upload failed: ${response.statusCode} ${response.body}');
+  }
+
+  Future<String> uploadImage(File file, {String? publicId}) {
+    return upload(file, publicId: publicId, type: CloudinaryResourceType.image);
+  }
+
+  Future<String> uploadVideo(File file, {String? publicId}) {
+    return upload(file, publicId: publicId, type: CloudinaryResourceType.video);
+  }
+
+  String _generateSignature(Map<String, String> params) {
+    final keys = params.keys.toList()..sort();
+    final str = keys.map((k) => '$k=${params[k]}').join('&') + _apiSecret;
+    return sha1.convert(utf8.encode(str)).toString();
+  }
+}

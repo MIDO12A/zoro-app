@@ -1,0 +1,48 @@
+{
+  "@@locale": "ar",
+  
+  "tabDiscover": "استكشاف",
+  "tabMessage": "الرسائل",
+  "tabProfile": "حسابي",
+  
+  "profileUserName": "اسم المستخدم",
+  "profileUserId": "رقم:",
+  "profileFollowing": "متابع",
+  "profileFollowers": "المتابعين",
+  "profileVisitors": "الزوار",
+  
+  "profileWallet": "الحقيبة",
+  "profileRecharge": "اشحن الآن",
+  "profileLevel": "المستوى",
+  "profileMall": "المتجر",
+  "profileBackpack": "الحقيبة",
+  "profileFeedback": "الملاحظات",
+  "profileSetting": "الإعدادات",
+  "profileUnion": "النقابة",
+  
+  "levelTitle": "المستوى",
+  "levelExperience": "الخبرة: {current}/{max}",
+  "@levelExperience": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "levelNext": "المستويات القادمة",
+  "levelUnlockReward": "فتح الجائزة",
+  
+  "mallTitle": "المتجر",
+  "mallHeadwear": "القبعات",
+  "mallBubble": "الفقاعات",
+  "mallCar": "السيارات",
+  "mallEntrance": "المدخل",
+  "mallBuy": "شراء",
+  
+  "walletTitle": "الحقيبة",
+  "walletCoinBalance": "رصيد العملات",
+  "walletItems": "عناصر الحقيبة"
+}

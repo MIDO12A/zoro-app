@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="title"></title>
+    <style>
+        /* 基础样式 */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #121212;
+            color: #E0E0E0;
+            font-size: 16px;
+        }
+
+        /* 顶部导航栏和标签栏的总体高度：44px (top-bar) + 48px (nav-tabs) = 92px */
+        .container {
+            padding: 16px;
+            /* 关键修改：为两个固定元素腾出空间，避免内容重叠 */
+            margin-top: 100px;
+        }
+
+        /* 顶部导航栏 */
+        .top-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: fixed;
+            top: 88px;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            height: 44px;
+
+            border-bottom: 1px solid #333;
+            background-color: #121212;
+        }
+
+        .top-bar .back-btn {
+            position: absolute;
+            left: 16px;
+            /* 关键修改：调大返回箭头的字体大小 */
+            font-size: 32px;
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .top-bar .title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        /* 导航标签 */
+        .nav-tabs {
+            display: flex;
+            justify-content: center;
+            padding: 16px 0;
+            position: fixed;
+            top: 44px;
+            left: 0;
+            right: 0;
+            z-index: 999;
+            background-color: #121212;
+        }
+
+        .nav-tab {
+            color: #A0A0A0;
+            padding: 8px 16px;
+            position: relative;
+            cursor: pointer;
+            margin: 0 12px;
+        }
+
+        .nav-tab.active {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .nav-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 32px;
+            height: 2px;
+            background-color: #FFC107;
+            border-radius: 2px;
+        }
+
+        /* 内容部分 */
+        .content-section {
+            display: none;
+        }
+        .content-section.active {
+            display: block;
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 24px;
+            margin-bottom: 16px;
+        }
+
+        .list-item {
+            display: flex;
+            margin-bottom: 16px;
+        }
+
+        .list-item .number {
+            font-size: 16px;
+            font-weight: bold;
+            margin-right: 12px;
+            color: #FFC107;
+        }
+
+        .list-item p {
+            margin: 0;
+            line-height: 1.6;
+        }
+
+        .highlight {
+            color: #FFC107;
+        }
+
+        .pre-wrap {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <a href="#" class="back-btn">&lt;</a>
+    <span class="title" data-i18n="title"></span>
+</div>
+
+<div class="nav-tabs">
+    <div class="nav-tab active" data-i18n="tab1" data-target="tab1-content"></div>
+    <div class="nav-tab" data-i18n="tab2" data-target="tab2-content"></div>
+</div>
+
+<div class="container">
+    <div id="tab1-content" class="content-section active">
+        <h3 class="section-title" data-i18n="salaryTitle"></h3>
+        <p class="pre-wrap" data-i18n="salaryPart1"></p>
+        <p class="pre-wrap" data-i18n="salaryPart2"></p>
+        <p data-i18n="calculationExample"></p>
+        <p data-i18n="reminder"></p>
+    </div>
+
+    <div id="tab2-content" class="content-section">
+        <h3 class="section-title" data-i18n="durationTitle"></h3>
+        <div class="list-item">
+            <span class="number">1.</span>
+            <p data-i18n="durationItem1"></p>
+        </div>
+        <div class="list-item">
+            <span class="number">2.</span>
+            <p data-i18n="durationItem2"></p>
+        </div>
+        <div class="list-item">
+            <span class="number">3.</span>
+            <p data-i18n="durationItem3"></p>
+        </div>
+        <div class="list-item">
+            <span class="number">4.</span>
+            <p data-i18n="durationItem4"></p>
+        </div>
+        <div class="list-item">
+            <span class="number">5.</span>
+            <p data-i18n="durationItem5"></p>
+        </div>
+        <h3 class="section-title" data-i18n="instructionsTitle"></h3>
+        <p data-i18n="instructionsContent"></p>
+    </div>
+</div>
+
+<script>
+    const i18n = {};
+    let currentLang = 'en';
+
+    function setLanguage() {
+        const langData = i18n[currentLang];
+        if (!langData) return;
+
+        document.documentElement.lang = currentLang;
+        document.documentElement.dir = (currentLang === 'ar') ? 'rtl' : 'ltr';
+
+        document.querySelectorAll('[data-i18n]').forEach(element => {
+            const key = element.getAttribute('data-i18n');
+            if (langData[key]) {
+                element.innerHTML = langData[key];
+            }
+        });
+    }
+
+    function loadLanguage(lang) {
+        const mainLang = lang.split('-')[0];
+        const filePath = `./lang/${mainLang}.json`;
+
+        const xhr = new XMLHttpRequest();
+        xhr.overrideMimeType("application/json");
+        xhr.open('GET', filePath, true);
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200) {
+                    try {
+                        const langData = JSON.parse(xhr.responseText);
+                        i18n[mainLang] = langData;
+                        currentLang = mainLang;
+                        setLanguage();
+                        console.log(`Language loaded successfully: ${mainLang}`);
+                    } catch (e) {
+                        console.error(`JSON parse error for ${filePath}: ${e}`);
+                        if (mainLang !== 'en') {
+                            console.log('Falling back to default language: en');
+                            loadLanguage('en');
+                        }
+                    }
+                } else {
+                    console.error(`Failed to load language file with status ${xhr.status} from ${filePath}`);
+                    if (mainLang !== 'en') {
+                        console.log('Falling back to default language: en');
+                        loadLanguage('en');
+                    }
+                }
+            }
+        };
+        xhr.send(null);
+    }
+
+    function getUrlParameter(name) {
+        name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+        var regex = new RegExp('[\\?&]' + name + '=([^&#]*)');
+        var results = regex.exec(location.search);
+        return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));
+    };
+
+    const langFromUrl = getUrlParameter('lang');
+    if (langFromUrl) {
+        currentLang = langFromUrl;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLanguage(currentLang);
+
+        const navTabs = document.querySelectorAll('.nav-tab');
+        const contentSections = document.querySelectorAll('.content-section');
+
+        navTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                navTabs.forEach(t => t.classList.remove('active'));
+                contentSections.forEach(c => c.classList.remove('active'));
+
+                tab.classList.add('active');
+                const targetId = tab.getAttribute('data-target');
+                document.getElementById(targetId).classList.add('active');
+            });
+        });
+    });
+
+</script>
+</body>
+</html>

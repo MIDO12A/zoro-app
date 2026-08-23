@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "95008435096",
+    "firebase_url": "https://zeroappzero-e1b4a-default-rtdb.firebaseio.com",
+    "project_id": "zeroappzero-e1b4a",
+    "storage_bucket": "zeroappzero-e1b4a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:95008435096:android:70ef1c429c3d04683099ed",
+        "android_client_info": {
+          "package_name": "com.zero.app.zero"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "95008435096-u3blse0c5ftbrl7ucp4pgjtottd6koph.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zero.app.zero",
+            "certificate_hash": "e87fb8950495de030ef9a35a3a011ac90bc6664e"
+          }
+        },
+        {
+          "client_id": "95008435096-u3l8hcm3833j0vf29jntk2450duir63e.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBV61UNM2iTTTZcBEALxvWxvi17EFD9XOU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "95008435096-u3l8hcm3833j0vf29jntk2450duir63e.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

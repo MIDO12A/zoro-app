@@ -1,0 +1,240 @@
+class UserModel {
+  final String uid;
+  final String customId; // 8-digit numeric ID for display
+  final String name;
+  final String email;
+  final String photoUrl;
+  final int coins;
+  final int diamonds;
+  final String gender;
+  final String? activeFrame;
+  final String? activeHeadwear;
+  final String? activeBubble;
+  final String? activeEntrance;
+  final String? activeCar;
+  final String? activeCover;
+  final List<String> ownedItems;
+  final String? hostedRoomId;
+  final List<String> followedRooms;
+  final int totalGiftsSent;
+  final int totalGiftsReceived;
+  final int level;
+  final int experience;
+  final int followers;
+  final int following;
+  final int visitors;
+  final int charm;
+  final List<String> ownedBadges;
+  final int wealthLevel;
+  final int wealthExp;
+  final int rechargeLevel;
+  final int rechargeExp;
+  final int gemsLevel;
+  final int gemsExp;
+  final bool banned;
+  final String banReason;
+  final List<String> ownedLevelFrames;
+  final List<String> ownedLevelBadges;
+  final List<String> ownedNecklaces;
+
+  UserModel({
+    required this.uid,
+    this.customId = '',
+    this.name = '',
+    this.email = '',
+    this.photoUrl = '',
+    this.coins = 0,
+    this.diamonds = 0,
+    this.gender = 'male',
+    this.activeFrame,
+    this.activeHeadwear,
+    this.activeBubble,
+    this.activeEntrance,
+    this.activeCar,
+    this.activeCover,
+    this.ownedItems = const [],
+    this.ownedBadges = const [],
+    this.hostedRoomId,
+    this.followedRooms = const [],
+    this.totalGiftsSent = 0,
+    this.totalGiftsReceived = 0,
+    this.level = 1,
+    this.experience = 0,
+    this.followers = 0,
+    this.following = 0,
+    this.visitors = 0,
+    this.charm = 0,
+    this.wealthLevel = 1,
+    this.wealthExp = 0,
+    this.rechargeLevel = 1,
+    this.rechargeExp = 0,
+    this.gemsLevel = 1,
+    this.gemsExp = 0,
+    this.banned = false,
+    this.banReason = '',
+    this.ownedLevelFrames = const [],
+    this.ownedLevelBadges = const [],
+    this.ownedNecklaces = const [],
+  });
+
+  UserModel copyWith({
+    String? customId,
+    String? name,
+    String? email,
+    String? photoUrl,
+    int? coins,
+    int? diamonds,
+    String? gender,
+    String? activeFrame,
+    String? activeHeadwear,
+    String? activeBubble,
+    String? activeEntrance,
+    String? activeCar,
+    String? activeCover,
+    List<String>? ownedItems,
+    String? hostedRoomId,
+    List<String>? followedRooms,
+    int? totalGiftsSent,
+    int? totalGiftsReceived,
+    int? level,
+    int? experience,
+    int? followers,
+    int? following,
+    int? visitors,
+    int? charm,
+    List<String>? ownedBadges,
+    int? wealthLevel,
+    int? wealthExp,
+    int? rechargeLevel,
+    int? rechargeExp,
+    int? gemsLevel,
+    int? gemsExp,
+    bool? banned,
+    String? banReason,
+    List<String>? ownedLevelFrames,
+    List<String>? ownedLevelBadges,
+    List<String>? ownedNecklaces,
+  }) {
+    return UserModel(
+      uid: uid,
+      customId: customId ?? this.customId,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      photoUrl: photoUrl ?? this.photoUrl,
+      coins: coins ?? this.coins,
+      diamonds: diamonds ?? this.diamonds,
+      gender: gender ?? this.gender,
+      activeFrame: activeFrame ?? this.activeFrame,
+      activeHeadwear: activeHeadwear ?? this.activeHeadwear,
+      activeBubble: activeBubble ?? this.activeBubble,
+      activeEntrance: activeEntrance ?? this.activeEntrance,
+      activeCar: activeCar ?? this.activeCar,
+      activeCover: activeCover ?? this.activeCover,
+      ownedItems: ownedItems ?? this.ownedItems,
+      hostedRoomId: hostedRoomId ?? this.hostedRoomId,
+      followedRooms: followedRooms ?? this.followedRooms,
+      totalGiftsSent: totalGiftsSent ?? this.totalGiftsSent,
+      totalGiftsReceived: totalGiftsReceived ?? this.totalGiftsReceived,
+      level: level ?? this.level,
+      experience: experience ?? this.experience,
+      followers: followers ?? this.followers,
+      following: following ?? this.following,
+      visitors: visitors ?? this.visitors,
+      charm: charm ?? this.charm,
+      ownedBadges: ownedBadges ?? this.ownedBadges,
+      wealthLevel: wealthLevel ?? this.wealthLevel,
+      wealthExp: wealthExp ?? this.wealthExp,
+      rechargeLevel: rechargeLevel ?? this.rechargeLevel,
+      rechargeExp: rechargeExp ?? this.rechargeExp,
+      gemsLevel: gemsLevel ?? this.gemsLevel,
+      gemsExp: gemsExp ?? this.gemsExp,
+      banned: banned ?? this.banned,
+      banReason: banReason ?? this.banReason,
+      ownedLevelFrames: ownedLevelFrames ?? this.ownedLevelFrames,
+      ownedLevelBadges: ownedLevelBadges ?? this.ownedLevelBadges,
+      ownedNecklaces: ownedNecklaces ?? this.ownedNecklaces,
+    );
+  }
+
+  factory UserModel.fromMap(Map map) {
+    return UserModel(
+      uid: map['uid']?.toString() ?? '',
+      customId: map['custom_id']?.toString() ?? '',
+      name: map['name']?.toString() ?? '',
+      email: map['email']?.toString() ?? '',
+      photoUrl: map['photo_url']?.toString() ?? '',
+      coins: (map['coins'] ?? 0).toInt(),
+      diamonds: (map['diamonds'] ?? 0).toInt(),
+      gender: map['gender']?.toString() ?? 'male',
+      activeFrame: map['active_frame']?.toString(),
+      activeHeadwear: map['active_headwear']?.toString(),
+      activeBubble: map['active_bubble']?.toString(),
+      activeEntrance: map['active_entrance']?.toString(),
+      activeCar: map['active_car']?.toString(),
+      activeCover: map['active_cover']?.toString(),
+      ownedItems: (map['owned_items'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      ownedBadges: (map['owned_badges'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      hostedRoomId: map['hosted_room_id']?.toString(),
+      followedRooms: (map['followed_rooms'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      totalGiftsSent: (map['total_gifts_sent'] ?? 0).toInt(),
+      totalGiftsReceived: (map['total_gifts_received'] ?? 0).toInt(),
+      level: (map['level'] ?? 1).toInt(),
+      experience: (map['experience'] ?? 0).toInt(),
+      followers: (map['followers'] ?? 0).toInt(),
+      following: (map['following'] ?? 0).toInt(),
+      visitors: (map['visitors'] ?? 0).toInt(),
+      charm: (map['charm'] ?? 0).toInt(),
+      wealthLevel: (map['wealth_level'] ?? 1).toInt(),
+      wealthExp: (map['wealth_exp'] ?? 0).toInt(),
+      rechargeLevel: (map['recharge_level'] ?? 1).toInt(),
+      rechargeExp: (map['recharge_exp'] ?? 0).toInt(),
+      gemsLevel: (map['gems_level'] ?? 1).toInt(),
+      gemsExp: (map['gems_exp'] ?? 0).toInt(),
+      banned: map['banned'] == true,
+      banReason: map['ban_reason']?.toString() ?? '',
+      ownedLevelFrames: (map['owned_level_frames'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      ownedLevelBadges: (map['owned_level_badges'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      ownedNecklaces: (map['owned_necklaces'] as List?)?.map((e) => e.toString()).toList() ?? [],
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'uid': uid,
+        'custom_id': customId,
+        'name': name,
+        'email': email,
+        'photo_url': photoUrl,
+        'coins': coins,
+        'diamonds': diamonds,
+        'gender': gender,
+        'active_frame': activeFrame,
+        'active_headwear': activeHeadwear,
+        'active_bubble': activeBubble,
+        'active_entrance': activeEntrance,
+        'active_car': activeCar,
+        'active_cover': activeCover,
+        'owned_items': ownedItems,
+        'owned_badges': ownedBadges,
+        'hosted_room_id': hostedRoomId,
+        'followed_rooms': followedRooms,
+        'total_gifts_sent': totalGiftsSent,
+        'total_gifts_received': totalGiftsReceived,
+        'level': level,
+        'experience': experience,
+        'followers': followers,
+        'following': following,
+        'visitors': visitors,
+        'charm': charm,
+        'wealth_level': wealthLevel,
+        'wealth_exp': wealthExp,
+        'recharge_level': rechargeLevel,
+        'recharge_exp': rechargeExp,
+        'gems_level': gemsLevel,
+        'gems_exp': gemsExp,
+        'banned': banned,
+        'ban_reason': banReason,
+        'owned_level_frames': ownedLevelFrames,
+        'owned_level_badges': ownedLevelBadges,
+        'owned_necklaces': ownedNecklaces,
+      };
+}

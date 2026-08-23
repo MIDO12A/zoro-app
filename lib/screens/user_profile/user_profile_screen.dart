@@ -1,0 +1,2161 @@
+import 'dart:async';
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
+import '../../models/message_model.dart';
+import '../../config/r.dart';
+import '../../config/app_colors.dart';
+import '../../services/dynamic_config_service.dart';
+import '../../services/level_service.dart';
+import '../../services/supabase_service.dart';
+import '../../services/cloudinary_service.dart';
+import '../../core/supabase_compat.dart';
+import '../../core/widgets/cached_image.dart';
+import '../../providers/user_provider.dart';
+import '../../models/user_model.dart';
+import '../../models/gift_model.dart' as gm;
+import '../../models/gifted_item_model.dart';
+import '../room/widgets/svga_player.dart';
+import '../room/widgets/svga_frame.dart';
+import '../room/room_screen.dart';
+import '../../features/cp/cp_service.dart';
+
+class UserProfileScreen extends StatefulWidget {
+  final String? targetUid;
+
+  const UserProfileScreen({super.key, this.targetUid});
+
+  @override
+  State<UserProfileScreen> createState() => _UserProfileScreenState();
+}
+
+class _UserProfileScreenState extends State<UserProfileScreen> {
+  final supabase = SupabaseService();
+  UserModel? _user;
+  bool _loading = true;
+  bool _isFollowing = false;
+  List<gm.SentGiftModel> _receivedGifts = [];
+  List<Map<String, dynamic>> _badgesCatalog = [];
+  List<Map<String, dynamic>> _allOwnedNecklaces = [];
+  String? _currentRoomId;
+  gm.SentGiftModel? _selectedGift;
+  GiftedItemModel? _selectedItem;
+  Map<String, gm.GiftModel> _giftsCatalog = {};
+  String? _profileBgUrl;
+  String? _activeFrame;
+  List<dynamic> _ownedLevelFrames = [];
+
+  final Map<String, String> _storeSvgaMap = {};
+
+  // Stats counts (fetched from relational tables for accuracy)
+  int _followingCount = 0;
+  int _fansCount = 0;
+  int _visitorsCount = 0;
+  int _sentGiftsCount = 0;
+
+  // CP data
+  Map<String, dynamic>? _cpCouple;
+  Map<String, dynamic>? _cpPartner;
+  int _cpGiftTotal = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final uid = widget.targetUid;
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final currentUser = userProvider.currentUser;
+
+      UserModel? targetUser;
+      if (uid != null) {
+        targetUser = await supabase.getUser(uid);
+        if (currentUser != null) {
+          final following = await supabase.isFollowing(currentUser.uid, uid);
+          if (mounted) setState(() => _isFollowing = following);
+        }
+        if (targetUser != null) {
+          supabase.incrementVisitors(uid);
+        }
+      } else {
+        targetUser = currentUser;
+      }
+
+      if (targetUser != null) {
+        final uidVal = targetUser.uid;
+        final added = await supabase.awardRechargeNecklaces(uidVal, targetUser.rechargeLevel);
+        if (added.isNotEmpty) {
+          targetUser = await supabase.getUser(uidVal);
+        }
+        final gifts = await supabase.getReceivedGifts(uidVal);
+        final badgesCat = await supabase.getBadgesCatalog();
+        final nCat = await supabase.getNecklacesCatalog();
+        if (badgesCat.isEmpty) debugPrint('[UserProfile] badgesCatalog is empty');
+        if (nCat.isEmpty) debugPrint('[UserProfile] necklacesCatalog is empty');
+        final roomId = await supabase.getUserCurrentRoomId(uidVal);
+        final giftsCat = await supabase.getGiftsCatalog();
+        final ownedGifted = await supabase.getGiftedItems(uidVal);
+        final necklaces = ownedGifted.where((i) => i.itemCategory == 'necklace').toList();
+        final allOwnedNList = <Map<String, dynamic>>[];
+        final ownedNIds = targetUser?.ownedNecklaces ?? [];
+        for (final n in nCat) {
+          final nid = n['id']?.toString();
+          if (ownedNIds.contains(nid)) {
+            allOwnedNList.add(n);
+          }
+        }
+        for (final n in necklaces) {
+          if (!allOwnedNList.any((x) => x['id']?.toString() == n.itemId)) {
+            allOwnedNList.add({'id': n.itemId, 'svga_url': n.svgaAsset, 'image_url': n.itemIcon, 'name': n.itemName});
+          }
+        }
+        Map<String, dynamic>? extraUserData;
+        try {
+          extraUserData = await Supabase.instance.client
+              .from('users')
+              .select('profile_bg_url, active_frame, owned_level_frames')
+              .eq('uid', uidVal)
+              .maybeSingle();
+        } catch (e) {
+          debugPrint('[UserProfile] extraUserData query error: $e');
+        }
+        // Load store items to resolve itemId -> svga asset URL
+        try {
+          final storeItems = await Supabase.instance.client
+              .from('store_items')
+              .select('item_id, svga_asset');
+          for (final item in (storeItems as List)) {
+            final id = item['item_id']?.toString();
+            final svga = item['svga_asset']?.toString();
+            if (id != null && svga != null && svga.isNotEmpty) {
+              _storeSvgaMap[id] = svga;
+            }
+          }
+        } catch (e) {
+          debugPrint('[UserProfile] store_items query error: $e');
+        }
+        // Resolve frame IDs to actual SVGA asset paths
+        final rawFrame = extraUserData?['active_frame']?.toString() ?? targetUser?.activeFrame ?? '';
+        final rawFrames = (extraUserData?['owned_level_frames'] as List?) ?? targetUser?.ownedLevelFrames ?? [];
+        final resolvedFrame = rawFrame.isNotEmpty ? _resolveSvga(rawFrame) : null;
+        final resolvedFrames = rawFrames.map((e) => _resolveSvga(e.toString())).toList();
+        // Load CP data
+        Map<String, dynamic>? cpMyData;
+        try {
+          cpMyData = await CpService.getMyData();
+        } catch (_) {}
+
+        // Load individual CP gift total (for level determination)
+        int cpGiftTotal = 0;
+        try {
+          cpGiftTotal = await CpService.getUserCpGiftTotal(uidVal);
+        } catch (e) {
+          debugPrint('[UserProfile] cp gift total error: $e');
+        }
+
+        // Fetch actual stats counts from relational tables
+        int followingCount = 0, fansCount = 0, visitorsCount = 0, sentGiftsCount = 0;
+        try {
+          final followingList = await supabase.getFollowing(uidVal);
+          followingCount = followingList.length;
+        } catch (_) {}
+        try {
+          final fansList = await supabase.getFans(uidVal);
+          fansCount = fansList.length;
+        } catch (_) {}
+        try {
+          final visitorsList = await supabase.getVisitors(uidVal);
+          visitorsCount = visitorsList.length;
+        } catch (_) {}
+        try {
+          final sentRes = await Supabase.instance.client
+              .from('sent_gifts')
+              .select('id')
+              .eq('sender_id', uidVal);
+          sentGiftsCount = (sentRes as List?)?.length ?? 0;
+        } catch (_) {}
+
+        if (mounted) {
+          setState(() {
+            _user = targetUser;
+            _receivedGifts = gifts;
+            _badgesCatalog = badgesCat;
+            _allOwnedNecklaces = allOwnedNList;
+            _currentRoomId = roomId;
+            _giftsCatalog = giftsCat;
+            _profileBgUrl = extraUserData?['profile_bg_url']?.toString();
+            _activeFrame = resolvedFrame;
+            _ownedLevelFrames = resolvedFrames;
+            _cpCouple = cpMyData?['couple'] as Map<String, dynamic>?;
+            _cpPartner = _cpCouple?['partner'] as Map<String, dynamic>?;
+            _cpGiftTotal = cpGiftTotal;
+            _followingCount = followingCount;
+            _fansCount = fansCount;
+            _visitorsCount = visitorsCount;
+            _sentGiftsCount = sentGiftsCount;
+            _loading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _loading = false);
+      }
+    } catch (e) {
+      debugPrint('_loadData error: $e');
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.currentUser;
+    if (currentUser == null || _user == null) return;
+    if (_isFollowing) {
+      await supabase.unfollowUser(currentUser.uid, _user!.uid);
+    } else {
+      await supabase.followUser(currentUser.uid, _user!.uid);
+    }
+    if (mounted) setState(() => _isFollowing = !_isFollowing);
+  }
+
+  Future<void> _navigateToRoom() async {
+    final roomId = _currentRoomId ?? _user?.hostedRoomId;
+    if (roomId == null || roomId.isEmpty) return;
+    final room = await supabase.getRoom(roomId);
+    if (room == null || !mounted) return;
+    navigateToRoom(context,
+        roomName: room.name,
+        hostName: room.hostName,
+        roomId: room.roomId,
+        roomPassword: room.password,
+        hotValue: room.totalGifts.toString(),
+        gameDesc: room.description);
+  }
+
+  Future<void> _navigateToChat() async {
+    if (_user == null || widget.targetUid == null) return;
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.currentUser;
+    if (currentUser == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatScreen(
+          targetUid: _user!.uid,
+          targetName: _user!.name,
+          targetPhotoUrl: _user!.photoUrl,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickCoverImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (image == null || !mounted) return;
+    setState(() => _loading = true);
+    try {
+      debugPrint('[CoverImage] picked: ${image.path}');
+      CroppedFile? cropped;
+      try {
+        cropped = await ImageCropper().cropImage(
+          sourcePath: image.path,
+          aspectRatio: const CropAspectRatio(ratioX: 1.11, ratioY: 1),
+          uiSettings: [
+            AndroidUiSettings(
+              toolbarTitle: 'قص الصورة',
+              toolbarColor: Colors.white,
+              toolbarWidgetColor: Colors.white,
+              lockAspectRatio: true,
+              statusBarColor: Colors.white,
+            ),
+            IOSUiSettings(
+              title: 'قص الصورة',
+              aspectRatioPickerButtonHidden: true,
+              resetButtonHidden: true,
+            ),
+          ],
+        );
+      } catch (e) {
+        debugPrint('[CoverImage] crop error: $e');
+        cropped = null;
+      }
+      if (cropped == null || !mounted) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      debugPrint('[CoverImage] cropped: ${cropped.path}');
+      String url;
+      try {
+        url = await CloudinaryService().uploadImage(
+          File(cropped.path),
+          publicId: 'cover_${DateTime.now().millisecondsSinceEpoch}',
+        );
+      } catch (e) {
+        debugPrint('[CoverImage] upload error: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فشل رفع الصورة إلى السحابة')),
+          );
+        }
+        setState(() => _loading = false);
+        return;
+      }
+      if (!mounted || url.isEmpty) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final currentUser = userProvider.currentUser;
+      if (currentUser == null) return;
+      try {
+        await Supabase.instance.client.from('users').update({'profile_bg_url': url}).eq('uid', currentUser.uid);
+      } catch (e) {
+        debugPrint('[CoverImage] db update error: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تم الرفع لكن فشل الحفظ في قاعدة البيانات')),
+          );
+        }
+        setState(() => _loading = false);
+        return;
+      }
+      if (mounted) {
+        setState(() => _profileBgUrl = url);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('تم حفظ صورة الغلاف')),
+        );
+      }
+    } catch (e) {
+      debugPrint('[CoverImage] unexpected error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('خطأ غير متوقع: الرجاء المحاولة مرة أخرى')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _resolveSvga(String itemId) {
+    if (itemId.startsWith('http://') || itemId.startsWith('https://')) return itemId;
+    if (_storeSvgaMap.containsKey(itemId)) return _storeSvgaMap[itemId]!;
+    final storeItem = supabase.getStoreItemSync(itemId);
+    if (storeItem?.svgaAsset != null && storeItem!.svgaAsset!.isNotEmpty) {
+      _storeSvgaMap[itemId] = storeItem.svgaAsset!;
+      return storeItem.svgaAsset!;
+    }
+    if (itemId.startsWith('assets/')) return itemId;
+    return itemId;
+  }
+
+  void _showImageFullScreen(String url) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          body: GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Center(
+              child: InteractiveViewer(
+                child: CachedImg(url, fit: BoxFit.contain,
+                  placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+                  error: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCoverMenu(BuildContext ctx) {
+    showModalBottomSheet(
+      context: ctx,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_library, color: Colors.black54),
+                title: const Text('تغيير صورة الغلاف', style: TextStyle(color: Colors.black87)),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  _pickCoverImage();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.black54),
+                title: const Text('إزالة صورة الغلاف', style: TextStyle(color: Colors.black87)),
+                onTap: () async {
+                  Navigator.pop(sheetCtx);
+                  if (!mounted) return;
+                  final userProvider = Provider.of<UserProvider>(context, listen: false);
+                  final currentUser = userProvider.currentUser;
+                  if (currentUser == null) return;
+                  await Supabase.instance.client.from('users').update({'profile_bg_url': null}).eq('uid', currentUser.uid);
+                  if (mounted) setState(() => _profileBgUrl = null);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getCpLevelFromGifts(int totalGifts) {
+    if (totalGifts >= 1000000) return 'cp3';
+    if (totalGifts >= 500000) return 'cp2';
+    if (totalGifts >= 1) return 'cp1';
+    if (_cpCouple != null) return 'cp1';
+    return 'cp1'; // Always show cp1 even without CP data
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final user = _user ?? userProvider.currentUser;
+
+    return ListenableBuilder(
+      listenable: DynamicConfigService(),
+      builder: (context, _) {
+        final config = DynamicConfigService();
+        return Scaffold(
+          backgroundColor: Colors.white,
+          body: SafeArea(
+            child: Stack(
+              children: [
+                _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            _buildHeaderSection(config, user),
+                            _buildUserInfoPanel(config, user),
+                            _buildStatsPanel(config, user),
+                            if (_currentRoomId != null || user?.hostedRoomId != null)
+                              _buildRoomCard(config, user),
+                            _buildCpPanelSection(config, user),
+                            _buildMomentsSection(config, user),
+                            _buildGiftWallSection(config, user),
+                            _buildMedalWallSection(config, user),
+                            _buildBadgesSection(config, user),
+                            _buildActionButtons(config, user),
+                            const SizedBox(height: 40),
+                          ],
+                        ),
+                      ),
+                if (_selectedGift != null) _buildGiftOverlay(config),
+                if (_selectedItem != null) _buildItemOverlay(config),
+                // Title overlay matching XML flTitle
+                _buildTitleBar(config, user),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildTitleBar(DynamicConfigService config, UserModel? user) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 4),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: 40,
+                height: 40,
+                margin: const EdgeInsetsDirectional.only(start: 10),
+                child: const Icon(Icons.arrow_back, color: Colors.black87, size: 24),
+              ),
+            ),
+            const Spacer(),
+            GestureDetector(
+              onTap: () {},
+              child: Container(
+                width: 40,
+                height: 40,
+                margin: const EdgeInsetsDirectional.only(end: 10),
+                child: const Icon(Icons.more_horiz, color: Colors.black87, size: 24),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderSection(DynamicConfigService config, UserModel? user) {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.currentUser;
+    final isOwnProfile = widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid);
+    final hasCp = _cpCouple != null;
+    return SizedBox(
+      width: double.infinity,
+      child: Stack(
+        children: [
+          // Banner image - matching XML aspect ratio 1.11
+          GestureDetector(
+            onTap: isOwnProfile ? _pickCoverImage : null,
+            child: AspectRatio(
+              aspectRatio: 1.11,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      config.buttonColor,
+                      config.buttonColor.withValues(alpha: 0.7),
+                    ],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                  image: (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
+                      ? DecorationImage(
+                          image: cachedImgProvider(_profileBgUrl!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: isOwnProfile
+                    ? Stack(
+                        children: [
+                          Container(
+                            alignment: Alignment.bottomRight,
+                            padding: const EdgeInsets.all(12),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                            ),
+                          ),
+                          Positioned(
+                            top: 12, left: 12,
+                            child: GestureDetector(
+                              onTap: () => _showCoverMenu(context),
+                              child: Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : null,
+              ),
+            ),
+          ),
+          // Gradient overlay matching XML gradientView + bv
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                Container(
+                  height: 30,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.transparent, Colors.white],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+                Container(
+                  height: 42,
+                  color: Colors.white,
+                ),
+              ],
+            ),
+          ),
+          // Avatar section - matching XML ConstraintLayout with avatars
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: SizedBox(
+              height: 104,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Main avatar
+                  Positioned(
+                    left: 12,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (user?.photoUrl != null && user!.photoUrl.isNotEmpty) {
+                          _showImageFullScreen(user.photoUrl);
+                        }
+                      },
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 52,
+                                backgroundColor: Colors.white,
+                                child: CircleAvatar(
+                                  radius: 50,
+                                  backgroundImage: (user?.photoUrl != null && user!.photoUrl.isNotEmpty)
+                                      ? cachedImgProvider(user.photoUrl)
+                                      : null,
+                                  child: (user?.photoUrl == null || user!.photoUrl.isEmpty)
+                                      ? Image.asset(R.avaBoy, fit: BoxFit.cover)
+                                      : null,
+                                ),
+                              ),
+                              if (_activeFrame != null || _ownedLevelFrames.isNotEmpty)
+                                SvgaFrame(
+                                  svgaPath: _activeFrame ?? (_ownedLevelFrames.isNotEmpty ? _ownedLevelFrames.last.toString() : ''),
+                                  size: 100,
+                                ),
+                            ],
+                          ),
+                          // Online indicator - matching XML imgOnline position
+                          Positioned(
+                          bottom: 18,
+                          right: 28,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFF4CAF50),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    ),
+                  ),
+                  // CP avatar - positioned overlapping main avatar (marginStart=-12dp)
+                  if (hasCp)
+                    Positioned(
+                      left: 104 - 12,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          CircleAvatar(
+                            radius: 52,
+                            backgroundColor: Colors.white,
+                            child: CircleAvatar(
+                              radius: 52,
+                              backgroundColor: Colors.white,
+                              child: CircleAvatar(
+                                radius: 50,
+                                backgroundImage: (_cpPartner?['avatar'] as String?) != null
+                                    ? cachedImgProvider(_cpPartner!['avatar'] as String)
+                                    : null,
+                                child: const Icon(Icons.person, size: 40, color: Colors.grey),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // CP heart icon between avatars
+                  if (hasCp)
+                    Positioned(
+                      left: 104 - 12,
+                      top: 32,
+                      child: Image.asset(
+                        config.cpProfileHeartIcon,
+                        width: 32,
+                        height: 32,
+                      ),
+                    ),
+                  // Like button - only for other users' profiles
+                  if (!isOwnProfile)
+                    Positioned(
+                      right: 20,
+                      bottom: 0,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: const BoxDecoration(
+                              color: Color(0x99000000),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.favorite_border,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '0',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUserInfoPanel(DynamicConfigService config, UserModel? user) {
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Name row - matching XML: userNameTv1 + userCountryFlag + unionBadge
+          Padding(
+            padding: const EdgeInsetsDirectional.only(top: 3, start: 12),
+            child: Row(
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: Text(
+                    user?.name ?? 'اسم المستخدم',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Country flag placeholder
+                Container(
+                  width: 24,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 1),
+                // Union badge placeholder
+                if (user?.hostedRoomId != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: config.buttonColor,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      'Room',
+                      style: const TextStyle(fontSize: 9, color: Colors.white),
+                      maxLines: 1,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Sex/Age view + Level badges row
+          Padding(
+            padding: const EdgeInsetsDirectional.only(top: 10, start: 12),
+            child: Row(
+              children: [
+                // Sex/Age pill - matching layout_sex_age_v2.xml
+                Container(
+                  height: 16,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: user?.gender == 'female'
+                        ? const Color(0xFFf3517c)
+                        : const Color(0xFF4690f2),
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        user?.gender == 'female' ? Icons.female : Icons.male,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${user?.level ?? 0}',
+                        style: const TextStyle(fontSize: 10, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 3),
+                // Level badges
+                _buildLevelBadgeSmall(user?.wealthLevel ?? 1, 'wealth'),
+                const SizedBox(width: 3),
+                _buildLevelBadgeSmall(user?.rechargeLevel ?? 1, 'recharge'),
+                const SizedBox(width: 3),
+                _buildLevelBadgeSmall(user?.gemsLevel ?? 1, 'gems'),
+              ],
+            ),
+          ),
+          // ID row - matching XML llID
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              children: [
+                Text(
+                  'ID: ${(user?.customId ?? '').isNotEmpty ? user!.customId : ((1000000 + (user?.uid.hashCode.abs() ?? 0) % 9000000).toString())}',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                ),
+                const SizedBox(width: 5),
+                const Text('|', style: TextStyle(color: Color(0xFFbbbbbb), fontSize: 12)),
+                const SizedBox(width: 5),
+                const Icon(Icons.location_on, size: 12, color: Color(0xFF666666)),
+                const SizedBox(width: 3),
+                Text(
+                  'مصر',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                ),
+                const SizedBox(width: 5),
+                const Text('|', style: TextStyle(color: Color(0xFFbbbbbb), fontSize: 12)),
+                const SizedBox(width: 5),
+                Text(
+                  'منذ 5 ساعات',
+                  style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                ),
+              ],
+            ),
+          ),
+          // Bio/Signature
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'لم يضف توقيعاً بعد',
+              style: TextStyle(fontSize: 12, color: Color(0xFF555555)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsPanel(DynamicConfigService config, UserModel? user) {
+    final stats = <_StatItemData>[
+      _StatItemData('$_followingCount', 'Following'),
+      _StatItemData('$_fansCount', 'Fans'),
+      _StatItemData('$_visitorsCount', 'Visitors'),
+      _StatItemData('${_receivedGifts.length}', 'Gifts'),
+      _StatItemData('$_sentGiftsCount', 'Sent'),
+    ];
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFFF5F5F5),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              const Color(0xFFDE880F).withValues(alpha: 0.1),
+              const Color(0xFFF5F5F5),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: AspectRatio(
+          aspectRatio: 351 / 80,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: () {
+              final items = <Widget>[];
+              for (int i = 0; i < stats.length; i++) {
+                items.add(_statItem(stats[i].count, stats[i].label));
+                if (i < stats.length - 1) {
+                  items.add(_dividerVertical());
+                }
+              }
+              return items;
+            }(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _statItem(String count, String label) {
+    return SizedBox(
+      width: 60,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            count,
+            style: const TextStyle(
+              fontSize: 15,
+            fontWeight: FontWeight.bold,
+               color: Colors.black87,
+             ),
+           ),
+           const SizedBox(height: 4),
+           Text(
+             label,
+             style: TextStyle(
+               fontSize: 11,
+               color: Colors.black87.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dividerVertical() {
+    return Container(
+      width: 1,
+      height: 28,
+      color: Colors.white.withValues(alpha: 0.2),
+    );
+  }
+
+  Widget _buildRoomCard(DynamicConfigService config, UserModel? user) {
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        width: double.infinity,
+        height: 70,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8E8E8),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 10),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                color: Colors.white.withValues(alpha: 0.2),
+              ),
+              child: const Icon(Icons.meeting_room, color: Colors.black54, size: 28),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _currentRoomId ?? 'الغرفة',
+                style: const TextStyle(
+                  fontSize: 16,
+                  color: Colors.black87,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            GestureDetector(
+              onTap: _navigateToRoom,
+              child: Container(
+                margin: const EdgeInsets.only(right: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFF6de5ff)),
+                ),
+                child: const Text(
+                  'دخول',
+                  style: TextStyle(fontSize: 14, color: Color(0xFF6de5ff)),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String getCpLevelFromGifts(int totalGifts) {
+    if (totalGifts >= 1000000) return 'cp3';
+    if (totalGifts >= 500000) return 'cp2';
+    if (totalGifts >= 1) return 'cp1';
+    if (_cpCouple != null) return 'cp1';
+    return 'cp1'; // Always show cp1 even without CP data
+  }
+
+  Widget _buildCpPanelSection(DynamicConfigService cfg, UserModel? user) {
+    final userName = user?.name ?? '';
+    final userPhoto = user?.photoUrl ?? '';
+    final partnerName = _cpPartner?['name'] as String? ?? '';
+    final partnerAvatar = _cpPartner?['avatar'] as String? ?? '';
+    final daysTogether = (_cpCouple?['days_together'] as num?)?.toInt() ?? 0;
+    final hasCp = _cpCouple != null;
+    final cpLevel = _getCpLevelFromGifts(_cpGiftTotal);
+    final hasLevel = cpLevel != 'none';
+
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: SizedBox(
+          width: 310,
+          child: Column(
+            children: [
+              if (_profileBgUrl != null && _profileBgUrl!.isNotEmpty && !hasCp)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SizedBox(
+                    height: 40,
+                    child: SvgaPlayer(assetPath: cfg.cpProfileTopBgSvga, width: 310, height: 40),
+                  ),
+                ),
+              if (hasCp && hasLevel) ...[
+                Image.asset(cfg.cpProfileLevelBg,
+                    width: 123, height: 19),
+                const SizedBox(height: 4),
+                Text('Lv.$cpLevel',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      foreground: Paint()
+                        ..shader = LinearGradient(
+                          colors: [cfg.cpProfileLevelGradientStart, cfg.cpProfileLevelGradientEnd],
+                        ).createShader(Rect.fromLTWH(0, 0, 60, 16)),
+                    )),
+                const SizedBox(height: 8),
+              ],
+              SizedBox(
+                height: 102,
+                child: hasLevel
+                    ? SvgaPlayer(
+                        assetPath: 'assets/svga/$cpLevel.svga',
+                        width: 310,
+                        height: 102,
+                        fit: BoxFit.contain,
+                        imageReplacement: {
+                          'avatar1': userPhoto.isNotEmpty ? userPhoto : '',
+                          if (partnerAvatar.isNotEmpty) 'avatar2': partnerAvatar,
+                        },
+                        defaultImageUrl: hasCp ? '' : null,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              const SizedBox(height: 13),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _cpNameBadge(cfg, userName),
+                  const SizedBox(width: 20),
+                  _cpNameBadge(cfg, hasCp ? partnerName : '....'),
+                ],
+              ),
+              if (hasCp)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: cfg.cpProfileDaysBadgeBg,
+                      borderRadius: BorderRadius.circular(55),
+                      border: Border.all(
+                          color: cfg.cpProfileDaysBadgeBorder, width: 0.5),
+                    ),
+                    child: Text(
+                      'معاً منذ $daysTogether يوم',
+                      style: TextStyle(
+                          color: cfg.cpProfileDaysTogetherText, fontSize: 10),
+                    ),
+                  ),
+                ),
+              if (hasCp)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: cfg.cpProfileDaysBadgeBg2,
+                      borderRadius: BorderRadius.circular(29),
+                      border: Border.all(
+                          color: cfg.cpProfileDaysBadgeBorder2, width: 0.5),
+                    ),
+                    child: Text(
+                      '$daysTogether يوم',
+                      style: TextStyle(
+                          color: cfg.cpProfileDaysText, fontSize: 10),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _cpNameBadge(DynamicConfigService cfg, String name) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage(cfg.cpProfileNameFrame),
+          fit: BoxFit.fill,
+        ),
+      ),
+      child: Text(
+        name,
+        style: TextStyle(color: cfg.cpHeaderText, fontSize: 12),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildMomentsSection(DynamicConfigService config, UserModel? user) {
+    final momentsList = _allOwnedNecklaces.take(4).toList();
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0F0F0),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'اللحظات',
+                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const Spacer(),
+                const Icon(Icons.chevron_right, color: Color(0xFF555555), size: 20),
+              ],
+            ),
+            if (momentsList.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 50,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: momentsList.map((m) {
+                    final svga = m['svga_url']?.toString();
+                    final img = m['image_url']?.toString();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: SizedBox(
+                        width: 50,
+                        height: 50,
+                        child: svga != null && svga.isNotEmpty
+                            ? SvgaPlayer(assetPath: svga, width: 50, height: 50)
+                            : (img != null && img.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                  child: CachedImg(img, fit: BoxFit.contain),
+                                )
+                              : Container(
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE8E8E8),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Icon(Icons.music_note, color: Colors.grey),
+                                )),
+                        ),
+                      );
+                    }).toList(),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGiftWallSection(DynamicConfigService config, UserModel? user) {
+
+    return Container(
+      width: double.infinity,
+      color: const Color(0xffffffff),
+      padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                const Text(
+                  'جدار الهدايا',
+                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const Spacer(),
+                const Icon(Icons.chevron_right, color: Color(0xFF555555), size: 20),
+              ],
+            ),
+          ),
+          if (_receivedGifts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'لا توجد هدايا بعد',
+                  style: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.4)),
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 80,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                itemCount: _receivedGifts.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (context, index) {
+                  final g = _receivedGifts[index];
+                  final giftDef = _giftsCatalog[g.giftId];
+                  final isCpGift = giftDef?.isCpGift ?? false;
+                  final cpDays = isCpGift ? (giftDef?.cpGiftDurationHours ?? 0) ~/ 24 : 0;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedGift = g),
+                    child: Column(
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              width: 54,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0F0F0),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: giftDef?.iconAsset != null
+                                  ? ClipRRect(
+                                      borderRadius: BorderRadius.circular(7),
+                                      child: detectAssetType(giftDef!.iconAsset) == AssetType.svga
+                                          ? SvgaPlayer(
+                                              assetPath: giftDef!.iconAsset,
+                                              width: 54,
+                                              height: 54,
+                                            )
+                                          : CachedImg(
+                                              giftDef!.iconAsset,
+                                              fit: BoxFit.contain,
+                                              error: (_, __, ___) =>
+                                                  const Icon(Icons.card_giftcard, size: 24, color: Colors.grey),
+                                            ),
+                                    )
+                                  : const Icon(Icons.card_giftcard, size: 24, color: Colors.grey),
+                            ),
+                            if (isCpGift && cpDays > 0)
+                              Positioned(
+                                right: -2,
+                                top: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: config.cpGold,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.music_note, size: 8, color: Colors.black),
+                                      const SizedBox(width: 1),
+                                      Text('$cpDays',
+                                          style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: Colors.black)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: 54,
+                          child: Text(
+                            g.giftName,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 9, color: Colors.grey),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMedalWallSection(DynamicConfigService config, UserModel? user) {
+    final necklaces = _allOwnedNecklaces.take(8).toList();
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                const Text(
+                  'المدليات',
+                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+          necklaces.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Image.asset('assets/cp/ic_add_cp.webp', width: 52, height: 52,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 52, height: 52,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8E8E8),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(Icons.card_giftcard, color: Colors.grey, size: 24),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'لا توجد مدليات',
+                        style: TextStyle(color: Colors.black54, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                )
+              : SizedBox(
+                  height: 64,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    children: necklaces.map((n) {
+                      final svga = n['svga_url']?.toString();
+                      final img = n['image_url']?.toString();
+                      final name = n['name']?.toString() ?? '';
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: GestureDetector(
+                          onTap: () => _showNecklaceDetail(n),
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                width: 52,
+                                height: 52,
+                                child: svga != null && svga.isNotEmpty
+                                    ? SvgaPlayer(assetPath: svga, width: 52, height: 52)
+                                    : (img != null && img.isNotEmpty
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: CachedImg(img, fit: BoxFit.contain,
+                                              error: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.grey)),
+                                          )
+                                        : Container(
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFE8E8E8),
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: const Icon(Icons.card_giftcard, color: Colors.grey, size: 24),
+                                          )),
+                              ),
+                              if (name.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: SizedBox(
+                                    width: 52,
+                                    child: Text(
+                                      name,
+                                      textAlign: TextAlign.center,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(fontSize: 8, color: Colors.grey),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  void _showNecklaceDetail(Map<String, dynamic> necklace) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: Colors.white,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 100, width: 100,
+              child: Icon(Icons.card_giftcard, size: 60, color: Colors.black54)),
+            const SizedBox(height: 12),
+            Text(
+              necklace['name']?.toString() ?? '',
+              style: const TextStyle(color: Colors.black87, fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBadgesSection(DynamicConfigService config, UserModel? user) {
+    final ownedBadgeIds = user?.ownedBadges ?? [];
+    final levelBadgeUrls = user?.ownedLevelBadges ?? [];
+    if (ownedBadgeIds.isEmpty && levelBadgeUrls.isEmpty) {
+      return const SizedBox();
+    }
+    final badgeWidgets = <Widget>[];
+    for (final id in ownedBadgeIds) {
+      if (id.isEmpty) continue;
+      if (id.startsWith('http://') || id.startsWith('https://') || id.startsWith('assets/')) {
+        badgeWidgets.add(SvgaPlayer(assetPath: id, width: 40, height: 40));
+        continue;
+      }
+      final match = _badgesCatalog.where((b) => b['id']?.toString() == id).toList();
+      if (match.isNotEmpty) {
+        final b = match.first;
+        final svgaUrl = b['svga_url']?.toString();
+        final imgUrl = b['image_url']?.toString();
+        if (svgaUrl != null && svgaUrl.isNotEmpty) {
+          badgeWidgets.add(SvgaPlayer(assetPath: svgaUrl, width: 40, height: 40));
+        } else if (imgUrl != null && imgUrl.isNotEmpty) {
+          badgeWidgets.add(CachedImg(imgUrl, width: 40, height: 40, fit: BoxFit.contain));
+        }
+      }
+    }
+    for (final url in levelBadgeUrls) {
+      if (detectAssetType(url) == AssetType.svga) {
+        badgeWidgets.add(SvgaPlayer(assetPath: url, width: 40, height: 40));
+      } else {
+        badgeWidgets.add(
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: CachedImg(url, width: 40, height: 40, fit: BoxFit.contain,
+                error: (_, __, ___) => const SizedBox()),
+          ),
+        );
+      }
+    }
+    if (badgeWidgets.isEmpty) return const SizedBox();
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                const Text(
+                  'الشارات',
+                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 50,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              children: badgeWidgets.map((w) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: w,
+              )).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(DynamicConfigService config, UserModel? user) {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.currentUser;
+
+    // Own profile -> show Edit button
+    if (widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid)) {
+      return Container(
+        width: double.infinity,
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        child: GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const EditProfileScreenPlaceholder(),
+              ),
+            );
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(25),
+              border: Border.all(color: const Color(0xFF6de5ff)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.edit, size: 20, color: Color(0xFF6de5ff)),
+                const SizedBox(width: 10),
+                const Text(
+                  'تعديل الملف الشخصي',
+                  style: TextStyle(fontSize: 16, color: Color(0xFF6de5ff)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Other user -> Show Follow + Message buttons
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: Row(
+        children: [
+          // Follow button
+          Expanded(
+            child: GestureDetector(
+              onTap: _toggleFollow,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(25),
+                  border: Border.all(color: const Color(0xFF6de5ff)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _isFollowing ? Icons.check : Icons.person_add,
+                      size: 20,
+                      color: const Color(0xFF6de5ff),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _isFollowing ? 'متابع' : 'متابعة',
+                      style: const TextStyle(fontSize: 16, color: Color(0xFF6de5ff)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Message button
+          Expanded(
+            child: GestureDetector(
+              onTap: _navigateToChat,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(25),
+                  border: Border.all(color: const Color(0xFF6de5ff)),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.chat, size: 20, color: Color(0xFF6de5ff)),
+                    SizedBox(width: 10),
+                    Text(
+                      'رسالة',
+                      style: TextStyle(fontSize: 16, color: Color(0xFF6de5ff)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLevelBadgeSmall(int level, String type) {
+    final lvlConfig = LevelService().getLevelConfig(type, level);
+    final url = lvlConfig?.imageUrl;
+    if (url != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: R.loadAsset(url, width: 20, height: 20),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        gradient: AppColors.giftBtnGradient,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        'Lv.$level',
+        style: const TextStyle(fontSize: 8, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildGiftOverlay(DynamicConfigService config) {
+    final g = _selectedGift!;
+    final giftDef = _giftsCatalog[g.giftId];
+    final isCpGift = giftDef?.isCpGift ?? false;
+    final cpDays = isCpGift ? (giftDef?.cpGiftDurationHours ?? 0) ~/ 24 : 0;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedGift = null),
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.7),
+        child: Center(
+          child: GestureDetector(
+            onTap: () {},
+            child: Container(
+              width: 200,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (g.giftName.isNotEmpty)
+                    Text(g.giftName,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  if (isCpGift && cpDays > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: config.cpGold,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.music_note, size: 12, color: Colors.black),
+                            const SizedBox(width: 4),
+                            Text('هدية CP - $cpDays يوم',
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: _giftsCatalog[g.giftId]?.iconAsset != null
+                          ? CachedImg(_giftsCatalog[g.giftId]!.iconAsset,
+                              fit: BoxFit.contain,
+                              error: (_, __, ___) =>
+                                  Icon(Icons.card_giftcard, size: 40, color: config.goldColor))
+                          : Icon(Icons.card_giftcard, size: 40, color: config.goldColor),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Value: ${g.value} x ${g.count}',
+                      style: TextStyle(fontSize: 12, color: config.textSecondary)),
+                  const SizedBox(height: 4),
+                  Text('From: ${g.senderName}',
+                      style: TextStyle(fontSize: 12, color: config.textSecondary)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemOverlay(DynamicConfigService config) {
+    final item = _selectedItem!;
+    final isSvga = item.svgaAsset != null;
+    final assetUrl = item.svgaAsset ?? item.itemIcon;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedItem = null),
+      child: Container(
+        color: Colors.black.withValues(alpha: 0.7),
+        child: Center(
+          child: GestureDetector(
+            onTap: () {},
+            child: Container(
+              width: 220,
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(item.itemName,
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: 100,
+                    height: 100,
+                    child: isSvga
+                        ? SvgaPlayer(assetPath: assetUrl, width: 100, height: 100, loops: true)
+                        : (assetUrl.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: CachedImg(assetUrl, fit: BoxFit.contain),
+                              )
+                            : Icon(Icons.card_giftcard, size: 50, color: config.goldColor)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatItemData {
+  final String count;
+  final String label;
+  const _StatItemData(this.count, this.label);
+}
+
+class EditProfileScreenPlaceholder extends StatelessWidget {
+  const EditProfileScreenPlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('تعديل الملف الشخصي')),
+      body: const Center(child: Text('شاشة تعديل الملف الشخصي')),
+    );
+  }
+}
+
+class ChatScreen extends StatefulWidget {
+  final String targetUid;
+  final String targetName;
+  final String? targetPhotoUrl;
+
+  const ChatScreen({
+    super.key,
+    required this.targetUid,
+    required this.targetName,
+    this.targetPhotoUrl,
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _msgController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  final SupabaseService _firebaseService = SupabaseService();
+  List<MessageModel> _messages = [];
+  bool _sendingImage = false;
+  StreamSubscription? _messagesSub;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initConversation());
+  }
+
+  Future<void> _initConversation() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.currentUser;
+    if (user == null) return;
+    final sorted = [user.uid, widget.targetUid]..sort();
+    final convId = '${sorted[0]}_${sorted[1]}';
+    _messagesSub = _firebaseService.privateMessagesStream(convId).listen((msgs) {
+      if (mounted) {
+        setState(() => _messages = msgs);
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      }
+    });
+    _firebaseService.markConversationRead(user.uid, convId);
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final text = _msgController.text.trim();
+    if (text.isEmpty) return;
+    _msgController.clear();
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.currentUser;
+    if (user == null) return;
+
+    try {
+      await _firebaseService.sendPrivateMessage(
+        senderId: user.uid,
+        senderName: user.name,
+        senderPhotoUrl: user.photoUrl,
+        receiverId: widget.targetUid,
+        receiverName: widget.targetName,
+        receiverPhotoUrl: widget.targetPhotoUrl ?? '',
+        text: text,
+      );
+    } catch (e) {
+      debugPrint('sendPrivateMessage error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to send message')),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+    if (image == null) return;
+
+    setState(() => _sendingImage = true);
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final user = userProvider.currentUser;
+      if (user == null) return;
+
+      final imageUrl = await CloudinaryService().uploadImage(
+        File(image.path),
+        publicId: 'chat_${DateTime.now().millisecondsSinceEpoch}',
+      );
+
+      await _firebaseService.sendPrivateMessage(
+        senderId: user.uid,
+        senderName: user.name,
+        senderPhotoUrl: user.photoUrl,
+        receiverId: widget.targetUid,
+        receiverName: widget.targetName,
+        receiverPhotoUrl: widget.targetPhotoUrl ?? '',
+        text: '',
+        imageUrl: imageUrl,
+        type: 'image',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sendingImage = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _messagesSub?.cancel();
+    _msgController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F5FC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: R.image(R.backIc, width: 24, height: 24),
+          ),
+        ),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundImage: widget.targetPhotoUrl != null && widget.targetPhotoUrl!.isNotEmpty
+                  ? cachedImgProvider(widget.targetPhotoUrl!)
+                  : null,
+              child: widget.targetPhotoUrl == null || widget.targetPhotoUrl!.isEmpty
+                  ? const Icon(Icons.person, size: 18)
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              widget.targetName,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF16151A),
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: _messages.isEmpty
+                ? const Center(
+                    child: Text(
+                      'No messages yet',
+                      style: TextStyle(color: Color(0xFF9BA1B6)),
+                    ),
+                  )
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = _messages[index];
+                      final userProvider = Provider.of<UserProvider>(context, listen: false);
+                      final isMe = msg.senderUid == userProvider.currentUser?.uid;
+                      return _buildMessageBubble(msg, isMe);
+                    },
+                  ),
+          ),
+          if (_sendingImage)
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: LinearProgressIndicator(),
+            ),
+          _buildInputBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(MessageModel msg, bool isMe) {
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
+        child: Column(
+          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (!isMe)
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 2),
+                child: Text(
+                  msg.senderName,
+                  style: const TextStyle(fontSize: 11, color: Color(0xFF9BA1B6)),
+                ),
+              ),
+            if (msg.type == 'image' && msg.imageUrl != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                  child: GestureDetector(
+                    onTap: () => _showImagePreview(msg.imageUrl!),
+                    child: CachedImg(
+                      msg.imageUrl!,
+                      width: 200,
+                      height: 200,
+                      fit: BoxFit.cover,
+                      error: (_, __, ___) => Container(
+                        width: 200,
+                        height: 200,
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.broken_image),
+                      ),
+                    ),
+                  ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isMe ? const Color(0xFF1E90FF) : Colors.white,
+                  borderRadius: BorderRadius.circular(12).copyWith(
+                    bottomRight: isMe ? const Radius.circular(0) : null,
+                    bottomLeft: !isMe ? const Radius.circular(0) : null,
+                  ),
+                ),
+                child: Text(
+                  msg.text,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isMe ? Colors.white : const Color(0xFF16151A),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                _formatTime(msg.timestamp),
+                style: const TextStyle(fontSize: 10, color: Color(0xFF9BA1B6)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE8E8E8), width: 0.5)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: _pickImage,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F5FC),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(Icons.image, size: 20, color: Color(0xFF9BA1B6)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F5FC),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: TextField(
+                  controller: _msgController,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _sendMessage(),
+                  decoration: const InputDecoration(
+                    hintText: 'Type a message...',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _sendMessage,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E90FF),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: const Icon(Icons.send, size: 18, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showImagePreview(String url) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: InteractiveViewer(
+          child: CachedImg(url, fit: BoxFit.contain),
+        ),
+      ),
+    );
+  }
+
+  String _formatTime(int? timestamp) {
+    if (timestamp == null) return '';
+    final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+}
