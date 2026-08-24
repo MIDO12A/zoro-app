@@ -14,6 +14,12 @@ class RoomAudioService {
   String? _currentRoomId;
   String? _currentUid;
 
+  // Serialize engine lifecycle: never allow two createEngineWithProfile /
+  // destroyEngine calls to overlap (overlapping calls crash natively inside
+  // libZegoExpressEngine.so -> zego_express_engine_init with SIGSEGV).
+  Future<bool>? _initFuture;
+  Future<void>? _disposeFuture;
+
   bool get isInitialized => _initialized;
   bool get isMicEnabled => _micEnabled;
 
@@ -32,14 +38,22 @@ class RoomAudioService {
     }
   }
 
-  Future<bool> initialize() async {
-    if (_initialized) return true;
+  Future<bool> initialize() {
+    if (_initialized) return Future<bool>.value(true);
+    // Reuse the in-flight init so concurrent callers (double room push,
+    // rapid enter/exit) share one createEngineWithProfile call.
+    return _initFuture ??= _doInitialize().whenComplete(() => _initFuture = null);
+  }
+
+  Future<bool> _doInitialize() async {
     try {
       final status = await Permission.microphone.request();
       if (!status.isGranted) {
         debugPrint('[RoomAudioService] Microphone permission denied');
         return false;
       }
+      // If a destroy is still running from a previous room, wait for it.
+      await _disposeFuture;
       await ZegoExpressEngine.createEngineWithProfile(ZegoEngineProfile(
         AppConfig.zegoAppId, ZegoScenario.Default, appSign: AppConfig.zegoAppSign,
       ));
@@ -155,7 +169,15 @@ class RoomAudioService {
     }
   }
 
-  Future<void> dispose() async {
+  Future<void> dispose() {
+    if (!_initialized && _disposeFuture == null) return Future<void>.value();
+    // Serialize destroys too: a createEngine must never overlap a destroy.
+    return _disposeFuture ??= _doDispose().whenComplete(() => _disposeFuture = null);
+  }
+
+  Future<void> _doDispose() async {
+    // Wait for any in-flight init to finish before destroying.
+    await _initFuture;
     await leaveChannel();
     try {
       ZegoExpressEngine.destroyEngine();

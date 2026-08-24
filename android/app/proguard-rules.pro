@@ -29,3 +29,7 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# Keep ZEGO underlying avkit2 layer (com.zego.*) - required by official docs
+-keep class com.zego.** { *; }
+-dontwarn com.zego.**

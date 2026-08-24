@@ -524,8 +524,9 @@ class _GiftPanelState extends State<GiftPanel> {
       final receivers = _selectedUserId != null
           ? [{'id': _selectedUserId, 'name': _selectedUserName ?? ''}]
           : widget.targetUsers;
+      var allOk = true;
       for (final r in receivers) {
-        await fb.sendGift(
+        final ok = await fb.sendGift(
           roomId: widget.roomId,
           giftId: gift.id,
           giftName: gift.name,
@@ -538,7 +539,8 @@ class _GiftPanelState extends State<GiftPanel> {
           value: gift.value,
           count: widget.selectedCount,
         );
-        if (gift.isCpGift) {
+        if (!ok) allOk = false;
+        if (ok && gift.isCpGift) {
           await CpService.sendGiftAndLink(
             giftId: gift.id,
             senderId: currentUser.uid,
@@ -551,6 +553,14 @@ class _GiftPanelState extends State<GiftPanel> {
         }
       }
       await userProvider.loadUser(currentUser.uid);
+      if (!allOk && mounted) {
+        setState(() {
+          _errorMsg = 'فشل إرسال الهدية — تأكد من رصيد العملات وحاول مجدداً';
+        });
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _errorMsg = null);
+        });
+      }
     }
 
     setState(() => _sending = false);

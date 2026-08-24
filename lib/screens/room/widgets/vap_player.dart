@@ -53,7 +53,6 @@ class VapPlayer extends StatefulWidget {
 class _VapPlayerState extends State<VapPlayer> {
   final FlutterVapController _controller = FlutterVapController();
   String? _localPath;
-  String? _tempDir;
   bool _ready = false;
   bool _hasError = false;
 
@@ -68,9 +67,9 @@ class _VapPlayerState extends State<VapPlayer> {
     super.didUpdateWidget(old);
     if (old.url != widget.url) {
       _controller.stop();
-      _deleteTempFile();
+      // Keep the downloaded file – it stays in the cache dir so replays of
+      // the same effect cost zero data.
       _localPath = null;
-      _tempDir = null;
       _ready = false;
       _hasError = false;
       _resolveSource();
@@ -80,24 +79,16 @@ class _VapPlayerState extends State<VapPlayer> {
   @override
   void dispose() {
     _controller.stop();
-    _deleteTempFile();
+    // Do NOT delete the cached file here: keeping it lets the next gift play
+    // instantly and saves the user's mobile data. The OS clears temp storage
+    // automatically when space is needed.
     super.dispose();
-  }
-
-  void _deleteTempFile() {
-    final p = _localPath;
-    final d = _tempDir;
-    if (p != null && d != null && p.startsWith(d)) {
-      File(p).delete().ignore();
-    }
   }
 
   Future<void> _resolveSource() async {
     try {
       final url = widget.url;
       if (url.startsWith('http://') || url.startsWith('https://')) {
-        final dir = await getTemporaryDirectory();
-        _tempDir = dir.path;
         final path = await VapPlayer._cachePathFor(url);
         final file = File(path);
         if (!await file.exists()) {
@@ -186,6 +177,3 @@ class _VapPlayerState extends State<VapPlayer> {
   }
 }
 
-extension on Future<void> {
-  void ignore() {}
-}

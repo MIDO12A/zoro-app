@@ -268,10 +268,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           uiSettings: [
             AndroidUiSettings(
               toolbarTitle: 'قص الصورة',
-              toolbarColor: Colors.white,
+              toolbarColor: const Color(0xFF171A24),
               toolbarWidgetColor: Colors.white,
+              activeControlsWidgetColor: const Color(0xFF4CC790),
               lockAspectRatio: true,
-              statusBarColor: Colors.white,
+              statusBarColor: const Color(0xFF171A24),
             ),
             IOSUiSettings(
               title: 'قص الصورة',

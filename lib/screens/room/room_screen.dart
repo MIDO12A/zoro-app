@@ -57,6 +57,9 @@ Future<void> navigateToRoom(
   String gameDesc = '',
   bool replace = false,
 }) async {
+  // Double-tap guard: pushing two RoomScreens concurrently initializes the
+  // audio engine twice and crashes natively (SIGSEGV in Zego engineInitJni).
+  if (!RoomScreen.pushGuard(roomId)) return;
   final svc = MinimizedRoomService();
   final userProvider = Provider.of<UserProvider>(context, listen: false);
   final uid = userProvider.currentUser?.uid;
@@ -92,6 +95,21 @@ Future<void> navigateToRoom(
 
 // fragment_chat_room.xml
 class RoomScreen extends StatefulWidget {
+  static DateTime _lastPushAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static String? _lastPushRoomId;
+
+  /// Returns true if this push is allowed (debounces double-taps on the same
+  /// room within 800ms, which would stack two RoomScreens and double-init Zego).
+  static bool pushGuard(String roomId) {
+    final now = DateTime.now();
+    final dup = identical(_lastPushRoomId, roomId) &&
+        now.difference(_lastPushAt).inMilliseconds < 800;
+    if (dup) return false;
+    _lastPushAt = now;
+    _lastPushRoomId = roomId;
+    return true;
+  }
+
   final String roomName;
   final String hostName;
   final String roomId;
@@ -250,13 +268,16 @@ class _RoomScreenState extends State<RoomScreen> {
       _isFollowed = currentUser.followedRooms.contains(widget.roomId);
       _checkRoomBan(currentUser.uid);
       // Clear any stale seats for this user before registering (await to avoid race)
-      Future(() async {
-        await Supabase.instance.client
-            .from('room_seats')
-            .delete()
-            .eq('room_id', widget.roomId)
-            .eq('uid', currentUser.uid);
-      });
+      // Only on fresh joins – on minimized-room re-entry the current seat must survive.
+      if (!widget.isReentry) {
+        Future(() async {
+          await Supabase.instance.client
+              .from('room_seats')
+              .delete()
+              .eq('room_id', widget.roomId)
+              .eq('uid', currentUser.uid);
+        });
+      }
       // Register in Firebase so others see this user
       _firebaseService.joinRoom(widget.roomId, currentUser);
       if (!widget.isReentry) {
@@ -301,6 +322,9 @@ class _RoomScreenState extends State<RoomScreen> {
       if (mounted) {
         setState(() => _bannerConfigs = configs.where((c) => c.isActive).toList());
       }
+      // Pre-cache the banner SVGA/VAP files so the first play is instant
+      MediaPrefetchService()
+          .prefetchUrls(configs.where((c) => c.isActive).map((c) => c.svgaUrl));
     });
 
     _roomSub = _firebaseService.roomStream(widget.roomId).listen((room) {
@@ -710,7 +734,12 @@ class _RoomScreenState extends State<RoomScreen> {
 
   @override
   void dispose() {
-    _cleanupUserSession();
+    // Minimized rooms keep their seat, membership and audio session alive –
+    // the user is still "in" the room via the floating bubble.
+    if (!_isMinimized) {
+      _cleanupUserSession();
+      _roomAudio.dispose();
+    }
     _chatCtrl.dispose();
     _chatScroll.dispose();
     _giftSub?.cancel();
@@ -722,7 +751,6 @@ class _RoomScreenState extends State<RoomScreen> {
     _bannerConfigSub?.cancel();
     _msgSub?.cancel();
     _entranceSub?.cancel();
-    _roomAudio.dispose();
     super.dispose();
   }
 
@@ -927,33 +955,45 @@ class _RoomScreenState extends State<RoomScreen> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.currentUser;
     final name = currentUser?.name ?? 'Me';
-    // Leave any existing seat first
+    // Remember the previous seat before overwriting local state
+    int? previousIdx;
     for (int i = 0; i < _seats.length; i++) {
-      if (_seats[i].user?.id == _currentUserId && i != idx) {
-        _firebaseService.leaveSeat(widget.roomId, i).then((_) {
-          _firebaseService.takeSeat(widget.roomId, idx, app.UserModel(
-            uid: _currentUserId!,
-            name: name,
-            photoUrl: currentUser?.photoUrl ?? '',
-            activeFrame: currentUser?.activeFrame,
-            activeCar: currentUser?.activeCar,
-          )).then((_) => _takingSeat = false);
-        });
-        setState(() {
-          _seats[i].state = SeatState.empty;
-          _seats[i].user = null;
-        });
-        return;
+      if (i != idx && _seats[i].user?.id == _currentUserId) {
+        previousIdx = i;
+        break;
       }
     }
-    // No existing seat — just take the new one
-    _firebaseService.takeSeat(widget.roomId, idx, app.UserModel(
-      uid: _currentUserId!,
-      name: name,
-      photoUrl: currentUser?.photoUrl ?? '',
-      activeFrame: currentUser?.activeFrame,
-      activeCar: currentUser?.activeCar,
-    )).then((_) => _takingSeat = false);
+    // Optimistic UI: place the user on the target seat immediately so the
+    // move feels instant; the seats stream reconciles with the server state.
+    setState(() {
+      _seats[idx] = SeatModel(
+        index: idx,
+        state: SeatState.occupied,
+        user: UserModel(
+          name: name,
+          avatar: currentUser?.photoUrl ?? '',
+          id: _currentUserId!,
+        ),
+      );
+      if (previousIdx != null) {
+        _seats[previousIdx] = SeatModel(index: previousIdx);
+      }
+    });
+    Future<void> doTake() async {
+      await _firebaseService.takeSeat(widget.roomId, idx, app.UserModel(
+        uid: _currentUserId!,
+        name: name,
+        photoUrl: currentUser?.photoUrl ?? '',
+        activeFrame: currentUser?.activeFrame,
+        activeCar: currentUser?.activeCar,
+      ));
+      _takingSeat = false;
+    }
+    if (previousIdx != null) {
+      _firebaseService.leaveSeat(widget.roomId, previousIdx).then((_) => doTake());
+    } else {
+      doTake();
+    }
   }
 
   void _kickOffMic(int idx) {

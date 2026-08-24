@@ -366,6 +366,16 @@ class FirebaseService {
   // GIFTS
   // ═══════════════════════════════════════════════════════
 
+  /// Safe int conversion – fields may be stored as int, double or string by
+  /// different writers (admin dashboard, REST backend, manual console edits).
+  /// A strict `as int` cast throws inside the transaction and silently rolls
+  /// back the whole gift (no coin deduction).
+  static int _asInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 0;
+  }
+
   Future<bool> sendGift({
     required String roomId,
     required String giftId,
@@ -387,7 +397,7 @@ class FirebaseService {
       await _db.runTransaction((txn) async {
         final senderSnap = await txn.get(senderRef);
         if (!senderSnap.exists) throw Exception('sender missing');
-        final senderCoins = (senderSnap.data()?['coins'] ?? 0) as int;
+        final senderCoins = _asInt(senderSnap.data()?['coins']);
         if (senderCoins < totalCost) throw Exception('insufficient coins');
 
         txn.set(_db.collection('sent_gifts').doc(id), {
@@ -418,7 +428,7 @@ class FirebaseService {
         });
 
         final sd = senderSnap.data() ?? {};
-        final sentTotal = (sd['total_gifts_sent'] ?? 0) as int;
+        final sentTotal = _asInt(sd['total_gifts_sent']);
         txn.update(senderRef, {
           'coins': senderCoins - totalCost,
           'total_gifts_sent': sentTotal + totalCost,
@@ -429,8 +439,8 @@ class FirebaseService {
         if (recvSnap.exists) {
           final rd = recvSnap.data() ?? {};
           txn.update(receiverRef, {
-            'diamonds': ((rd['diamonds'] ?? 0) as int) + totalCost,
-            'total_gifts_received': ((rd['total_gifts_received'] ?? 0) as int) + totalCost,
+            'diamonds': _asInt(rd['diamonds']) + totalCost,
+            'total_gifts_received': _asInt(rd['total_gifts_received']) + totalCost,
           });
         }
 
@@ -439,8 +449,8 @@ class FirebaseService {
         if (roomSnap.exists) {
           final rm = roomSnap.data() ?? {};
           txn.update(roomRef, {
-            'total_gifts': ((rm['total_gifts'] ?? 0) as int) + totalCost,
-            'hot_value': ((rm['hot_value'] ?? 0) as int) + totalCost,
+            'total_gifts': _asInt(rm['total_gifts']) + totalCost,
+            'hot_value': _asInt(rm['hot_value']) + totalCost,
           });
         }
 
@@ -449,7 +459,7 @@ class FirebaseService {
         final wSnap = await txn.get(walletRef);
         if (wSnap.exists) {
           final wd = wSnap.data() ?? {};
-          txn.update(walletRef, {'diamond_balance': ((wd['diamond_balance'] ?? 0) as int) + totalCost});
+          txn.update(walletRef, {'diamond_balance': _asInt(wd['diamond_balance']) + totalCost});
         } else {
           txn.set(walletRef, {'user_id': receiverId, 'diamond_balance': totalCost, 'gold_balance': 0});
         }

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svga/flutter_svga.dart';
 import 'package:dio/dio.dart';
@@ -89,9 +90,12 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
   @override
   void didUpdateWidget(SvgaPlayer old) {
     super.didUpdateWidget(old);
+    // Compare replacement maps by CONTENT, not identity: parent screens pass
+    // freshly-allocated maps on every build, and identity comparison made the
+    // player reload/restart the animation constantly so it never finished.
     if (old.assetPath != widget.assetPath ||
-        old.textReplacement != widget.textReplacement ||
-        old.imageReplacement != widget.imageReplacement) {
+        !mapEquals(old.textReplacement, widget.textReplacement) ||
+        !mapEquals(old.imageReplacement, widget.imageReplacement)) {
       setState(() { isLoading = true; hasError = false; });
       _loadAnimation();
     }
@@ -195,7 +199,7 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
       try {
         final bytes = await cachedFile.readAsBytes();
         print('SVGA loaded from cache: ${cachedFile.path} (${bytes.length} bytes)');
-        return SVGAParser.shared.decodeFromBuffer(bytes);
+        return await SVGAParser.shared.decodeFromBuffer(bytes);
       } catch (e) {
         print('SVGA cache read error: $e, re-downloading...');
       }

@@ -206,6 +206,7 @@ class _AuthGateState extends State<_AuthGate> {
     final roomPassword = svc.roomPassword ?? '';
     final hotValue = svc.hotValue ?? '0';
     final gameDesc = svc.gameDesc ?? '';
+    if (!RoomScreen.pushGuard(roomId)) return;
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => RoomScreen(
@@ -215,6 +216,7 @@ class _AuthGateState extends State<_AuthGate> {
           roomPassword: roomPassword,
           hotValue: hotValue,
           gameDesc: gameDesc,
+          isReentry: true,
         ),
       ),
     );
