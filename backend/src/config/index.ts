@@ -5,9 +5,9 @@ export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
 
-  supabase: {
-    url: process.env.SUPABASE_URL || '',
-    serviceKey: process.env.SUPABASE_SERVICE_KEY || '',
+  firebase: {
+    webApiKey: process.env.FIREBASE_WEB_API_KEY || '',
+    serviceAccountB64: process.env.FIREBASE_SERVICE_ACCOUNT_B64 || '',
   },
 
   jwt: {

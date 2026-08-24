@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '../config/database';
+import { FieldValue } from 'firebase-admin/firestore';
+import { db } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
@@ -17,8 +18,9 @@ router.post('/create', authenticate, async (req: Request, res: Response) => {
 
     const code = 'AG' + String(1000 + Math.floor(Math.random() * 9000));
 
+    const agencyId = uuidv4();
     const agency = {
-      id: uuidv4(),
+      id: agencyId,
       name,
       code,
       owner_uid: ownerUid,
@@ -29,14 +31,9 @@ router.post('/create', authenticate, async (req: Request, res: Response) => {
       created_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from('agencies').insert(agency);
+    await db.collection('agencies').doc(agencyId).set(agency);
 
-    if (error) {
-      res.status(400).json({ error: error.message });
-      return;
-    }
-
-    await supabase.from('users').update({ role: 'agent', agency_id: agency.id }).eq('uid', ownerUid);
+    await db.collection('users').doc(ownerUid).set({ role: 'agent', agency_id: agencyId }, { merge: true });
 
     res.status(201).json({ agency });
   } catch (err: any) {
@@ -48,28 +45,37 @@ router.get('/my', authenticate, async (req: Request, res: Response) => {
   try {
     const uid = req.user!.uid;
 
-    const { data: membership } = await supabase
-      .from('agency_members')
-      .select('agency_id')
-      .eq('user_uid', uid)
-      .maybeSingle();
+    const membershipSnap = await db
+      .collection('agency_members')
+      .where('user_uid', '==', uid)
+      .limit(1)
+      .get();
 
-    const agencyId = membership?.agency_id;
+    const agencyId = membershipSnap.empty ? undefined : membershipSnap.docs[0].data().agency_id;
 
-    if (!agencyId) {
-      const { data: ownedAgency } = await supabase
-        .from('agencies')
-        .select('*')
-        .eq('owner_uid', uid)
-        .single();
+    let agencyDoc = null;
+    if (agencyId) {
+      agencyDoc = await db.collection('agencies').doc(agencyId).get();
+    }
 
-      if (ownedAgency) {
-        const { data: members } = await supabase
-          .from('agency_members')
-          .select('*')
-          .eq('agency_id', ownedAgency.id);
+    if (!agencyId || !agencyDoc!.exists) {
+      const ownedSnap = await db
+        .collection('agencies')
+        .where('owner_uid', '==', uid)
+        .limit(1)
+        .get();
 
-        res.json({ agency: ownedAgency, members: members || [] });
+      if (!ownedSnap.empty) {
+        const ownedAgency = ownedSnap.docs[0].data();
+        const membersSnap = await db
+          .collection('agency_members')
+          .where('agency_id', '==', ownedAgency.id)
+          .get();
+
+        res.json({
+          agency: ownedAgency,
+          members: membersSnap.docs.map(d => d.data()),
+        });
         return;
       }
 
@@ -77,18 +83,15 @@ router.get('/my', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: agency } = await supabase
-      .from('agencies')
-      .select('*')
-      .eq('id', agencyId)
-      .single();
+    const membersSnap = await db
+      .collection('agency_members')
+      .where('agency_id', '==', agencyId)
+      .get();
 
-    const { data: members } = await supabase
-      .from('agency_members')
-      .select('*')
-      .eq('agency_id', agencyId);
-
-    res.json({ agency, members: members || [] });
+    res.json({
+      agency: agencyDoc!.data(),
+      members: membersSnap.docs.map(d => d.data()),
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -104,36 +107,35 @@ router.post('/join', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: agency, error: findError } = await supabase
-      .from('agencies')
-      .select('*')
-      .eq('code', code)
-      .single();
-
-    if (findError || !agency) {
+    const agencySnap = await db.collection('agencies').where('code', '==', code).limit(1).get();
+    if (agencySnap.empty) {
       res.status(404).json({ error: 'Agency not found' });
       return;
     }
+
+    const agencyDoc = agencySnap.docs[0];
+    const agency = agencyDoc.data() as any;
 
     if (agency.status !== 'active') {
       res.status(400).json({ error: 'Agency is suspended' });
       return;
     }
 
-    const { data: existing } = await supabase
-      .from('agency_members')
-      .select('id')
-      .eq('agency_id', agency.id)
-      .eq('user_uid', userUid)
-      .maybeSingle();
+    const existingSnap = await db
+      .collection('agency_members')
+      .where('agency_id', '==', agency.id)
+      .where('user_uid', '==', userUid)
+      .limit(1)
+      .get();
 
-    if (existing) {
+    if (!existingSnap.empty) {
       res.status(400).json({ error: 'Already a member of this agency' });
       return;
     }
 
+    const memberId = uuidv4();
     const member = {
-      id: uuidv4(),
+      id: memberId,
       agency_id: agency.id,
       user_uid: userUid,
       role: 'sub_agent',
@@ -141,19 +143,14 @@ router.post('/join', authenticate, async (req: Request, res: Response) => {
       joined_at: new Date().toISOString(),
     };
 
-    const { error: joinError } = await supabase.from('agency_members').insert(member);
+    await db.runTransaction(async tx => {
+      tx.set(db.collection('agency_members').doc(memberId), member);
+      tx.update(db.collection('agencies').doc(agencyDoc.id), {
+        member_count: FieldValue.increment(1),
+      });
+    });
 
-    if (joinError) {
-      res.status(500).json({ error: joinError.message });
-      return;
-    }
-
-    await supabase
-      .from('agencies')
-      .update({ member_count: agency.member_count + 1 })
-      .eq('id', agency.id);
-
-    await supabase.from('users').update({ role: 'agent', agency_id: agency.id }).eq('uid', userUid);
+    await db.collection('users').doc(userUid).set({ role: 'agent', agency_id: agency.id }, { merge: true });
 
     res.status(201).json({ agency, member });
   } catch (err: any) {
@@ -165,8 +162,9 @@ router.post('/add-agent', authenticate, requireRole('admin'), async (req: Reques
   try {
     const { agencyId, userUid, commissionRate } = req.body;
 
+    const memberId = uuidv4();
     const member = {
-      id: uuidv4(),
+      id: memberId,
       agency_id: agencyId,
       user_uid: userUid,
       role: 'agent',
@@ -174,14 +172,9 @@ router.post('/add-agent', authenticate, requireRole('admin'), async (req: Reques
       joined_at: new Date().toISOString(),
     };
 
-    const { error } = await supabase.from('agency_members').insert(member);
+    await db.collection('agency_members').doc(memberId).set(member);
 
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
-
-    await supabase.from('users').update({ role: 'agent', agency_id: agencyId }).eq('uid', userUid);
+    await db.collection('users').doc(userUid).set({ role: 'agent', agency_id: agencyId }, { merge: true });
 
     res.status(201).json({ member });
   } catch (err: any) {
@@ -191,17 +184,9 @@ router.post('/add-agent', authenticate, requireRole('admin'), async (req: Reques
 
 router.get('/all', authenticate, requireRole('admin'), async (_req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
-      .from('agencies')
-      .select('*')
-      .order('created_at', { ascending: false });
+    const snap = await db.collection('agencies').orderBy('created_at', 'desc').get();
 
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
-
-    res.json({ agencies: data });
+    res.json({ agencies: snap.docs.map(d => d.data()) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

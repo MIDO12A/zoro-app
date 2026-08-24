@@ -1,32 +1,46 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../config/database';
+import { db } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 
 const router = Router();
+
+const USER_PUBLIC_FIELDS = ['uid', 'custom_id', 'name', 'photo_url', 'gender', 'level', 'experience', 'vip_tier', 'coins', 'diamonds', 'total_gifts_sent', 'total_gifts_received', 'followers', 'following', 'visitors', 'charm', 'active_frame', 'active_headwear', 'active_bubble', 'active_entrance', 'active_car', 'active_cover', 'owned_badges', 'owned_level_frames', 'owned_level_badges', 'owned_necklaces'];
+
+function pickFields(data: any, fields: string[]): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const f of fields) {
+    if (data[f] !== undefined) out[f] = data[f];
+  }
+  return out;
+}
 
 router.get('/search', authenticate, async (req: Request, res: Response) => {
   try {
     const { q, custom_id } = req.query;
 
-    let query = supabase.from('users').select('uid, custom_id, name, photo_url, level, vip_tier');
+    const usersRef = db.collection('users');
+    let snap;
 
     if (custom_id) {
-      query = query.eq('custom_id', custom_id as string);
+      snap = await usersRef.where('custom_id', '==', custom_id as string).limit(20).get();
     } else if (q) {
-      query = query.or(`name.ilike.%${q}%,custom_id.ilike.%${q}%`);
+      const term = (q as string).trim();
+      if (/^\d+$/.test(term)) {
+        snap = await usersRef.where('custom_id', '==', term).limit(20).get();
+        if (snap.empty) {
+          // fall back to prefix match on name for numeric-looking names
+          snap = await usersRef.orderBy('name').startAt(term).endAt(term + '\uf8ff').limit(20).get();
+        }
+      } else {
+        snap = await usersRef.orderBy('name').startAt(term).endAt(term + '\uf8ff').limit(20).get();
+      }
     } else {
       res.status(400).json({ error: 'Provide q or custom_id' });
       return;
     }
 
-    const { data, error } = await query.limit(20);
-
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
-
-    res.json({ users: data });
+    const users = snap.docs.map(d => pickFields(d.data(), ['uid', 'custom_id', 'name', 'photo_url', 'level', 'vip_tier']));
+    res.json({ users });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -36,18 +50,13 @@ router.get('/:uid/profile', authenticate, async (req: Request, res: Response) =>
   try {
     const { uid } = req.params;
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('uid, custom_id, name, photo_url, gender, level, experience, vip_tier, coins, diamonds, total_gifts_sent, total_gifts_received, followers, following, visitors, charm, active_frame, active_headwear, active_bubble, active_entrance, active_car, active_cover, owned_badges, owned_level_frames, owned_level_badges, owned_necklaces')
-      .eq('uid', uid)
-      .single();
-
-    if (error) {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
-    res.json({ user });
+    res.json({ user: pickFields(doc.data()!, USER_PUBLIC_FIELDS) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -70,12 +79,7 @@ router.put('/profile', authenticate, async (req: Request, res: Response) => {
       return;
     }
 
-    const { error } = await supabase.from('users').update(updates).eq('uid', uid);
-
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
+    await db.collection('users').doc(uid).set(updates, { merge: true });
 
     res.json({ success: true });
   } catch (err: any) {
@@ -87,18 +91,14 @@ router.get('/by-custom/:customId', authenticate, async (req: Request, res: Respo
   try {
     const { customId } = req.params;
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('uid, custom_id, name, photo_url, level')
-      .eq('custom_id', customId)
-      .single();
-
-    if (error) {
+    const snap = await db.collection('users').where('custom_id', '==', customId).limit(1).get();
+    if (snap.empty) {
       res.status(404).json({ error: 'User not found with this ID' });
       return;
     }
 
-    res.json({ user });
+    const d = snap.docs[0].data();
+    res.json({ user: pickFields(d, ['uid', 'custom_id', 'name', 'photo_url', 'level']) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -109,15 +109,7 @@ router.put('/:uid/ban', authenticate, requireRole('admin'), async (req: Request,
     const { uid } = req.params;
     const { reason } = req.body;
 
-    const { error } = await supabase
-      .from('users')
-      .update({ banned: true, ban_reason: reason || 'No reason' })
-      .eq('uid', uid);
-
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
+    await db.collection('users').doc(uid).set({ banned: true, ban_reason: reason || 'No reason' }, { merge: true });
 
     res.json({ success: true });
   } catch (err: any) {
@@ -129,15 +121,7 @@ router.put('/:uid/unban', authenticate, requireRole('admin'), async (req: Reques
   try {
     const { uid } = req.params;
 
-    const { error } = await supabase
-      .from('users')
-      .update({ banned: false, ban_reason: '' })
-      .eq('uid', uid);
-
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
+    await db.collection('users').doc(uid).set({ banned: false, ban_reason: '' }, { merge: true });
 
     res.json({ success: true });
   } catch (err: any) {
@@ -154,12 +138,8 @@ router.post('/generate-id', authenticate, async (_req: Request, res: Response) =
     do {
       const num = 1000000 + Math.floor(Math.random() * 9000000);
       customId = String(num);
-      const { data: existing } = await supabase
-        .from('users')
-        .select('custom_id')
-        .eq('custom_id', customId)
-        .maybeSingle();
-      if (!existing) break;
+      const existing = await db.collection('users').where('custom_id', '==', customId).limit(1).get();
+      if (existing.empty) break;
       attempts++;
     } while (attempts < maxAttempts);
 
@@ -178,15 +158,7 @@ router.put('/make-admin', authenticate, requireRole('admin'), async (req: Reques
   try {
     const { uid } = req.body;
 
-    const { error } = await supabase
-      .from('users')
-      .update({ role: 'admin' })
-      .eq('uid', uid);
-
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
+    await db.collection('users').doc(uid).set({ role: 'admin' }, { merge: true });
 
     res.json({ success: true });
   } catch (err: any) {

@@ -1,24 +1,22 @@
 {
   "name": "zero-backend",
   "version": "1.0.0",
-  "description": "Zero App Backend API - Auth, Users, Levels, VIP, Recharge, Agencies",
+  "description": "Zero App Backend API - Auth, Users, Levels, VIP, Recharge, Agencies (Firestore)",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "npx tsx src/index.ts",
-    "migrate": "tsx src/migrate.ts"
+    "start": "npx tsx src/index.ts"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.0",
+    "firebase-admin": "^12.6.0",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.5.0",
     "uuid": "^10.0.0",
-    "ws": "^8.21.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -29,7 +27,6 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node-cron": "^3.0.11",
     "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.18.1",
     "tsx": "^4.19.0",
     "typescript": "^5.5.4"
   }

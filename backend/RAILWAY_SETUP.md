@@ -20,9 +20,11 @@ git push
 
 | Variable Name | Variable Value |
 |---|---|
-| `SUPABASE_URL` | `https://mbdrysnfohknqulevulif.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` |
+| `FIREBASE_SERVICE_ACCOUNT_B64` | Base64 of the Firebase service account JSON |
+| `FIREBASE_WEB_API_KEY` | Firebase Web API key |
 | `JWT_SECRET` | `zero-backend-jwt-secret-2026` |
+
+(Firebase Console → Project settings → Service accounts → Generate new private key, then base64-encode the file.)
 
 **مهم:** Variable Name في الخانة الأولى، Variable Value في الخانة التانية.
 

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../config/database';
+import { db } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { getVipTiers, getVipTier, calculateVipLevel } from '../services/vipService';
 
@@ -13,17 +13,13 @@ router.get('/:uid', authenticate, async (req: Request, res: Response) => {
   try {
     const { uid } = req.params;
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('uid, vip_tier, recharge_exp, diamonds')
-      .eq('uid', uid)
-      .single();
-
-    if (error) {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
+    const user = doc.data()!;
     const tier = user.vip_tier || 0;
     const nextTier = calculateVipLevel((user.recharge_exp || 0) + 1);
     const tierInfo = getVipTier(tier);
@@ -50,15 +46,7 @@ router.put('/set-tier', authenticate, requireRole('admin'), async (req: Request,
       return;
     }
 
-    const { error } = await supabase
-      .from('users')
-      .update({ vip_tier: tier })
-      .eq('uid', uid);
-
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
+    await db.collection('users').doc(uid).set({ vip_tier: tier }, { merge: true });
 
     res.json({ success: true });
   } catch (err: any) {

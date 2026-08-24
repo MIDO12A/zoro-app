@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../config/database';
+import { db } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { getLevelConfig, getLevelByXp, addXp } from '../services/levelService';
 
@@ -13,17 +13,13 @@ router.get('/:uid', authenticate, async (req: Request, res: Response) => {
   try {
     const { uid } = req.params;
 
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('uid, level, experience, wealth_level, wealth_exp, recharge_level, recharge_exp, gems_level, gems_exp, owned_level_frames, owned_level_badges')
-      .eq('uid', uid)
-      .single();
-
-    if (error) {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
+    const user = doc.data()!;
     const mainLevel = getLevelByXp(user.experience);
     const wealthLevel = getLevelByXp(user.wealth_exp);
     const rechargeLevel = getLevelByXp(user.recharge_exp);

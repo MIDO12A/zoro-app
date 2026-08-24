@@ -1,4 +1,5 @@
-import { supabase } from '../config/database';
+import { FieldValue } from 'firebase-admin/firestore';
+import { db } from '../config/database';
 
 interface LevelConfig {
   level: number;
@@ -48,39 +49,27 @@ export function getLevelByXp(xp: number): { level: number; xp: number; nextLevel
 }
 
 export async function addXp(uid: string, amount: number, field: 'experience' | 'wealth_exp' | 'recharge_exp' | 'gems_exp'): Promise<void> {
-  const { data: user, error } = await supabase
-    .from('users')
-    .select(`${field}, level, coins`)
-    .eq('uid', uid)
-    .single();
+  const userRef = db.collection('users').doc(uid);
 
-  if (error || !user) throw new Error('User not found');
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(userRef);
+    if (!snap.exists) throw new Error('User not found');
+    const user = snap.data()!;
 
-  const newXp = ((user as any)[field] || 0) + amount;
-  const updates: Record<string, number> = { [field]: newXp };
+    const newXp = ((user as any)[field] || 0) + amount;
+    const updates: Record<string, any> = { [field]: FieldValue.increment(amount) };
 
-  if (field === 'experience') {
-    const { level: newLevel } = getLevelByXp(newXp);
-    if (newLevel > user.level) {
-      updates.level = newLevel;
-      const reward = LEVEL_CONFIGS.find(l => l.level === newLevel)?.rewards?.[0];
-      if (reward?.type === 'coins') {
-        const { data: currentUser } = await supabase
-          .from('users')
-          .select('coins')
-          .eq('uid', uid)
-          .single();
-        if (currentUser) {
-          updates.coins = (currentUser.coins || 0) + (reward.value as number);
+    if (field === 'experience') {
+      const { level: newLevel } = getLevelByXp(newXp);
+      if (newLevel > (user.level || 1)) {
+        updates.level = newLevel;
+        const reward = LEVEL_CONFIGS.find(l => l.level === newLevel)?.rewards?.[0];
+        if (reward?.type === 'coins') {
+          updates.coins = FieldValue.increment(reward.value);
         }
       }
     }
-  }
 
-  const { error: updateError } = await supabase
-    .from('users')
-    .update(updates)
-    .eq('uid', uid);
-
-  if (updateError) throw updateError;
+    tx.update(userRef, updates);
+  });
 }

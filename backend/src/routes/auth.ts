@@ -1,10 +1,35 @@
 import { Router, Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import { supabase } from '../config/database';
+import { db, firebaseWebApiKey } from '../config/database';
+import { auth } from '../config/firebase';
 import { generateToken } from '../middleware/auth';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+interface RestSignInResult {
+  localId: string;
+  idToken: string;
+}
+
+async function restSignIn(email: string, password: string): Promise<RestSignInResult | null> {
+  try {
+    const res = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseWebApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, returnSecureToken: true }),
+      }
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { localId?: string; idToken?: string };
+    const { localId, idToken } = data;
+    if (!localId || !idToken) return null;
+    return { localId, idToken };
+  } catch {
+    return null;
+  }
+}
 
 router.post('/signup', async (req: Request, res: Response) => {
   try {
@@ -15,21 +40,23 @@ router.post('/signup', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data: existingAuth, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
-
-    if (authError) {
+    let userRecord;
+    try {
+      userRecord = await auth.createUser({
+        email,
+        password,
+        displayName: name,
+        emailVerified: true,
+      });
+    } catch (authError: any) {
       res.status(400).json({ error: authError.message });
       return;
     }
 
-    const uid = existingAuth.user.id;
+    const uid = userRecord.uid;
     const customId = String(1000000 + Math.floor(Math.random() * 9000000));
 
-    const { error: dbError } = await supabase.from('users').insert({
+    const userData = {
       uid,
       custom_id: customId,
       name,
@@ -37,10 +64,15 @@ router.post('/signup', async (req: Request, res: Response) => {
       gender: 'male',
       coins: 10000,
       diamonds: 0,
-    });
+      role: 'user',
+      level: 1,
+      created_at: new Date().toISOString(),
+    };
 
-    if (dbError) {
-      await supabase.auth.admin.deleteUser(uid);
+    try {
+      await db.collection('users').doc(uid).set(userData);
+    } catch (dbError: any) {
+      await auth.deleteUser(uid);
       res.status(400).json({ error: dbError.message });
       return;
     }
@@ -65,29 +97,28 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const signIn = await restSignIn(email, password);
 
-    if (error) {
-      res.status(401).json({ error: error.message });
+    if (!signIn) {
+      res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
-    const { data: profile } = await supabase
-      .from('users')
-      .select('*')
-      .eq('uid', data.user.id)
-      .single();
+    const uid = signIn.localId;
+
+    const doc = await db.collection('users').doc(uid).get();
+    const profile = doc.exists ? doc.data() : undefined;
 
     if (profile?.banned) {
       res.status(403).json({ error: `Account banned: ${profile.ban_reason || 'No reason'}` });
       return;
     }
 
-    const token = generateToken({ uid: data.user.id, role: profile?.role || 'user' });
+    const token = generateToken({ uid, role: ((profile?.role as string) || 'user') as any });
 
     res.json({
       token,
-      user: { uid: data.user.id, ...profile },
+      user: profile ? { uid, ...profile } : { uid },
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -96,18 +127,14 @@ router.post('/login', async (req: Request, res: Response) => {
 
 router.get('/me', authenticate, async (req: Request, res: Response) => {
   try {
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('uid', req.user!.uid)
-      .single();
+    const doc = await db.collection('users').doc(req.user!.uid).get();
 
-    if (error) {
+    if (!doc.exists) {
       res.status(404).json({ error: 'User not found' });
       return;
     }
 
-    res.json({ user });
+    res.json({ user: doc.data() });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -117,17 +144,8 @@ router.delete('/account', authenticate, async (req: Request, res: Response) => {
   try {
     const uid = req.user!.uid;
 
-    const { error: dbError } = await supabase.from('users').delete().eq('uid', uid);
-    if (dbError) {
-      res.status(500).json({ error: dbError.message });
-      return;
-    }
-
-    const { error: authError } = await supabase.auth.admin.deleteUser(uid);
-    if (authError) {
-      res.status(500).json({ error: authError.message });
-      return;
-    }
+    await db.collection('users').doc(uid).delete();
+    await auth.deleteUser(uid);
 
     res.json({ success: true, message: 'Account deleted permanently' });
   } catch (err: any) {
@@ -139,27 +157,32 @@ router.post('/admin/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    const signIn = await restSignIn(email, password);
 
-    if (error) {
-      res.status(401).json({ error: error.message });
+    if (!signIn) {
+      res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
 
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('uid', data.user.id)
-      .single();
+    const uid = signIn.localId;
 
-    if (profile?.role !== 'admin') {
+    // Dashboard admins live in admin_users; app-level admins in users.role.
+    const adminDoc = await db.collection('admin_users').doc(uid).get();
+    let isAdmin = adminDoc.exists;
+
+    if (!isAdmin) {
+      const profile = await db.collection('users').doc(uid).get();
+      isAdmin = profile.data()?.role === 'admin';
+    }
+
+    if (!isAdmin) {
       res.status(403).json({ error: 'Not an admin account' });
       return;
     }
 
-    const token = generateToken({ uid: data.user.id, role: 'admin' });
+    const token = generateToken({ uid, role: 'admin' });
 
-    res.json({ token, uid: data.user.id });
+    res.json({ token, uid });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

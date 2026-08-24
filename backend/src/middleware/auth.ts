@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
-import { supabase } from '../config/database';
+import { db } from '../config/database';
+import { auth } from '../config/firebase';
 import { AuthPayload } from '../types';
 
 declare global {
@@ -12,11 +13,11 @@ declare global {
   }
 }
 
-async function verifySupabaseToken(token: string): Promise<AuthPayload | null> {
+async function verifyFirebaseIdToken(token: string): Promise<AuthPayload | null> {
   try {
-    const { data, error } = await supabase.auth.getUser(token);
-    if (error || !data.user) return null;
-    return { uid: data.user.id, role: 'user' };
+    const decoded = await auth.verifyIdToken(token);
+    if (!decoded?.uid) return null;
+    return { uid: decoded.uid, role: 'user' };
   } catch {
     return null;
   }
@@ -31,6 +32,19 @@ async function verifyCustomToken(token: string): Promise<AuthPayload | null> {
   }
 }
 
+async function resolveRole(uid: string): Promise<AuthPayload['role']> {
+  try {
+    // Admins of the dashboard live in admin_users; app-level admins in users.role.
+    const adminDoc = await db.collection('admin_users').doc(uid).get();
+    if (adminDoc.exists) return 'admin';
+    const userDoc = await db.collection('users').doc(uid).get();
+    const role = (userDoc.data()?.role as string) || 'user';
+    return (role === 'admin' || role === 'agent' ? role : 'user') as AuthPayload['role'];
+  } catch {
+    return 'user';
+  }
+}
+
 export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
@@ -42,7 +56,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
 
   let payload = await verifyCustomToken(token);
   if (!payload) {
-    payload = await verifySupabaseToken(token);
+    payload = await verifyFirebaseIdToken(token);
   }
 
   if (!payload) {
@@ -50,7 +64,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return;
   }
 
-  req.user = payload;
+  req.user = { ...payload, role: await resolveRole(payload.uid) };
   next();
 }
 
@@ -60,10 +74,10 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
     const token = authHeader.slice(7);
     let payload = await verifyCustomToken(token);
     if (!payload) {
-      payload = await verifySupabaseToken(token);
+      payload = await verifyFirebaseIdToken(token);
     }
     if (payload) {
-      req.user = payload;
+      req.user = { ...payload, role: await resolveRole(payload.uid) };
     }
   }
   next();

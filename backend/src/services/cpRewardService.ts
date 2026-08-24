@@ -1,5 +1,5 @@
 import cron from 'node-cron';
-import { supabase } from '../config/database';
+import { db } from '../config/database';
 
 interface RankReward {
   id: number;
@@ -59,19 +59,15 @@ const SETTINGS_KEYS = {
 };
 
 async function getSetting(key: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('cp_settings')
-    .select('value')
-    .eq('key', key)
-    .single();
-  if (error || !data) return null;
-  return data.value;
+  const doc = await db.collection('cp_settings').doc(key).get();
+  if (!doc.exists) return null;
+  return (doc.data()!.value as string) ?? null;
 }
 
 async function setSetting(key: string, value: string): Promise<void> {
-  await supabase.from('cp_settings').upsert(
+  await db.collection('cp_settings').doc(key).set(
     { key, value, updated_at: new Date().toISOString() },
-    { onConflict: 'key' }
+    { merge: true }
   );
 }
 
@@ -143,18 +139,30 @@ async function getTopCouples(limit: number, period: string): Promise<CpCouple[]>
     : period === 'month' ? 'month_score'
     : 'total_score';
 
-  const { data, error } = await supabase
-    .from('cp_couples')
-    .select('id, user1_uid, user2_uid, week_score, month_score, total_score, started_at')
-    .is('ended_at', null)
-    .order(orderCol, { ascending: false })
-    .limit(limit);
+  try {
+    const snap = await db
+      .collection('cp_couples')
+      .where('ended_at', '==', null)
+      .orderBy(orderCol, 'desc')
+      .limit(limit)
+      .get();
 
-  if (error) {
-    console.error('[CP Rewards] getTopCouples error:', error);
+    return snap.docs.map(d => {
+      const c = d.data();
+      return {
+        id: c.id ?? d.id,
+        user1_uid: c.user1_uid,
+        user2_uid: c.user2_uid,
+        week_score: c.week_score,
+        month_score: c.month_score,
+        total_score: c.total_score,
+        started_at: c.started_at,
+      } as CpCouple;
+    });
+  } catch (err: any) {
+    console.error('[CP Rewards] getTopCouples error:', err);
     return [];
   }
-  return (data || []) as CpCouple[];
 }
 
 function getPeriodEndDisplay(cfg: PeriodConfig): string {
@@ -253,8 +261,16 @@ export async function distributeRewards(): Promise<{ success: boolean; message: 
     await saveActiveRewards(activeRewards);
 
     const scoreCol = periodKey === 'month' ? 'month_score' : 'week_score';
-    await supabase.from('cp_couples').update({ [scoreCol]: 0 })
-      .is('ended_at', null);
+    try {
+      const couplesSnap = await db.collection('cp_couples').where('ended_at', '==', null).get();
+      const batch = db.batch();
+      for (const doc of couplesSnap.docs) {
+        batch.update(doc.ref, { [scoreCol]: 0 });
+      }
+      await batch.commit();
+    } catch (e) {
+      console.error('[CP Rewards] reset scores error:', e);
+    }
 
     const newNext = calcNextDistribution(cfg);
     cfg.last_distribution = now.toISOString();
@@ -284,13 +300,11 @@ export async function distributeRewards(): Promise<{ success: boolean; message: 
 }
 
 async function assignRewardsToUser(userUid: string, rewards: ActiveReward['rewards']): Promise<void> {
-  const { data: user } = await supabase
-    .from('users')
-    .select('owned_level_frames, owned_level_badges, owned_level_necklaces, active_frame')
-    .eq('uid', userUid)
-    .single();
+  const userRef = db.collection('users').doc(userUid);
+  const userDoc = await userRef.get();
 
-  if (!user) return;
+  if (!userDoc.exists) return;
+  const user = userDoc.data()!;
 
   let frames: any[] = user.owned_level_frames || [];
   let badges: any[] = user.owned_level_badges || [];
@@ -322,7 +336,7 @@ async function assignRewardsToUser(userUid: string, rewards: ActiveReward['rewar
   if (necklaces.length > 0) updates.owned_level_necklaces = necklaces;
 
   if (Object.keys(updates).length > 0) {
-    await supabase.from('users').update(updates).eq('uid', userUid);
+    await userRef.set(updates, { merge: true });
   }
 }
 
@@ -369,13 +383,11 @@ export async function expireRewards(): Promise<{ removed: number }> {
 }
 
 async function removeExpiredFromUser(userUid: string): Promise<void> {
-  const { data: user } = await supabase
-    .from('users')
-    .select('owned_level_frames, owned_level_badges, owned_level_necklaces, active_frame')
-    .eq('uid', userUid)
-    .single();
+  const userRef = db.collection('users').doc(userUid);
+  const userDoc = await userRef.get();
 
-  if (!user) return;
+  if (!userDoc.exists) return;
+  const user = userDoc.data() as any;
 
   const now = new Date();
   let changed = false;
@@ -402,7 +414,7 @@ async function removeExpiredFromUser(userUid: string): Promise<void> {
         updates.active_frame = null;
       }
     }
-    await supabase.from('users').update(updates).eq('uid', userUid);
+    await userRef.set(updates, { merge: true });
   }
 }
 

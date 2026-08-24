@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { supabase } from '../config/database';
+import { db } from '../config/database';
 import { authenticate, requireRole } from '../middleware/auth';
 import { getRechargePlans, createOrder, completeOrder, getUserOrders } from '../services/rechargeService';
 
@@ -57,18 +57,13 @@ router.get('/orders', authenticate, async (req: Request, res: Response) => {
 
 router.get('/orders/all', authenticate, requireRole('admin'), async (_req: Request, res: Response) => {
   try {
-    const { data, error } = await supabase
-      .from('recharge_orders')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(100);
+    const snap = await db
+      .collection('recharge_orders')
+      .orderBy('created_at', 'desc')
+      .limit(100)
+      .get();
 
-    if (error) {
-      res.status(500).json({ error: error.message });
-      return;
-    }
-
-    res.json({ orders: data });
+    res.json({ orders: snap.docs.map(d => d.data()) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

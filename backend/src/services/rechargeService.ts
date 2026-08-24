@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '../config/database';
+import { FieldValue } from 'firebase-admin/firestore';
+import { db } from '../config/database';
 import { calculateVipLevel } from './vipService';
 import { addXp } from './levelService';
 
@@ -45,48 +46,44 @@ export async function createOrder(userId: string, planId: number): Promise<{ ord
     completed_at: null,
   };
 
-  const { error } = await supabase.from('recharge_orders').insert(order);
-  if (error) return { error: error.message };
+  try {
+    await db.collection('recharge_orders').doc(order.id).set(order);
+  } catch (e: any) {
+    return { error: e.message };
+  }
 
   return { order, plan };
 }
 
 export async function completeOrder(orderId: string, adminUid: string): Promise<{ success: boolean; error?: string }> {
-  const { data: order, error: fetchError } = await supabase
-    .from('recharge_orders')
-    .select('*')
-    .eq('id', orderId)
-    .single();
+  const orderDoc = await db.collection('recharge_orders').doc(orderId).get();
 
-  if (fetchError || !order) return { success: false, error: 'Order not found' };
+  if (!orderDoc.exists) return { success: false, error: 'Order not found' };
+  const order = orderDoc.data()!;
   if (order.status !== 'pending') return { success: false, error: 'Order already processed' };
 
   const userUid = order.user_id;
 
-  const { data: user } = await supabase
-    .from('users')
-    .select('diamonds, recharge_level, recharge_exp')
-    .eq('uid', userUid)
-    .single();
+  const userRef = db.collection('users').doc(userUid);
+  const userDoc = await userRef.get();
+  if (!userDoc.exists) return { success: false, error: 'User not found' };
+  const user = userDoc.data()!;
 
-  if (!user) return { success: false, error: 'User not found' };
-
-  const totalDiamonds = (user.diamonds || 0) + order.diamonds;
   const rechargeXp = (user.recharge_exp || 0) + order.amount;
 
-  await supabase
-    .from('recharge_orders')
-    .update({ status: 'completed', completed_at: new Date().toISOString() })
-    .eq('id', orderId);
+  await db.collection('recharge_orders').doc(orderId).set(
+    { status: 'completed', completed_at: new Date().toISOString() },
+    { merge: true }
+  );
 
-  await supabase
-    .from('users')
-    .update({
-      diamonds: totalDiamonds,
-      recharge_exp: rechargeXp,
+  await userRef.set(
+    {
+      diamonds: FieldValue.increment(order.diamonds),
+      recharge_exp: FieldValue.increment(order.amount),
       vip_tier: calculateVipLevel(rechargeXp),
-    })
-    .eq('uid', userUid);
+    },
+    { merge: true }
+  );
 
   try {
     await addXp(userUid, order.amount * 10, 'recharge_exp');
@@ -96,12 +93,12 @@ export async function completeOrder(orderId: string, adminUid: string): Promise<
 }
 
 export async function getUserOrders(userId: string): Promise<any[]> {
-  const { data } = await supabase
-    .from('recharge_orders')
-    .select('*')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  const snap = await db
+    .collection('recharge_orders')
+    .where('user_id', '==', userId)
+    .orderBy('created_at', 'desc')
+    .limit(50)
+    .get();
 
-  return data || [];
+  return snap.docs.map(d => d.data());
 }
