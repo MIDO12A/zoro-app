@@ -42,8 +42,10 @@ class UpdateService {
   /// or when nothing was published yet.
   Future<AppUpdateInfo?> checkForUpdate() async {
     try {
-      final snap =
-          await FirebaseFirestore.instance.doc(_docPath).get(const GetOptions(source: Source.server));
+      final snap = await FirebaseFirestore.instance
+          .doc(_docPath)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 8));
       if (!snap.exists) return null;
       final d = snap.data();
       if (d == null) return null;

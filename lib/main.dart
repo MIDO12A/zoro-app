@@ -27,9 +27,16 @@ import 'features/host_agency/screens/agency_join_requests_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // Guard against [core/duplicate-app]: on Android the google-services plugin
+  // may already have created the [DEFAULT] app before Dart runs.
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    ).catchError((Object e) {
+      debugPrint('Firebase.initializeApp: $e');
+      return Firebase.app();
+    });
+  }
   FirebaseAuth.instance.authStateChanges().listen((data) {
     developer.log('AUTH STATE CHANGE: ${data?.uid ?? 'none'}');
   });
