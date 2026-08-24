@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../providers/user_provider.dart';
-import '../../services/dynamic_config_service.dart';
 import '../../services/level_service.dart';
 import '../../services/supabase_service.dart';
 import '../../core/supabase_compat.dart';
@@ -20,8 +19,6 @@ import 'edit_profile_screen.dart';
 import '../setting/feedback_screen.dart';
 import '../vip/vip_center_screen.dart';
 import '../vip/vip_intro_screen.dart';
-import '../../features/cp/cp_detail_full_screen.dart';
-import '../../features/cp/cp_service.dart';
 import '../../features/host_agency/host_agency_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
 import '../../features/signin/weekly_signin_screen.dart';
@@ -42,7 +39,6 @@ class ProfileScreen extends StatelessWidget {
           child: Column(
             children: [
               _buildInfoSection(context, user),
-              _buildCpRelationshipCard(context),
               _buildDataSection(context),
               _buildWalletSection(context, user),
               _buildVipSection(context),
@@ -274,185 +270,6 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildCpRelationshipCard(BuildContext context) {
-    final cfg = DynamicConfigService();
-    return FutureBuilder<Map<String, dynamic>>(
-      future: CpService.getMyData(),
-      builder: (context, snapshot) {
-        final couple = snapshot.data?['couple'] as Map<String, dynamic>?;
-        final partner = couple?['partner'] as Map<String, dynamic>?;
-        final hasCp = couple != null && snapshot.connectionState == ConnectionState.done && !snapshot.hasError;
-        final userProvider = Provider.of<UserProvider>(context, listen: false);
-        final user = userProvider.currentUser;
-        final totalScore = (couple?['total_score'] as num?)?.toInt() ?? 0;
-        final daysTogether = (couple?['days_together'] as num?)?.toInt() ?? 0;
-
-        return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const CPDetailFullScreen()),
-            );
-          },
-          child: Container(
-            margin: const EdgeInsets.only(top: 16, left: 16, right: 16),
-            decoration: BoxDecoration(
-              color: cfg.cpCardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: cfg.cpCardBorder.withValues(alpha: 0.3), width: 1),
-              boxShadow: [
-                BoxShadow(color: cfg.cpPrimaryColor.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2)),
-              ],
-            ),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-                  child: Row(
-                    children: [
-                      Icon(Icons.favorite, color: cfg.cpPrimaryColor, size: 18),
-                      const SizedBox(width: 6),
-                      Text(
-                        'العلاقات',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cfg.cpTextColor),
-                      ),
-                      const Spacer(),
-                      Icon(Icons.arrow_back_ios, size: 14, color: cfg.cpSubText),
-                    ],
-                  ),
-                ),
-                if (snapshot.connectionState == ConnectionState.waiting)
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 16),
-                    child: SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else if (hasCp && partner != null)
-                  _buildCpPartnerRow(cfg, user, partner, daysTogether, totalScore)
-                else
-                  _buildCpEmptyState(cfg),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCpPartnerRow(DynamicConfigService cfg, dynamic user, Map<String, dynamic> partner, int days, int score) {
-    final partnerName = partner['name'] as String? ?? partner['nickname'] as String? ?? '';
-    final partnerAvatar = partner['avatar'] as String? ?? partner['photoUrl'] as String? ?? '';
-    final userName = user?.name ?? '';
-    final userPhoto = user?.photoUrl ?? '';
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 80,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Positioned(
-                  left: 0,
-                  child: _cpAvatarFrame(userPhoto.isNotEmpty ? R.cachedImage(userPhoto) : null, userName, cfg),
-                ),
-                Positioned(
-                  left: 76,
-                  top: 4,
-                  child: Icon(Icons.favorite, color: cfg.cpPrimaryColor, size: 28),
-                ),
-                Positioned(
-                  right: 0,
-                  child: _cpAvatarFrame(partnerAvatar.isNotEmpty ? R.cachedImage(partnerAvatar) : null, partnerName, cfg),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(userName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: cfg.cpTextColor)),
-              const SizedBox(width: 20),
-              Text(partnerName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: cfg.cpTextColor)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            decoration: BoxDecoration(
-              color: cfg.cpPrimaryColor.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              'معاً منذ $days يوم',
-              style: TextStyle(fontSize: 11, color: cfg.cpAccent, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cpAvatarFrame(ImageProvider? avatar, String name, DynamicConfigService cfg) {
-    return SizedBox(
-      width: 80, height: 80,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 80, height: 80,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: cfg.cpAvatarBorderColor, width: 2),
-            ),
-          ),
-          CircleAvatar(
-            radius: 33,
-            backgroundImage: avatar,
-            child: avatar == null
-                ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?', style: const TextStyle(fontSize: 18))
-                : null,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCpEmptyState(DynamicConfigService cfg) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.favorite_border, color: cfg.cpSubText, size: 16),
-          const SizedBox(width: 6),
-          Text(
-            'ليس لديك علاقة بعد',
-            style: TextStyle(fontSize: 13, color: cfg.cpSubText),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [cfg.cpGradientStart, cfg.cpGradientEnd],
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              'ابحث عن شريك',
-              style: TextStyle(fontSize: 12, color: cfg.cpButtonTextColor, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildDataSection(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
@@ -675,18 +492,6 @@ class ProfileScreen extends StatelessWidget {
       ),
       child: Column(
         children: [
-          _buildMenuItem(
-            R.mineCpIc,
-            'CP',
-            null,
-            () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CPDetailFullScreen()),
-              );
-            },
-          ),
-          _buildDivider(),
           _buildMenuItem(
             R.mineUnionIc,
             'وكالة المضيفين',

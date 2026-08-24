@@ -21,6 +21,7 @@ import '../room/widgets/svga_player.dart';
 import '../room/widgets/svga_frame.dart';
 import '../room/room_screen.dart';
 import '../../features/cp/cp_service.dart';
+import '../../features/cp/cp_detail_full_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String? targetUid;
@@ -1034,47 +1035,47 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Center(
         child: SizedBox(
           width: 310,
-          child: Column(
-            children: [
-              if (_profileBgUrl != null && _profileBgUrl!.isNotEmpty && !hasCp)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              children: [
+                if (hasCp && hasLevel) ...[
+                  Image.asset(cfg.cpProfileLevelBg,
+                      width: 123, height: 19),
+                  const SizedBox(height: 4),
+                  Text('Lv.$cpLevel',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        foreground: Paint()
+                          ..shader = LinearGradient(
+                            colors: [cfg.cpProfileLevelGradientStart, cfg.cpProfileLevelGradientEnd],
+                          ).createShader(Rect.fromLTWH(0, 0, 60, 16)),
+                      )),
+                  const SizedBox(height: 8),
+                ],
+                GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CPDetailFullScreen()),
+                    );
+                  },
                   child: SizedBox(
-                    height: 40,
-                    child: SvgaPlayer(assetPath: cfg.cpProfileTopBgSvga, width: 310, height: 40),
+                    height: 130,
+                    child: hasLevel
+                        ? SvgaPlayer(
+                            assetPath: 'assets/svga/$cpLevel.svga',
+                            width: 340,
+                            height: 130,
+                            fit: BoxFit.contain,
+                            imageReplacement: {
+                              'avatar1': userPhoto.isNotEmpty ? userPhoto : '',
+                              if (partnerAvatar.isNotEmpty) 'avatar2': partnerAvatar,
+                            },
+                            defaultImageUrl: hasCp ? '' : null,
+                          )
+                        : const SizedBox.shrink(),
                   ),
                 ),
-              if (hasCp && hasLevel) ...[
-                Image.asset(cfg.cpProfileLevelBg,
-                    width: 123, height: 19),
-                const SizedBox(height: 4),
-                Text('Lv.$cpLevel',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      foreground: Paint()
-                        ..shader = LinearGradient(
-                          colors: [cfg.cpProfileLevelGradientStart, cfg.cpProfileLevelGradientEnd],
-                        ).createShader(Rect.fromLTWH(0, 0, 60, 16)),
-                    )),
-                const SizedBox(height: 8),
-              ],
-              SizedBox(
-                height: 102,
-                child: hasLevel
-                    ? SvgaPlayer(
-                        assetPath: 'assets/svga/$cpLevel.svga',
-                        width: 310,
-                        height: 102,
-                        fit: BoxFit.contain,
-                        imageReplacement: {
-                          'avatar1': userPhoto.isNotEmpty ? userPhoto : '',
-                          if (partnerAvatar.isNotEmpty) 'avatar2': partnerAvatar,
-                        },
-                        defaultImageUrl: hasCp ? '' : null,
-                      )
-                    : const SizedBox.shrink(),
-              ),
               const SizedBox(height: 13),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
