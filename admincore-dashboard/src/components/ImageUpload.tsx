@@ -71,6 +71,7 @@ export default function ImageUpload({ currentUrl, currentType, onUpload, onUrlCh
   const [preview, setPreview] = useState<string | null>(initialUrl);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState('');
   const [urlInput, setUrlInput] = useState(initialUrl);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [assetType, setAssetType] = useState<AssetType>(() => {
@@ -92,13 +93,19 @@ export default function ImageUpload({ currentUrl, currentType, onUpload, onUrlCh
     if (!file) return;
     setUploading(true);
     setProgress(0);
+    setError('');
     const detected = detectAssetType(file.name);
     setAssetType(detected);
     try {
       const url = await onUpload(file, (pct) => setProgress(pct));
       setPreviewWithType(url, detected);
     } catch (err) {
-      alert('Upload failed: ' + (err as Error).message);
+      const msg = (err as Error).message || 'Upload failed';
+      setError(
+        /whitelisted|upload preset/i.test(msg)
+          ? 'فشل الرفع: preset الـ Cloudinary مش Unsigned — ظبطه من Settings → Upload أو حط API Key/Secret في Settings'
+          : 'فشل الرفع: ' + msg
+      );
     }
     setUploading(false);
     setProgress(0);
@@ -192,6 +199,11 @@ export default function ImageUpload({ currentUrl, currentType, onUpload, onUrlCh
       {uploading && progress > 0 && (
         <div className="w-full bg-slate-800 rounded-full h-1.5">
           <div className="bg-indigo-500 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      {error && (
+        <div className="text-[10px] text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-2 py-1.5 leading-relaxed">
+          {error}
         </div>
       )}
       {showUrlInput && (
