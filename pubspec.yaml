@@ -34,7 +34,6 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-  supabase_flutter: ^2.8.3
   firebase_core: ^3.6.0
   firebase_auth: ^5.1.0
   cloud_firestore: ^5.4.0
@@ -64,6 +63,8 @@ dependencies:
   google_fonts: ^6.2.1
   just_audio: ^0.9.40
   flutter_svg: ^2.3.0
+  package_info_plus: ^9.0.1
+  open_filex: ^4.5.0
 
 dependency_overrides:
   archive: ^4.0.9
@@ -78,6 +79,13 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon.png"
+  android: "ic_launcher"
+  adaptive_icon_background: "#0C101D"
+  adaptive_icon_foreground: "assets/icon/app_icon.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

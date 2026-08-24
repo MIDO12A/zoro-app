@@ -1730,3 +1730,45 @@ function calcNext(cfg: any): string {
 }
 
 export { supabase };
+
+// ============================================================
+// In-app updates: published as app_config/app_update doc.
+// The Flutter app reads this same document on startup.
+// ============================================================
+export interface AppUpdateConfig {
+  latest_version: string
+  build_number: number
+  apk_url: string
+  notes_ar: string
+  notes_en: string
+  force_update: boolean
+  published_at?: string
+}
+
+export async function getAppUpdate(): Promise<AppUpdateConfig | null> {
+  try {
+    const { data } = await supabase.from('app_config').select('*').eq('key', 'app_update').maybeSingle()
+    if (!data) return null
+    return data as unknown as AppUpdateConfig
+  } catch {
+    return null
+  }
+}
+
+export async function publishAppUpdate(cfg: Omit<AppUpdateConfig, 'published_at'>): Promise<string | null> {
+  try {
+    await supabase.from('app_config').upsert({ ...cfg, published_at: new Date().toISOString() })
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+}
+
+export async function unpublishAppUpdate(): Promise<string | null> {
+  try {
+    await supabase.from('app_config').delete().eq('key', 'app_update')
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+}

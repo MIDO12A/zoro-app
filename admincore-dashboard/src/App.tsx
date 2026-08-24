@@ -36,6 +36,7 @@ import ScreenCustomization from './pages/ScreenCustomization';
 import AppIcons from './pages/AppIcons';
 import CpFeatures from './pages/CpFeatures';
 import SigninFeatures from './pages/SigninFeatures';
+import AppUpdates from './pages/AppUpdates';
 import t from './lib/i18n';
 
 export default function App() {
@@ -117,6 +118,7 @@ export default function App() {
             <Route path="/app-icons" element={<AppIcons />} />
             <Route path="/cp-features" element={<CpFeatures />} />
             <Route path="/signin-features" element={<SigninFeatures />} />
+            <Route path="/app-updates" element={<AppUpdates />} />
           </Route>
         </Routes>
       </BrowserRouter>

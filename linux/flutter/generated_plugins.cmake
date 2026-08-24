@@ -5,9 +5,7 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   file_selector_linux
-  gtk
   restart_app
-  url_launcher_linux
   zego_express_engine
 )
 

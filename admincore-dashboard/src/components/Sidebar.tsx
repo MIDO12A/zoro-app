@@ -4,7 +4,7 @@ import {
   Building2, Crown, BarChart3, Award, Handshake,
   TrendingUp, Image, Palette, Bug,
   Bell, Settings, Shield, ChevronLeft, LogOut,   SlidersHorizontal, Grid, Gift as GiftIcon,
-  Tag, Sparkles, Eye, ImageIcon, Calendar,
+  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket,
 } from 'lucide-react';
 import { logout } from '../lib/auth';
 import { useContext } from 'react';
@@ -32,6 +32,7 @@ const navItems = [
   { to: '/agency', icon: Handshake, label: 'nav.agency' },
   { to: '/cp-features', icon: Gift, label: 'CP Features' },
   { to: '/signin-features', icon: Calendar, label: 'nav.signin' },
+  { to: '/app-updates', icon: Rocket, label: 'App Updates' },
   { to: '/bd', icon: TrendingUp, label: 'nav.bd' },
   { to: '/visual-manager', icon: Eye, label: 'Visual Manager' },
   { to: '/app-assets', icon: Grid, label: 'nav.appAssets' },

@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../services/supabase_service.dart';
 import '../../services/dynamic_config_service.dart';
+import '../../services/update_service.dart';
 import '../../providers/user_provider.dart';
+import '../../widgets/app_update_dialog.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.onNavigate});
@@ -52,6 +56,22 @@ class _SplashScreenState extends State<SplashScreen> {
           debugPrint('Error loading user data: $e');
         }
       }
+    }
+
+    // Check for a published app update before entering the app
+    try {
+      final update = await UpdateService.instance.checkForUpdate();
+      if (update != null && mounted) {
+        if (update.forceUpdate) {
+          await AppUpdateDialog.show(context, update);
+          return;
+        }
+        unawaited(AppUpdateDialog.show(context, update));
+        if (mounted) widget.onNavigate();
+        return;
+      }
+    } catch (e) {
+      debugPrint('Update flow error: $e');
     }
 
     if (mounted) {
