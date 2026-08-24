@@ -19,6 +19,7 @@ import 'edit_profile_screen.dart';
 import '../setting/feedback_screen.dart';
 import '../vip/vip_center_screen.dart';
 import '../vip/vip_intro_screen.dart';
+import '../../features/cp/cp_detail_full_screen.dart';
 import '../../features/host_agency/host_agency_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
 import '../../features/signin/weekly_signin_screen.dart';
@@ -492,6 +493,18 @@ class ProfileScreen extends StatelessWidget {
       ),
       child: Column(
         children: [
+          _buildMenuItem(
+            R.mineCpIc,
+            'CP',
+            null,
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const CPDetailFullScreen()),
+              );
+            },
+          ),
+          _buildDivider(),
           _buildMenuItem(
             R.mineUnionIc,
             'وكالة المضيفين',

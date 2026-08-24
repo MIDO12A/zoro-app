@@ -1060,12 +1060,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     );
                   },
                   child: SizedBox(
-                    height: 130,
+                    height: 170,
                     child: hasLevel
                         ? SvgaPlayer(
                             assetPath: 'assets/svga/$cpLevel.svga',
-                            width: 340,
-                            height: 130,
+                            width: 360,
+                            height: 170,
                             fit: BoxFit.contain,
                             imageReplacement: {
                               'avatar1': userPhoto.isNotEmpty ? userPhoto : '',

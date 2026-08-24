@@ -395,11 +395,25 @@ class FirebaseService {
 
     try {
       await _db.runTransaction((txn) async {
+        // ── ALL READS FIRST ──
+        // Firestore transactions forbid any read after the first write;
+        // interleaving them made every gift transaction throw and roll back
+        // silently (coins were never deducted).
         final senderSnap = await txn.get(senderRef);
         if (!senderSnap.exists) throw Exception('sender missing');
         final senderCoins = _asInt(senderSnap.data()?['coins']);
         if (senderCoins < totalCost) throw Exception('insufficient coins');
 
+        final receiverRef = _db.collection('users').doc(receiverId);
+        final recvSnap = await txn.get(receiverRef);
+
+        final roomRef = _db.collection('rooms').doc(roomId);
+        final roomSnap = await txn.get(roomRef);
+
+        final walletRef = _db.collection('user_wallets').doc(receiverId);
+        final wSnap = await txn.get(walletRef);
+
+        // ── THEN ALL WRITES ──
         txn.set(_db.collection('sent_gifts').doc(id), {
           'id': id,
           'gift_id': giftId,
@@ -434,8 +448,6 @@ class FirebaseService {
           'total_gifts_sent': sentTotal + totalCost,
         });
 
-        final receiverRef = _db.collection('users').doc(receiverId);
-        final recvSnap = await txn.get(receiverRef);
         if (recvSnap.exists) {
           final rd = recvSnap.data() ?? {};
           txn.update(receiverRef, {
@@ -444,8 +456,6 @@ class FirebaseService {
           });
         }
 
-        final roomRef = _db.collection('rooms').doc(roomId);
-        final roomSnap = await txn.get(roomRef);
         if (roomSnap.exists) {
           final rm = roomSnap.data() ?? {};
           txn.update(roomRef, {
@@ -454,9 +464,6 @@ class FirebaseService {
           });
         }
 
-        // Wallet diamond balance
-        final walletRef = _db.collection('user_wallets').doc(receiverId);
-        final wSnap = await txn.get(walletRef);
         if (wSnap.exists) {
           final wd = wSnap.data() ?? {};
           txn.update(walletRef, {'diamond_balance': _asInt(wd['diamond_balance']) + totalCost});
