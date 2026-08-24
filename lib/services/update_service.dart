@@ -37,10 +37,54 @@ class UpdateService {
   static final UpdateService instance = UpdateService._();
 
   static const _docPath = 'app_config/app_update';
+  static const _buildInfoUrl =
+      'https://github.com/MIDO12A/zoro-app/releases/download/latest/build_info.json';
+  static const _apkUrl =
+      'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app.apk';
 
-  /// Checks Firestore for a published update. Returns null when up-to-date
-  /// or when nothing was published yet.
+  /// Checks for a published update. GitHub Releases is the primary source
+  /// (no secrets needed - CI uploads build_info.json next to the APK on every
+  /// push); the Firestore doc is kept as a legacy fallback.
   Future<AppUpdateInfo?> checkForUpdate() async {
+    final info = await PackageInfo.fromPlatform();
+    return await _checkGithub(info) ?? await _checkFirestore(info);
+  }
+
+  Future<AppUpdateInfo?> _checkGithub(PackageInfo info) async {
+    try {
+      final res = await Dio().get<Map<String, dynamic>>(
+        _buildInfoUrl,
+        options: Options(responseType: ResponseType.json),
+      ).timeout(const Duration(seconds: 8));
+      final d = res.data;
+      if (d == null) return null;
+
+      final latestVersion = (d['version'] ?? '').toString().trim();
+      final latestBuild = int.tryParse('${d['build_number'] ?? ''}') ?? 0;
+      if (latestVersion.isEmpty || latestBuild == 0) return null;
+
+      final currentBuild = int.tryParse(info.buildNumber) ?? 0;
+      if (_versionCode(latestVersion) <= _versionCode(info.version) &&
+          latestBuild <= currentBuild) {
+        return null;
+      }
+      return AppUpdateInfo(
+        latestVersion: latestVersion,
+        buildNumber: latestBuild,
+        apkUrl: _apkUrl,
+        notesAr: 'تحديث جديد متاح',
+        notesEn: 'New update available',
+        forceUpdate: false,
+        currentVersion: info.version,
+        currentBuild: currentBuild,
+      );
+    } catch (e) {
+      debugPrint('GitHub update check failed: $e');
+      return null;
+    }
+  }
+
+  Future<AppUpdateInfo?> _checkFirestore(PackageInfo info) async {
     try {
       final snap = await FirebaseFirestore.instance
           .doc(_docPath)
@@ -53,8 +97,6 @@ class UpdateService {
       final latestVersion = (d['latest_version'] ?? '').toString().trim();
       final apkUrl = (d['apk_url'] ?? '').toString().trim();
       if (latestVersion.isEmpty || apkUrl.isEmpty) return null;
-
-      final info = await PackageInfo.fromPlatform();
 
       final latestBuild = int.tryParse('${d['build_number'] ?? ''}') ?? 0;
       final currentBuild = int.tryParse(info.buildNumber) ?? 0;
