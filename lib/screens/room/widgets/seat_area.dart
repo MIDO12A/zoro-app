@@ -327,6 +327,31 @@ class _NormalSeat extends StatelessWidget {
     const double borderSize = 64.0;
 
     if (!hasUser) {
+      if (seatStyle == SeatStyle.circle) {
+        return Center(
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.06),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+                width: 1.5,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: seat.isLocked
+                ? R.image(R.roomMicSeatLockIc, width: size * 0.45, height: size * 0.45)
+                : Icon(
+                    Icons.mic_none_rounded,
+                    size: size * 0.45,
+                    color: Colors.white54,
+                  ),
+          ),
+        );
+      }
+
       String emptyIcon = R.roomMicSeatDefaultIc;
       if (seatStyle == SeatStyle.heart) {
         emptyIcon = R.mipmap('room_mic_seat_default_vip_2_ic');

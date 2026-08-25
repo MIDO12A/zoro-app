@@ -46,150 +46,142 @@ class RoomHeader extends StatelessWidget {
     final sw = MediaQuery.of(context).size.width;
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(height: statusH),
-        SizedBox(
-          height: 50,
-          child: Stack(
-            children: [
-              Positioned(
-                left: isAr ? null : 0,
-                right: isAr ? 0 : null,
-                top: 0,
-                bottom: 0,
-                width: sw * 0.70,
-                child: GestureDetector(
-                  onTap: onInfoTap,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(isAr ? 0 : 14, 5, isAr ? 14 : 0, 5),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        _buildRoomAvatar(),
-                        const SizedBox(width: 5),
-                        _buildRoomInfoText(context, isAr),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                left: isAr ? 12 : null,
-                right: isAr ? null : 12,
-                top: 0,
-                bottom: 0,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: isAr
-                      ? [
-                          _buildExitButton(),
-                          const SizedBox(width: 8),
-                          _buildMinimizeButton(),
-                          const SizedBox(width: 8),
-                          _buildRankButton(),
-                        ]
-                      : [
-                          _buildRankButton(),
-                          const SizedBox(width: 8),
-                          _buildMinimizeButton(),
-                          const SizedBox(width: 8),
-                          _buildExitButton(),
-                        ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        GestureDetector(
-          onTap: onGameTap,
-          child: Container(
-            height: 32,
-            color: const Color(0x1AFFFFFF),
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Row(
+    return Directionality(
+      textDirection: isAr ? TextDirection.rtl : TextDirection.ltr,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(height: statusH),
+          Container(
+            height: 50,
+            child: Stack(
               children: [
-                const SizedBox(width: 5),
-                R.image(
-                  R.roomGameIc,
-                  width: 24,
-                  height: 24,
-                  fit: BoxFit.cover,
-                ),
-                const SizedBox(width: 5),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  child: const Text(
-                    'GAME',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    gameDesc ?? '',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Color(0x80FFFFFF),
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: onOnlineTap,
-                  child: Container(
-                    height: 24,
-                    padding: const EdgeInsets.only(left: 4),
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: AssetImage(R.roomOnlineInfoBg),
-                        fit: BoxFit.fill,
+                Positioned(
+                  left: isAr ? null : 0,
+                  right: isAr ? 0 : null,
+                  top: 0,
+                  bottom: 0,
+                  width: sw * 0.70,
+                  child: GestureDetector(
+                    onTap: onInfoTap,
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(isAr ? 0 : 14, 5, isAr ? 14 : 0, 5),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _buildRoomAvatar(),
+                          const SizedBox(width: 5),
+                          _buildRoomInfoText(context, isAr),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _OverlapAvatars(
-                          avatars: onlineAvatars.isEmpty
-                              ? [R.avaBoy, R.avaGirl]
-                              : onlineAvatars,
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          onlineCount ?? '0',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 2),
-                        R.image(
-                          R.nextWhiteIc,
-                          width: 10,
-                          height: 10,
-                        ),
-                        const SizedBox(width: 6),
-                      ],
-                    ),
+                  ),
+                ),
+                Positioned(
+                  left: isAr ? 12 : null,
+                  right: isAr ? null : 12,
+                  top: 0,
+                  bottom: 0,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildRankButton(),
+                      const SizedBox(width: 8),
+                      _buildMinimizeButton(),
+                      const SizedBox(width: 8),
+                      _buildExitButton(),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-        ),
-      ],
+          // Game Description panel below header
+          if (gameDesc != null && gameDesc!.isNotEmpty)
+            Container(
+              height: 32,
+              color: const Color(0x1AFFFFFF),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                children: [
+                  const SizedBox(width: 5),
+                  R.image(
+                    R.roomGameIc,
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.cover,
+                  ),
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    child: const Text(
+                      'GAME',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      gameDesc ?? '',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0x80FFFFFF),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: onOnlineTap,
+                    child: Container(
+                      height: 24,
+                      padding: const EdgeInsets.only(left: 4),
+                      decoration: BoxDecoration(
+                        image: DecorationImage(
+                          image: AssetImage(R.roomOnlineInfoBg),
+                          fit: BoxFit.fill,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _OverlapAvatars(
+                            avatars: onlineAvatars.isEmpty
+                                ? [R.avaBoy, R.avaGirl]
+                                : onlineAvatars,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            onlineCount ?? '0',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          R.image(
+                            R.nextWhiteIc,
+                            width: 10,
+                            height: 10,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -209,7 +201,7 @@ class RoomHeader extends StatelessWidget {
     return Expanded(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: isAr ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             roomName ?? 'Room',
@@ -219,47 +211,27 @@ class RoomHeader extends StatelessWidget {
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            textAlign: isAr ? TextAlign.right : TextAlign.left,
           ),
           const SizedBox(height: 2),
           Row(
             mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: isAr ? MainAxisAlignment.end : MainAxisAlignment.start,
-            children: isAr
-                ? [
-                    Text(
-                      hotValue ?? '0',
-                      style: const TextStyle(fontSize: 10, color: Color(0xB2FFFFFF)),
-                    ),
-                    const SizedBox(width: 2),
-                    R.image(R.roomHotLogoIc, width: 10, height: 10),
-                    const SizedBox(width: 4),
-                    if (isLocked) ...[
-                      R.image(R.roomLockStateIc, width: 12, height: 12),
-                      const SizedBox(width: 4),
-                    ],
-                    Text(
-                      'ID: ${roomId ?? '------'}',
-                      style: const TextStyle(fontSize: 10, color: Color(0xB2FFFFFF)),
-                    ),
-                  ]
-                : [
-                    Text(
-                      'ID: ${roomId ?? '------'}',
-                      style: const TextStyle(fontSize: 10, color: Color(0xB2FFFFFF)),
-                    ),
-                    if (isLocked) ...[
-                      const SizedBox(width: 2),
-                      R.image(R.roomLockStateIc, width: 12, height: 12),
-                    ],
-                    const SizedBox(width: 2),
-                    R.image(R.roomHotLogoIc, width: 10, height: 10),
-                    const SizedBox(width: 2),
-                    Text(
-                      hotValue ?? '0',
-                      style: const TextStyle(fontSize: 10, color: Color(0xB2FFFFFF)),
-                    ),
-                  ],
+            children: [
+              Text(
+                'ID: ${roomId ?? '------'}',
+                style: const TextStyle(fontSize: 10, color: Color(0xB2FFFFFF)),
+              ),
+              if (isLocked) ...[
+                const SizedBox(width: 2),
+                R.image(R.roomLockStateIc, width: 12, height: 12),
+              ],
+              const SizedBox(width: 2),
+              R.image(R.roomHotLogoIc, width: 10, height: 10),
+              const SizedBox(width: 2),
+              Text(
+                hotValue ?? '0',
+                style: const TextStyle(fontSize: 10, color: Color(0xB2FFFFFF)),
+              ),
+            ],
           ),
         ],
       ),
