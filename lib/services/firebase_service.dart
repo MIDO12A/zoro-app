@@ -562,6 +562,58 @@ class FirebaseService {
         .map((snap) => snap.docs.map((e) => UserModel.fromMap(_data(e))).toList());
   }
 
+  /// ترتيب المستخدمين حسب حقل عدّاد (total_gifts_sent / total_gifts_received).
+  Future<List<Map<String, dynamic>>> getUserRanking({
+    required String orderByField,
+    int limit = 50,
+  }) async {
+    try {
+      final snap = await _db
+          .collection('users')
+          .orderBy(orderByField, descending: true)
+          .limit(limit)
+          .get();
+      return snap.docs.map((e) {
+        final d = e.data();
+        return <String, dynamic>{
+          'uid': e.id,
+          'name': (d['name'] ?? '').toString(),
+          'photo_url': (d['photo_url'] ?? d['photoUrl'] ?? '').toString(),
+          'level': d['level'] ?? 1,
+          'total_gifts_sent': _asInt(d['total_gifts_sent']),
+          'total_gifts_received': _asInt(d['total_gifts_received']),
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('getUserRanking($orderByField) failed: $e');
+      return const [];
+    }
+  }
+
+  /// ترتيب الغرف حسب إجمالي الهدايا.
+  Future<List<Map<String, dynamic>>> getRoomRanking({int limit = 50}) async {
+    try {
+      final snap = await _db
+          .collection('rooms')
+          .orderBy('total_gifts', descending: true)
+          .limit(limit)
+          .get();
+      return snap.docs.map((e) {
+        final d = e.data();
+        return <String, dynamic>{
+          'uid': e.id,
+          'name': (d['name'] ?? '').toString(),
+          'hostName': (d['host_name'] ?? '').toString(),
+          'photo_url': (d['room_photo_url'] ?? '').toString(),
+          'points': _asInt(d['total_gifts']),
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('getRoomRanking failed: $e');
+      return const [];
+    }
+  }
+
   Future<void> saveAppConfig(String key, dynamic value) async {
     await _db.collection('app_config').doc(key).set({'key': key, 'value': value});
   }

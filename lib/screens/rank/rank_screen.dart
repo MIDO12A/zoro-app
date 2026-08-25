@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/r.dart';
-import '../../services/api_service.dart';
+import '../../services/supabase_service.dart';
 import '../../services/dynamic_config_service.dart';
 
 enum _RankPeriod { daily, weekly, monthly, all }
@@ -20,7 +20,7 @@ class _RankScreenState extends State<RankScreen>
   late TabController _wealthSubTabController;
   late TabController _charmSubTabController;
   late TabController _roomSubTabController;
-  final ApiService _api = ApiService();
+  final SupabaseService _api = SupabaseService();
   DynamicConfigService get _cfg => DynamicConfigService();
   final Map<String, List<Map<String, dynamic>>> _cachedRankings = {};
   bool _loading = true;
@@ -71,9 +71,9 @@ class _RankScreenState extends State<RankScreen>
     setState(() => _loading = true);
     try {
       final results = await Future.wait([
-        _api.getRankings('wealth').catchError((_) => <Map<String, dynamic>>[]),
-        _api.getRankings('charm').catchError((_) => <Map<String, dynamic>>[]),
-        _api.getRankings('room').catchError((_) => <Map<String, dynamic>>[]),
+        _api.getUserRanking(orderByField: 'total_gifts_sent'),
+        _api.getUserRanking(orderByField: 'total_gifts_received'),
+        _api.getRoomRanking(),
       ]);
       if (mounted) {
         setState(() {
