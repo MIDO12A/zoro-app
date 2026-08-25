@@ -60,25 +60,19 @@ class RoomHeader extends StatelessWidget {
                 right: isAr ? 0 : null,
                 top: 0,
                 bottom: 0,
-                width: sw * 0.55,
+                width: sw * 0.70,
                 child: GestureDetector(
                   onTap: onInfoTap,
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(isAr ? 0 : 14, 5, isAr ? 14 : 0, 5),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: isAr ? MainAxisAlignment.end : MainAxisAlignment.start,
-                      children: isAr
-                          ? [
-                              _buildRoomInfoText(context, isAr),
-                              const SizedBox(width: 5),
-                              _buildRoomAvatar(),
-                            ]
-                          : [
-                              _buildRoomAvatar(),
-                              const SizedBox(width: 5),
-                              _buildRoomInfoText(context, isAr),
-                            ],
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        _buildRoomAvatar(),
+                        const SizedBox(width: 5),
+                        _buildRoomInfoText(context, isAr),
+                      ],
                     ),
                   ),
                 ),
