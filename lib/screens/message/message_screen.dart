@@ -54,65 +54,66 @@ class _MessageScreenState extends State<MessageScreen>
       body: SafeArea(
         child: Column(
           children: [
+            // Header Stack (Title and Background arch decoration only)
             Stack(
+              alignment: Alignment.topCenter,
               children: [
                 R.image(
                   R.discoverHeaderBg,
                   width: double.infinity,
                   fit: BoxFit.fitWidth,
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'الرسائل',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF16151A),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildInfoCard(
-                                bgAsset: R.chatMessageSystemBg,
-                                label: 'الاشعارات',
-                                badgeCount: 0,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _buildInfoCard(
-                                bgAsset: R.chatMessageInformationBg,
-                                label: 'معلومات الحدث',
-                                badgeCount: 0,
-                                onTap: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('معلومات الحدث قريباً')),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
+                const Padding(
+                  padding: EdgeInsets.only(top: 16, bottom: 20),
+                  child: Text(
+                    'رسالة',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF16151A),
+                    ),
                   ),
                 ),
               ],
             ),
+
+            // Info Cards (Event Info and System Notifications) placed BELOW the header
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 16),
+              child: Row(
+                children: [
+                  // Right Card (Event Info)
+                  Expanded(
+                    child: _buildInfoCard(
+                      bgAsset: R.chatMessageInformationBg,
+                      label: 'معلومات\nالحدث',
+                      badgeCount: 2,
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('معلومات الحدث قريباً')),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Left Card (System Notification)
+                  Expanded(
+                    child: _buildInfoCard(
+                      bgAsset: R.chatMessageSystemBg,
+                      label: 'إشعار\nالنظام',
+                      badgeCount: 3,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               child: TabBar(
@@ -157,51 +158,78 @@ class _MessageScreenState extends State<MessageScreen>
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Stack(
-        children: [
-          R.image(bgAsset, width: double.infinity, fit: BoxFit.fitWidth),
-          Positioned(
-            top: 8,
-            right: 8,
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 12, color: Colors.white),
+      child: AspectRatio(
+        aspectRatio: 2.15,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: R.image(bgAsset, fit: BoxFit.fill),
             ),
-          ),
-          if (badgeCount > 0)
             Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFE82323),
-                  shape: BoxShape.circle,
+              top: 14,
+              right: 16,
+              child: Text(
+                label,
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  height: 1.25,
                 ),
-                child: Center(
-                  child: Text(
-                    '$badgeCount',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (badgeCount > 0)
+              Positioned(
+                top: -5,
+                left: -5,
+                child: Container(
+                  width: 18,
+                  height: 18,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE82323),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$badgeCount',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildConversationList() {
     if (_conversations.isEmpty) {
-      return const Center(
-        child: Text(
-          'لا توجد محادثات',
-          style: TextStyle(fontSize: 15, color: Color(0xFF9BA1B6)),
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            R.image(
+              R.mipmap('common_empty_ic_1'),
+              width: 140,
+              height: 140,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'لا توجد دردشات لـ الكل',
+              style: TextStyle(
+                fontSize: 15,
+                color: Color(0xFF16151A),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       );
     }

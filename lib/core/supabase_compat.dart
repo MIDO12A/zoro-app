@@ -60,6 +60,8 @@ class SupabaseClient {
         return <String, dynamic>{'status': 'ok'};
       case 'agency_create':
         return _rpcAgencyCreate(params);
+      case 'agency_get_dashboard':
+        return _rpcAgencyGetDashboard(params);
     }
     throw StateError(
       'RPC "$fn" is not migrated to Firebase yet. '
@@ -248,6 +250,109 @@ class SupabaseClient {
     });
 
     return {'status': 'ok', 'agency_id': agencyRef.id};
+  }
+
+  Future<Map<String, dynamic>> _rpcAgencyGetDashboard(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    if (agencyId == null || agencyId.isEmpty) {
+      return <String, dynamic>{};
+    }
+
+    // ── Agency info ──
+    final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
+    if (!agencySnap.exists) return <String, dynamic>{};
+    final agencyData = agencySnap.data()!;
+
+    // ── Members (with profile names) ──
+    final membersSnap = await _db
+        .collection('host_agency_members')
+        .where('agency_id', isEqualTo: agencyId)
+        .get();
+
+    final members = <Map<String, dynamic>>[];
+    for (final mDoc in membersSnap.docs) {
+      final mData = mDoc.data();
+      final userId = mData['user_id']?.toString() ?? '';
+      // Fetch profile display_name + kayan_id
+      String displayName = '';
+      String kayanId = '';
+      try {
+        final profileSnap = await _db.collection('profiles').doc(userId).get();
+        if (profileSnap.exists) {
+          final pd = profileSnap.data()!;
+          displayName = pd['display_name']?.toString() ?? '';
+          kayanId = pd['kayan_id']?.toString() ?? '';
+        }
+      } catch (_) {}
+      members.add({
+        'user_id': userId,
+        'display_name': displayName,
+        'kayan_id': kayanId,
+        'role': mData['role'] ?? 'host',
+        'status': mData['status'] ?? 'active',
+        'month_diamonds': mData['diamonds_earned_monthly'] ?? 0,
+        'week_diamonds': 0, // no weekly ledger in Firestore
+      });
+    }
+
+    // ── Milestones (if agency_milestones collection exists) ──
+    List<Map<String, dynamic>> milestones = [];
+    try {
+      final msSnap = await _db
+          .collection('agency_milestones')
+          .where('is_active', isEqualTo: true)
+          .orderBy('sort_order')
+          .get();
+      for (final msDoc in msSnap.docs) {
+        final ms = msDoc.data();
+        milestones.add({
+          'id': msDoc.id,
+          'name': ms['title_ar'] ?? ms['name'] ?? '',
+          'title_ar': ms['title_ar'] ?? '',
+          'target': ms['target_diamonds'] ?? 0,
+          'reward_type': ms['reward_type'],
+          'reward_value': ms['reward_value'] ?? 0,
+          'earned': 0,
+          'is_completed': false,
+          'progress_pct': 0,
+        });
+      }
+    } catch (_) {
+      // agency_milestones collection may not exist yet
+    }
+
+    // ── Pending members count ──
+    int pendingCount = 0;
+    try {
+      final pendingSnap = await _db
+          .collection('host_agency_members')
+          .where('agency_id', isEqualTo: agencyId)
+          .where('status', isEqualTo: 'pending')
+          .get();
+      pendingCount = pendingSnap.docs.length;
+    } catch (_) {}
+
+    return <String, dynamic>{
+      'agency': {
+        'id': agencyId,
+        'name': agencyData['name'] ?? '',
+        'specialty': agencyData['specialty'] ?? 'mixed',
+        'member_count': agencyData['member_count'] ?? members.length,
+        'monthly_diamonds': agencyData['total_diamonds_monthly'] ?? agencyData['monthly_diamonds'] ?? 0,
+        'total_diamonds': agencyData['total_diamonds_earned'] ?? 0,
+        'commission_rate': agencyData['commission_rate'] ?? 0.05,
+        'is_active': agencyData['is_active'] ?? true,
+        'agency_public_id': agencyData['agency_public_id'],
+        'description': agencyData['description'],
+        'photo_url': agencyData['photo_url'],
+        'country': agencyData['country'],
+        'tier': agencyData['tier'] ?? 'bronze',
+      },
+      'members': members,
+      'milestones': milestones,
+      'pending_members_count': pendingCount,
+    };
   }
 
   RealtimeChannel channel(String topic) => RealtimeChannel(topic);
