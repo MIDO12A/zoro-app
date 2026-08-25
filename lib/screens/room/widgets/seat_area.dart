@@ -61,14 +61,77 @@ class SeatArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (seatStyle == SeatStyle.circle) {
+      return _buildGameLayout(context);
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: _buildGrid(),
     );
   }
 
+  Widget _buildGameLayout(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 360,
+        height: 240,
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.95,
+                child: Image.asset(
+                  'assets/mipmap-xxhdpi/room_bg_game_seat_10.webp',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildGameRow(0),
+                    _buildGameRow(5),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-
+  Widget _buildGameRow(int startIdx) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        for (int i = 0; i < 5; i++)
+          Expanded(
+            child: (startIdx + i < seats.length)
+                ? Center(
+                    child: GestureDetector(
+                      onTap: () => onSeatTap(startIdx + i),
+                      child: _NormalSeat(
+                        seat: seats[startIdx + i],
+                        emoji: seatEmojis?[startIdx + i],
+                        isModerator: seats[startIdx + i].user != null
+                            ? moderators?.contains(seats[startIdx + i].user!.id) ?? false
+                            : false,
+                        seatStyle: seatStyle,
+                        isCaptain: false,
+                      ),
+                    ),
+                  )
+                : const SizedBox(),
+          ),
+      ],
+    );
+  }
   Widget _buildGrid() {
     const seatsPerRow = 5;
     final items = seats;
