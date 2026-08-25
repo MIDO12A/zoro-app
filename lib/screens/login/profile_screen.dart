@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../providers/user_provider.dart';
 import '../../services/level_service.dart';
 import '../../services/supabase_service.dart';
+import '../../services/update_service.dart';
+import '../../widgets/app_update_dialog.dart';
 import '../../core/supabase_compat.dart';
 import '../../screens/room/widgets/svga_player.dart';
 import '../../screens/room/widgets/vap_player.dart';
@@ -613,10 +616,51 @@ class ProfileScreen extends StatelessWidget {
               );
             },
           ),
+          _buildDivider(),
+          FutureBuilder<PackageInfo>(
+            future: PackageInfo.fromPlatform(),
+            builder: (context, snap) => _buildMenuItem(
+              R.mineFeedbackIc,
+              'فحص التحديثات',
+              snap.hasData ? 'v${snap.data!.version}+${snap.data!.buildNumber}' : null,
+              () => _checkUpdatesManually(context),
+            ),
+          ),
 
         ],
       ),
     );
+  }
+
+  Future<void> _checkUpdatesManually(BuildContext context) async {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('جاري فحص التحديثات...'), duration: Duration(seconds: 2)),
+    );
+    try {
+      final update = await UpdateService.instance.checkForUpdate(throwOnError: true);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (update != null) {
+        await AppUpdateDialog.show(context, update);
+        return;
+      }
+      final info = await PackageInfo.fromPlatform();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('أنت على أحدث نسخة (بناء ${info.buildNumber})')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تعذر فحص التحديث — تحقق من الاتصال: $e'),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildMenuItem(

@@ -61,12 +61,24 @@ class UpdateService {
   /// Checks for a published update. GitHub Releases is the primary source
   /// (no secrets needed - CI uploads build_info.json next to the APK on every
   /// push); the Firestore doc is kept as a legacy fallback.
-  Future<AppUpdateInfo?> checkForUpdate() async {
+  ///
+  /// [throwOnError] - used by the manual check button so network failures are
+  /// surfaced to the user instead of silently reading as "no update".
+  Future<AppUpdateInfo?> checkForUpdate({bool throwOnError = false}) async {
     final info = await PackageInfo.fromPlatform();
-    return await _checkGithub(info) ?? await _checkFirestore(info);
+    try {
+      return await _checkGithub(info, throwOnError: throwOnError) ??
+          await _checkFirestore(info, throwOnError: throwOnError);
+    } catch (e) {
+      if (throwOnError) rethrow;
+      return null;
+    }
   }
 
-  Future<AppUpdateInfo?> _checkGithub(PackageInfo info) async {
+  Future<AppUpdateInfo?> _checkGithub(
+    PackageInfo info, {
+    bool throwOnError = false,
+  }) async {
     try {
       final res = await Dio().get<Map<String, dynamic>>(
         // Cache-buster: GitHub Releases CDN serves stale copies of assets for
@@ -98,11 +110,15 @@ class UpdateService {
       );
     } catch (e) {
       debugPrint('GitHub update check failed: $e');
+      if (throwOnError) rethrow;
       return null;
     }
   }
 
-  Future<AppUpdateInfo?> _checkFirestore(PackageInfo info) async {
+  Future<AppUpdateInfo?> _checkFirestore(
+    PackageInfo info, {
+    bool throwOnError = false,
+  }) async {
     try {
       final snap = await FirebaseFirestore.instance
           .doc(_docPath)
@@ -134,6 +150,7 @@ class UpdateService {
       );
     } catch (e) {
       debugPrint('Update check failed: $e');
+      if (throwOnError) rethrow;
       return null;
     }
   }
