@@ -69,7 +69,9 @@ class UpdateService {
   Future<AppUpdateInfo?> _checkGithub(PackageInfo info) async {
     try {
       final res = await Dio().get<Map<String, dynamic>>(
-        _buildInfoUrl,
+        // Cache-buster: GitHub Releases CDN serves stale copies of assets for
+        // minutes after each publish, which hid new builds from the updater.
+        '$_buildInfoUrl?t=${DateTime.now().millisecondsSinceEpoch}',
         options: Options(responseType: ResponseType.json),
       ).timeout(const Duration(seconds: 8));
       final d = res.data;

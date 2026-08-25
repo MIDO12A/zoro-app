@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../config/r.dart';
+import '../../providers/user_provider.dart';
 import '../../services/dynamic_config_service.dart';
+import '../../services/update_service.dart';
 import '../../l10n/app_localizations.dart';
 import '../discover/room_discover_screen.dart';
 import '../message/message_screen.dart';
 import '../login/profile_screen.dart';
 import '../room/widgets/svga_player.dart';
+import '../../widgets/app_update_dialog.dart';
 
 
 
@@ -16,18 +22,49 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   late PageController _pageController;
   int _currentIndex = 0;
+  Timer? _updatePoll;
+  bool _checkingUpdate = false;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController(initialPage: 0);
+    WidgetsBinding.instance.addObserver(this);
+    // Periodic update check while the app is open (splash only checks cold start)
+    _updatePoll = Timer.periodic(const Duration(minutes: 15), (_) => _checkUpdate());
+  }
+
+  Future<void> _checkUpdate() async {
+    if (_checkingUpdate) return;
+    _checkingUpdate = true;
+    try {
+      final uid = Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
+      final update = await UpdateService.instance.checkForUpdate();
+      if (update != null && mounted) {
+        await AppUpdateDialog.show(context, update);
+        if (uid != null && mounted) {
+          await Provider.of<UserProvider>(context, listen: false).loadUser(uid);
+        }
+      }
+    } catch (_) {} finally {
+      _checkingUpdate = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkUpdate();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _updatePoll?.cancel();
     _pageController.dispose();
     super.dispose();
   }
