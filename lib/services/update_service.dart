@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:open_filex/open_filex.dart';
@@ -39,8 +40,23 @@ class UpdateService {
   static const _docPath = 'app_config/app_update';
   static const _buildInfoUrl =
       'https://github.com/MIDO12A/zoro-app/releases/download/latest/build_info.json';
-  static const _apkUrl =
+  static const _apkUrlArm64 =
       'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app.apk';
+  static const _apkUrlArm32 =
+      'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app-arm32.apk';
+  static const _apkUrlX8664 =
+      'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app-x86_64.apk';
+
+  /// Picks the APK asset matching the device ABI (CI publishes split APKs).
+  Future<String> apkUrlForDevice() async {
+    try {
+      final abis = (await DeviceInfoPlugin().androidInfo).supportedAbis;
+      if (abis.contains('arm64-v8a')) return _apkUrlArm64;
+      if (abis.contains('x86_64')) return _apkUrlX8664;
+      if (abis.contains('armeabi-v7a')) return _apkUrlArm32;
+    } catch (_) {}
+    return _apkUrlArm64;
+  }
 
   /// Checks for a published update. GitHub Releases is the primary source
   /// (no secrets needed - CI uploads build_info.json next to the APK on every
@@ -71,7 +87,7 @@ class UpdateService {
       return AppUpdateInfo(
         latestVersion: latestVersion,
         buildNumber: latestBuild,
-        apkUrl: _apkUrl,
+        apkUrl: await apkUrlForDevice(),
         notesAr: 'تحديث جديد متاح',
         notesEn: 'New update available',
         forceUpdate: false,
