@@ -12,7 +12,8 @@ class UserModel {
   final bool isAdmin;
   final bool isOwner;
   final String? frameAsset;
-  final String? id;
+  final String? id; // uid
+  final String? customId; // 8-digit display ID
   final int level;
   final String following;
   final String fans;
@@ -29,6 +30,7 @@ class UserModel {
     this.isOwner = false,
     this.frameAsset,
     this.id,
+    this.customId,
     this.level = 1,
     this.following = '0',
     this.fans = '0',
@@ -46,6 +48,7 @@ class UserModel {
     bool? isOwner,
     String? frameAsset,
     String? id,
+    String? customId,
     int? level,
     String? following,
     String? fans,
@@ -62,6 +65,7 @@ class UserModel {
       isOwner: isOwner ?? this.isOwner,
       frameAsset: frameAsset ?? this.frameAsset,
       id: id ?? this.id,
+      customId: customId ?? this.customId,
       level: level ?? this.level,
       following: following ?? this.following,
       fans: fans ?? this.fans,
@@ -79,6 +83,7 @@ class UserModel {
     'isAdmin': isAdmin,
     'isOwner': isOwner,
     'id': id,
+    'custom_id': customId,
     'level': level,
     'following': following,
     'fans': fans,
@@ -96,6 +101,7 @@ class UserModel {
     isOwner: map['isOwner'] as bool? ?? false,
     frameAsset: map['frameAsset'] as String?,
     id: map['id'] as String?,
+    customId: map['custom_id'] as String? ?? map['customId'] as String?,
     level: map['level'] as int? ?? 1,
     following: map['following'] as String? ?? '0',
     fans: map['fans'] as String? ?? '0',

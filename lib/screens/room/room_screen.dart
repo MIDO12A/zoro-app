@@ -606,8 +606,11 @@ class _RoomScreenState extends State<RoomScreen> {
         // Fetch full user data for frame asset resolution
         if (!_cachedUsers.containsKey(uid)) {
           _firebaseService.getUser(uid).then((user) {
-            if (user != null) {
-              _cachedUsers[uid] = user;
+            if (user != null && mounted) {
+              setState(() {
+                _cachedUsers[uid] = user;
+                _processSeatMap(seatMap);
+              });
             }
           });
         }
@@ -628,6 +631,7 @@ class _RoomScreenState extends State<RoomScreen> {
             name: data['name']?.toString() ?? '',
             avatar: data['photo_url']?.toString(),
             id: uid,
+            customId: cachedUser?.customId ?? data['custom_id']?.toString(),
             giftCount: giftTotal,
             totalGiftsReceived: giftTotal,
             charm: giftTotal.toString(),
@@ -973,6 +977,7 @@ class _RoomScreenState extends State<RoomScreen> {
           name: name,
           avatar: currentUser?.photoUrl ?? '',
           id: _currentUserId!,
+          customId: currentUser?.customId,
         ),
       );
       if (previousIdx != null) {
@@ -982,6 +987,7 @@ class _RoomScreenState extends State<RoomScreen> {
     Future<void> doTake() async {
       await _firebaseService.takeSeat(widget.roomId, idx, app.UserModel(
         uid: _currentUserId!,
+        customId: currentUser?.customId ?? '',
         name: name,
         photoUrl: currentUser?.photoUrl ?? '',
         activeFrame: currentUser?.activeFrame,
@@ -2568,7 +2574,7 @@ class _RoomScreenState extends State<RoomScreen> {
                               ],
                             ),
                             subtitle: Text(
-                              'ID: ${u.id != null ? ((1000000 + u.id.hashCode.abs() % 9000000).toString()) : '------'}',
+                              'ID: ${(u.customId ?? '').isNotEmpty ? u.customId : (u.id != null ? ((1000000 + u.id.hashCode.abs() % 9000000).toString()) : '------')}',
                               style: const TextStyle(
                                 color: Colors.white38,
                                 fontSize: 11,

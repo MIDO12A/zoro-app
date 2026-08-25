@@ -86,7 +86,7 @@ class _UserProfileState extends State<UserProfile> {
       final svc = SupabaseService();
       final userData = await Supabase.instance.client
           .from('users')
-          .select('active_frame, active_cover, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces')
+          .select('custom_id, active_frame, active_cover, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces')
           .eq('uid', uid)
           .maybeSingle();
       if (userData != null) {
@@ -342,7 +342,7 @@ class _UserProfileState extends State<UserProfile> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'ID: ${widget.user['id'] ?? '------'}',
+                    'ID: ${_extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? widget.user['id'] ?? '------'}',
                     style: const TextStyle(fontSize: 10, color: Color(0xFF9BA1B6)),
                   ),
                   const SizedBox(width: 4),

@@ -287,6 +287,7 @@ class FirebaseService {
           'room_id': roomId,
           'seat_index': seatIndex,
           'uid': user.uid,
+          'custom_id': user.customId,
           'name': user.name,
           'photo_url': user.photoUrl,
           'active_frame': user.activeFrame,

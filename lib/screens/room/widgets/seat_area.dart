@@ -70,66 +70,78 @@ class SeatArea extends StatelessWidget {
     );
   }
 
+  double _getAngleForIndex(int idx) {
+    switch (idx) {
+      case 2: return -90 * math.pi / 180;
+      case 3: return -50 * math.pi / 180;
+      case 4: return -10 * math.pi / 180;
+      case 5: return 30 * math.pi / 180;
+      case 6: return 70 * math.pi / 180;
+      case 7: return 110 * math.pi / 180;
+      case 8: return 150 * math.pi / 180;
+      case 9: return 190 * math.pi / 180;
+      case 1: return 230 * math.pi / 180;
+      default: return 0.0;
+    }
+  }
+
   Widget _buildGameLayout(BuildContext context) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    const double layoutWidth = 360.0;
+    const double layoutHeight = 340.0;
+    const double centerX = layoutWidth / 2;
+    const double centerY = layoutHeight / 2;
+    const double radius = 105.0;
+
     return Center(
       child: Container(
-        width: 360,
-        height: 240,
+        width: layoutWidth,
+        height: layoutHeight,
         margin: const EdgeInsets.symmetric(vertical: 10),
         child: Stack(
           alignment: Alignment.center,
           children: [
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.95,
-                child: Image.asset(
-                  'assets/mipmap-xxhdpi/room_bg_game_seat_10.webp',
-                  fit: BoxFit.contain,
-                ),
+            // Seat 0 (Captain) in the center
+            if (seats.isNotEmpty)
+              Positioned(
+                left: centerX - 38,
+                top: centerY - 48,
+                child: _buildCircularSeatItem(0, true),
               ),
-            ),
-            Positioned.fill(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildGameRow(0),
-                    _buildGameRow(5),
-                  ],
-                ),
-              ),
-            ),
+            // Seats 1 to 9 arranged in a circle
+            for (int i = 1; i <= 9; i++)
+              if (i < seats.length)
+                () {
+                  final angle = _getAngleForIndex(i);
+                  final dx = radius * math.cos(angle);
+                  final dy = radius * math.sin(angle);
+                  // Mirror horizontally in Arabic (RTL)
+                  final x = isAr ? (centerX - dx) : (centerX + dx);
+                  final y = centerY + dy;
+                  return Positioned(
+                    left: x - 38,
+                    top: y - 48,
+                    child: _buildCircularSeatItem(i, false),
+                  );
+                }(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildGameRow(int startIdx) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        for (int i = 0; i < 5; i++)
-          Expanded(
-            child: (startIdx + i < seats.length)
-                ? Center(
-                    child: GestureDetector(
-                      onTap: () => onSeatTap(startIdx + i),
-                      child: _NormalSeat(
-                        seat: seats[startIdx + i],
-                        emoji: seatEmojis?[startIdx + i],
-                        isModerator: seats[startIdx + i].user != null
-                            ? moderators?.contains(seats[startIdx + i].user!.id) ?? false
-                            : false,
-                        seatStyle: seatStyle,
-                        isCaptain: false,
-                      ),
-                    ),
-                  )
-                : const SizedBox(),
-          ),
-      ],
+  Widget _buildCircularSeatItem(int idx, bool isCaptain) {
+    return GestureDetector(
+      onTap: () => onSeatTap(idx),
+      child: _NormalSeat(
+        seat: seats[idx],
+        emoji: seatEmojis?[idx],
+        isModerator: seats[idx].user != null
+            ? moderators?.contains(seats[idx].user!.id) ?? false
+            : false,
+        seatStyle: seatStyle,
+        isCaptain: isCaptain,
+      ),
     );
   }
   Widget _buildGrid() {
@@ -278,7 +290,11 @@ class _NormalSeat extends StatelessWidget {
               SizedBox(
                 width: isModerator ? 48 : 56,
                 child: Text(
-                  hasUser ? name : (isCaptain ? 'Captain' : '${seat.index + 1}'),
+                  hasUser
+                      ? name
+                      : (seatStyle == SeatStyle.circle
+                          ? (isCaptain ? 'Captain' : '${seat.index}')
+                          : (isCaptain ? 'Captain' : '${seat.index + 1}')),
                   style: const TextStyle(fontSize: 11, color: Colors.white),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
