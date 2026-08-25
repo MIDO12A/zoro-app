@@ -33,6 +33,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     super.initState();
     _pageController = PageController(initialPage: 0);
     WidgetsBinding.instance.addObserver(this);
+    // Check for updates immediately after the first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkUpdate();
+    });
     // Periodic update check while the app is open (splash only checks cold start)
     _updatePoll = Timer.periodic(const Duration(minutes: 15), (_) => _checkUpdate());
   }

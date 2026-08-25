@@ -1307,6 +1307,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 seatEmojis: _seatEmojis,
                 moderators: _moderators,
                 hostUid: _currentRoom?.hostUid,
+                seatStyle: _roomSeatStyle,
               ),
 
               // Chat area fills remaining

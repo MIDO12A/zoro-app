@@ -85,7 +85,12 @@ class UpdateService {
       // NOT auto-decode JSON - fetch plain text and decode manually.
       final res = await Dio().get<String>(
         '$_buildInfoUrl?t=${DateTime.now().millisecondsSinceEpoch}',
-        options: Options(responseType: ResponseType.plain),
+        options: Options(
+          responseType: ResponseType.plain,
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
+          },
+        ),
       ).timeout(const Duration(seconds: 8));
       final d = jsonDecode(res.data ?? '') as Map<String, dynamic>;
 
@@ -94,8 +99,11 @@ class UpdateService {
       if (latestVersion.isEmpty || latestBuild == 0) return null;
 
       final currentBuild = int.tryParse(info.buildNumber) ?? 0;
-      if (_versionCode(latestVersion) <= _versionCode(info.version) &&
-          latestBuild <= currentBuild) {
+      final isNewerVersion = _versionCode(latestVersion) > _versionCode(info.version);
+      final isSameVersionNewerBuild = _versionCode(latestVersion) == _versionCode(info.version) &&
+          latestBuild > currentBuild;
+
+      if (!isNewerVersion && !isSameVersionNewerBuild) {
         return null;
       }
       return AppUpdateInfo(
@@ -174,7 +182,12 @@ class UpdateService {
     final cancelToken = CancelToken();
     _cancelTokens[tag] = cancelToken;
 
-    final dir = await getTemporaryDirectory();
+    Directory? dir;
+    if (Platform.isAndroid) {
+      dir = await getExternalStorageDirectory();
+    }
+    dir ??= await getTemporaryDirectory();
+
     final fileName = 'zero_update_${DateTime.now().millisecondsSinceEpoch}.apk';
     final savePath = '${dir.path}${Platform.pathSeparator}$fileName';
 
@@ -183,7 +196,13 @@ class UpdateService {
       savePath,
       onReceiveProgress: onProgress,
       cancelToken: cancelToken,
-      options: Options(responseType: ResponseType.bytes, receiveTimeout: const Duration(hours: 1)),
+      options: Options(
+        responseType: ResponseType.bytes,
+        receiveTimeout: const Duration(hours: 1),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
+        },
+      ),
     );
 
     _cancelTokens.remove(tag);
