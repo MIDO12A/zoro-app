@@ -2814,95 +2814,137 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   Widget _buildExitDialog() {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Positioned.fill(
       child: GestureDetector(
         onTap: () => setState(() => _showExit = false),
         child: Container(
           color: Colors.black54,
-          child: Center(
-            child: GestureDetector(
-              onTap: () {},
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 40),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2C2C2C),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+          child: Stack(
+            children: [
+              Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'خيارات الغرفة',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    // Minimize button
+                    // Minimize Room Button
                     GestureDetector(
                       onTap: _minimizeRoom,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.minimize, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'تصغير',
-                              style: TextStyle(color: Colors.white, fontSize: 15),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFFFFD54F),
+                                  Color(0xFFFFB300),
+                                  Color(0xFFE65100),
+                                ],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                            child: const Icon(
+                              Icons.close_fullscreen,
+                              color: Colors.white,
+                              size: 34,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            isAr ? 'تصغير' : 'Minimize',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    // Exit button
+                    const SizedBox(height: 48),
+                    // Exit Room Button
                     GestureDetector(
                       onTap: _exitRoom,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          gradient: AppColors.giftBtnGradient,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.exit_to_app, color: Colors.white, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              'خروج',
-                              style: TextStyle(color: Colors.white, fontSize: 15),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 80,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFFFFD54F),
+                                  Color(0xFFFFB300),
+                                  Color(0xFFE65100),
+                                ],
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: () => setState(() => _showExit = false),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          'إلغاء',
-                          style: TextStyle(color: Colors.white54, fontSize: 14),
-                        ),
+                            child: const Icon(
+                              Icons.power_settings_new,
+                              color: Colors.white,
+                              size: 38,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            isAr ? 'خروج' : 'Exit',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+              // Fullscreen back button in bottom-left corner
+              Positioned(
+                bottom: 48,
+                left: 32,
+                child: GestureDetector(
+                  onTap: () => setState(() => _showExit = false),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.black.withOpacity(0.4),
+                      border: Border.all(color: Colors.white30, width: 1),
+                    ),
+                    child: const Icon(
+                      Icons.open_in_full,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

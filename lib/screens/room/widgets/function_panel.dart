@@ -1,18 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/r.dart';
 
-// fragment_room_bottom_set2.xml
-// LinearLayoutCompat vertical
-//   bg=shape_room_chat_bg (#f51d1111, topLeft/topRight=12dp)
-//   paddingTop=14, paddingBottom=20
-//   tv "Function" 15sp white  marginH=16
-//   recyclerview_function  match_parent wrap_content
-//   tv "Effect"   15sp white  marginH=16 marginTop=30
-//   recyclerview_effect   match_parent wrap_content
-//
-// adapter_room_function_item.xml per item:
-//   48×48 icon + 10sp white label below, marginTop=10
-
 class FunctionPanel extends StatelessWidget {
   final VoidCallback? onClose;
   final void Function(String label)? onItemTap;
@@ -27,112 +15,227 @@ class FunctionPanel extends StatelessWidget {
     this.isModerator = false,
   });
 
-  List<Map<String, String>> get _functions {
-    final items = <Map<String, String>>[
-      {'icon': R.roomSetVolumeIc, 'label': 'Volume'},
-      {'icon': R.roomSetSetIc, 'label': 'Settings'},
-    ];
-    if (isOwner) {
-      items.add({'icon': R.roomSetSeatStyle, 'label': 'Seat Style'});
-    }
-    items.addAll([
-      {'icon': R.roomSetReportIc, 'label': 'Report'},
-      {'icon': R.roomSetMixerIc, 'label': 'Mixer'},
-      {'icon': R.roomSetGiftIc, 'label': 'Gift'},
-      {'icon': R.roomSetEffectIc, 'label': 'Effect'},
-      {'icon': R.roomSetMusicIc, 'label': 'Music'},
-      {'icon': '', 'label': 'Notifications'},
-      {'icon': '', 'label': 'Rankings'},
-      {'icon': '', 'label': 'Share'},
-    ]);
-    return items;
-  }
-
-  static const List<Map<String, String>> _effects = [
-    {'icon': R.roomSetEffectIc, 'label': 'Effect 1'},
-    {'icon': R.roomSetMixerIc, 'label': 'Mixer'},
-    {'icon': R.roomSetVolumeIc, 'label': 'Bass'},
-    {'icon': R.roomSetMusicIc, 'label': 'Echo'},
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+
+    final interactionItems = [
+      {
+        'key': 'Magic Farm',
+        'label': isAr ? 'المزرعة السحرية' : 'Magic Farm',
+        'asset': '',
+      },
+      {
+        'key': 'PK Team',
+        'label': isAr ? 'فريق بي كي' : 'PK Team',
+        'asset': '',
+      },
+      {
+        'key': 'Lucky Bag',
+        'label': isAr ? 'حقيبة الحظ' : 'Lucky Bag',
+        'asset': '',
+      },
+    ];
+
+    final functionItems = [
+      {
+        'key': 'Settings',
+        'label': isAr ? 'إعداد الغرفة' : 'Room Settings',
+        'asset': R.roomSetSetIc,
+      },
+      {
+        'key': 'Gift Value',
+        'label': isAr ? 'قيمة الهدية' : 'Gift Value',
+        'asset': R.roomSetGiftIc,
+      },
+      {
+        'key': 'Mixer',
+        'label': isAr ? 'خلاط' : 'Mixer',
+        'asset': R.roomSetMixerIc,
+      },
+      {
+        'key': 'Volume',
+        'label': isAr ? 'مستوى صوت الغرفة' : 'Room Volume',
+        'asset': R.roomSetVolumeIc,
+      },
+      if (isOwner)
+        {
+          'key': 'Seat Style',
+          'label': isAr ? 'خلفية الغرفة' : 'Room Background',
+          'asset': R.roomSetSeatStyle,
+        },
+      {
+        'key': 'Mute Mic',
+        'label': isAr ? 'إيقاف الميكروفون' : 'Mute Mic',
+        'asset': '',
+      },
+      {
+        'key': 'Mic Mode',
+        'label': isAr ? 'نمط الميكروفون' : 'Mic Mode',
+        'asset': '',
+      },
+    ];
+
+    final effectItems = [
+      {
+        'key': 'Clear Messages',
+        'label': isAr ? 'مسح الرسائل' : 'Clear Messages',
+        'asset': '',
+      },
+      {
+        'key': 'Message Settings',
+        'label': isAr ? 'إعدادات الرسائل' : 'Message Settings',
+        'asset': '',
+      },
+      {
+        'key': 'Effect',
+        'label': isAr ? 'إعدادات التأثيرات' : 'Effects Settings',
+        'asset': R.roomSetEffectIc,
+      },
+    ];
+
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xF51D1111),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+        color: Color(0xFF151419),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      padding: const EdgeInsets.only(top: 14, bottom: 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Function',
-              style: TextStyle(fontSize: 15, color: Colors.white),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildRow(_functions),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 30, 16, 0),
-            child: Text(
-              'Effect',
-              style: TextStyle(fontSize: 15, color: Colors.white),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildRow(_effects),
-        ],
+      padding: const EdgeInsets.only(top: 20, bottom: 32),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildSection(context, isAr ? 'تفاعل الغرفة' : 'Room Interaction', interactionItems),
+            const SizedBox(height: 24),
+            _buildSection(context, isAr ? 'وظائف الغرفة' : 'Room Functions', functionItems),
+            const SizedBox(height: 24),
+            _buildSection(context, isAr ? 'إعدادات التأثيرات' : 'إعدادات التأثيرات', effectItems),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildRow(List<Map<String, String>> items) {
-    return SizedBox(
-      height: 80,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: items.length,
-        itemBuilder: (_, i) => GestureDetector(
-          onTap: () => onItemTap?.call(items[i]['label']!),
-          child: Padding(
-            padding: const EdgeInsets.only(right: 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                items[i]['icon']!.isNotEmpty
-                    ? Image.asset(
-                        items[i]['icon']!,
-                        width: 48,
-                        height: 48,
-                        errorBuilder: (_, __, ___) => const SizedBox(
-                          width: 48,
-                          height: 48,
-                          child: Icon(Icons.settings, color: Colors.white70, size: 22),
-                        ),
-                      )
-                    : const SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Icon(Icons.notifications, color: Colors.white70, size: 22),
-                      ),
-                const SizedBox(height: 6),
-                Text(
-                  items[i]['label']!,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Color(0xB3FFFFFF),
-                  ),
-                ),
-              ],
+  Widget _buildSection(BuildContext context, String title, List<Map<String, String>> items) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            title,
+            textAlign: isAr ? TextAlign.right : TextAlign.left,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.white70,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ),
+        const SizedBox(height: 12),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 16,
+            alignment: isAr ? WrapAlignment.end : WrapAlignment.start,
+            children: items.map((item) {
+              return SizedBox(
+                width: (MediaQuery.of(context).size.width - 48) / 4,
+                child: GestureDetector(
+                  onTap: () {
+                    final key = item['key']!;
+                    if (key == 'Settings' || key == 'Mixer' || key == 'Volume' || key == 'Seat Style' || key == 'Effect') {
+                      onItemTap?.call(key);
+                    } else {
+                      final label = item['label']!;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(isAr ? '$label قريباً' : '$label coming soon'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _getIconWidget(item['key']!, item['asset']),
+                      const SizedBox(height: 8),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: Text(
+                          item['label']!,
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Colors.white70,
+                            height: 1.2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _getIconWidget(String labelKey, String? assetPath) {
+    if (assetPath != null && assetPath.isNotEmpty) {
+      return Image.asset(
+        assetPath,
+        width: 48,
+        height: 48,
+        errorBuilder: (_, __, ___) => _fallbackIcon(labelKey),
+      );
+    }
+    return _fallbackIcon(labelKey);
+  }
+
+  Widget _fallbackIcon(String labelKey) {
+    switch (labelKey) {
+      case 'Magic Farm':
+        return _buildItemIcon(Icons.forest, [const Color(0xFF4CAF50), const Color(0xFF2E7D32)]);
+      case 'PK Team':
+        return _buildItemIcon(Icons.local_fire_department, [const Color(0xFFFF5722), const Color(0xFFD84315)]);
+      case 'Lucky Bag':
+        return _buildItemIcon(Icons.shopping_bag, [const Color(0xFFFFC107), const Color(0xFFE65100)]);
+      case 'Gift Value':
+        return _buildItemIcon(Icons.card_giftcard, [const Color(0xFFE91E63), const Color(0xFFC2185B)]);
+      case 'Mute Mic':
+        return _buildItemIcon(Icons.mic_off, [const Color(0xFF78909C), const Color(0xFF455A64)]);
+      case 'Mic Mode':
+        return _buildItemIcon(Icons.mic, [const Color(0xFF26A69A), const Color(0xFF00796B)]);
+      case 'Clear Messages':
+        return _buildItemIcon(Icons.cleaning_services, [const Color(0xFF42A5F5), const Color(0xFF1565C0)]);
+      case 'Message Settings':
+        return _buildItemIcon(Icons.chat_bubble_outline, [const Color(0xFFAB47BC), const Color(0xFF6A1B9A)]);
+      default:
+        return _buildItemIcon(Icons.settings, [const Color(0xFF90A4AE), const Color(0xFF37474F)]);
+    }
+  }
+
+  Widget _buildItemIcon(IconData icon, List<Color> gradientColors) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: gradientColors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
       ),
+      child: Icon(icon, color: Colors.white, size: 24),
     );
   }
 }

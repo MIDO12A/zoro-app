@@ -72,24 +72,62 @@ class SeatArea extends StatelessWidget {
 
   Widget _buildGameLayout(BuildContext context) {
     return Center(
-      child: SizedBox(
+      child: Container(
         width: 360,
-        height: 380,
+        height: 240,
+        margin: const EdgeInsets.symmetric(vertical: 10),
         child: Stack(
+          alignment: Alignment.center,
           children: [
-            _positionSeat(0, 180, 175, isCaptain: true),
-            _positionSeat(2, 180, 42),
-            _positionSeat(1, 98, 70),
-            _positionSeat(3, 262, 70),
-            _positionSeat(9, 50, 150),
-            _positionSeat(4, 310, 150),
-            _positionSeat(8, 50, 245),
-            _positionSeat(5, 310, 245),
-            _positionSeat(7, 120, 305),
-            _positionSeat(6, 240, 305),
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.95,
+                child: Image.asset(
+                  'assets/mipmap-xxhdpi/room_bg_game_seat_10.webp',
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildGameRow(0),
+                    _buildGameRow(5),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildGameRow(int startIdx) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        for (int i = 0; i < 5; i++)
+          Expanded(
+            child: Center(
+              child: GestureDetector(
+                onTap: () => onSeatTap(startIdx + i),
+                child: _NormalSeat(
+                  seat: seats[startIdx + i],
+                  emoji: seatEmojis?[startIdx + i],
+                  isModerator: seats[startIdx + i].user != null
+                      ? moderators?.contains(seats[startIdx + i].user!.id) ?? false
+                      : false,
+                  seatStyle: seatStyle,
+                  isCaptain: false,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -262,7 +300,7 @@ class _NormalSeat extends StatelessWidget {
               SizedBox(
                 width: isModerator ? 48 : 56,
                 child: Text(
-                  hasUser ? name : (isCaptain ? 'Captain' : '${seat.index}'),
+                  hasUser ? name : (isCaptain ? 'Captain' : '${seat.index + 1}'),
                   style: const TextStyle(fontSize: 11, color: Colors.white),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

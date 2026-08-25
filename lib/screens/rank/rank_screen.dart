@@ -26,6 +26,9 @@ class _RankScreenState extends State<RankScreen>
   bool _loading = true;
   String _currentType = 'wealth';
 
+  Timer? _countdownTimer;
+  String _countdownStr = '00 h 00 m 00 s';
+
   IconData _rankIcon(String iconName) {
     const map = {
       'Icons.emoji_events': Icons.emoji_events,
@@ -41,6 +44,16 @@ class _RankScreenState extends State<RankScreen>
     return map[iconName] ?? Icons.emoji_events;
   }
 
+  String _getCountdownString() {
+    final now = DateTime.now().toUtc().add(const Duration(hours: 3));
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    final diff = tomorrow.difference(now);
+    final h = diff.inHours.toString().padLeft(2, '0');
+    final m = (diff.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (diff.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h h $m m $s s';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -52,14 +65,24 @@ class _RankScreenState extends State<RankScreen>
         });
       }
     });
-    _wealthSubTabController = TabController(length: 4, vsync: this);
-    _charmSubTabController = TabController(length: 4, vsync: this);
-    _roomSubTabController = TabController(length: 4, vsync: this);
+    _wealthSubTabController = TabController(length: 3, vsync: this);
+    _charmSubTabController = TabController(length: 3, vsync: this);
+    _roomSubTabController = TabController(length: 3, vsync: this);
     _loadRankings();
+
+    _countdownStr = _getCountdownString();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _countdownStr = _getCountdownString();
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _mainTabController.dispose();
     _wealthSubTabController.dispose();
     _charmSubTabController.dispose();
@@ -148,6 +171,7 @@ class _RankScreenState extends State<RankScreen>
   }
 
   Widget _buildHeader() {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: SizedBox(
@@ -165,7 +189,7 @@ class _RankScreenState extends State<RankScreen>
             Expanded(
               child: TabBar(
                 controller: _mainTabController,
-                indicator: BoxDecoration(
+                indicator: const BoxDecoration(
                   image: DecorationImage(
                     image: AssetImage(
                       'assets/mipmap-xxhdpi/rank_tab_item_bg.webp',
@@ -176,10 +200,10 @@ class _RankScreenState extends State<RankScreen>
                 indicatorSize: TabBarIndicatorSize.label,
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.white60,
-                tabs: const [
-                  Tab(text: 'Wealth'),
-                  Tab(text: 'Charm'),
-                  Tab(text: 'Room'),
+                tabs: [
+                  Tab(text: isAr ? 'الثروة' : 'Wealth'),
+                  Tab(text: isAr ? 'السحر' : 'Charm'),
+                  Tab(text: isAr ? 'باتل' : 'Battle'),
                 ],
               ),
             ),
@@ -190,6 +214,7 @@ class _RankScreenState extends State<RankScreen>
   }
 
   Widget _buildRankPage(String type, TabController subTabController) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Column(
       children: [
         Container(
@@ -208,22 +233,31 @@ class _RankScreenState extends State<RankScreen>
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white60,
             labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            tabs: const [
-              Tab(text: 'Daily'),
-              Tab(text: 'Weekly'),
-              Tab(text: 'Monthly'),
-              Tab(text: 'All'),
+            tabs: [
+              Tab(text: isAr ? 'يومياً' : 'Daily'),
+              Tab(text: isAr ? 'أسبوعياً' : 'Weekly'),
+              Tab(text: isAr ? 'تصنيف المجموع' : 'Total'),
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Text(
+            isAr ? 'العد التنازلي: (GMT+3) $_countdownStr' : 'Countdown: (GMT+3) $_countdownStr',
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFFFFF9C4),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
         Expanded(
           child: TabBarView(
             controller: subTabController,
             children: [
               _buildRankList(type, _RankPeriod.daily),
               _buildRankList(type, _RankPeriod.weekly),
-              _buildRankList(type, _RankPeriod.monthly),
               _buildRankList(type, _RankPeriod.all),
             ],
           ),
@@ -240,18 +274,25 @@ class _RankScreenState extends State<RankScreen>
     }
 
     final data = _getRankingData(period, type);
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     if (data.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(_rankIcon(_cfg.rankTrophyIcon), size: 64, color: _cfg.rankTextColorFor(_currentType).withValues(alpha: 0.3)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 80),
+            R.image(
+              R.mipmap('common_empty_ic_1'),
+              width: 140,
+              height: 140,
+            ),
+            const SizedBox(height: 16),
             Text(
-              _cfg.rankEmptyText,
-              style: TextStyle(
-                fontSize: 15,
-                color: _cfg.rankSubTextColorFor(_currentType),
+              isAr ? 'لا توجد بيانات ترتيب حالياً' : 'No ranking data available',
+              style: const TextStyle(
+                fontSize: 14,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],

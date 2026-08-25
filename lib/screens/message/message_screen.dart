@@ -14,9 +14,7 @@ class MessageScreen extends StatefulWidget {
   State<MessageScreen> createState() => _MessageScreenState();
 }
 
-class _MessageScreenState extends State<MessageScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _MessageScreenState extends State<MessageScreen> {
   final SupabaseService _firebaseService = SupabaseService();
   List<Map<String, dynamic>> _conversations = [];
   StreamSubscription? _conversationsSub;
@@ -24,7 +22,6 @@ class _MessageScreenState extends State<MessageScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadConversations());
   }
 
@@ -43,7 +40,6 @@ class _MessageScreenState extends State<MessageScreen>
   @override
   void dispose() {
     _conversationsSub?.cancel();
-    _tabController.dispose();
     super.dispose();
   }
 
@@ -153,36 +149,8 @@ class _MessageScreenState extends State<MessageScreen>
                       ],
               ),
             ),
-
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                indicator: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  color: const Color(0xFF1E90FF),
-                ),
-                indicatorSize: TabBarIndicatorSize.label,
-                labelColor: Colors.white,
-                unselectedLabelColor: const Color(0xFF16151A),
-                labelPadding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                tabs: [
-                  Tab(text: isAr ? 'الكل' : 'All'),
-                  Tab(text: isAr ? 'الرسائل' : 'Messages'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
             Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildConversationList(),
-                  _buildConversationList(),
-                ],
-              ),
+              child: _buildConversationList(),
             ),
           ],
         ),
