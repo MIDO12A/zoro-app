@@ -77,12 +77,6 @@ class SeatArea extends StatelessWidget {
         height: 380,
         child: Stack(
           children: [
-            Positioned.fill(
-              child: Image.asset(
-                R.mipmap('room_bg_game_seat_10'),
-                fit: BoxFit.contain,
-              ),
-            ),
             _positionSeat(0, 180, 175, isCaptain: true),
             _positionSeat(2, 180, 42),
             _positionSeat(1, 98, 70),

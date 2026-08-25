@@ -49,6 +49,11 @@ class _MessageScreenState extends State<MessageScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final String title = isAr ? 'رسالة' : 'Message';
+    final String eventInfoLabel = isAr ? 'معلومات\nالحدث' : 'Event\ninformation';
+    final String systemNotifLabel = isAr ? 'إشعار\nالنظام' : 'System\nnotification';
+
     return Scaffold(
       backgroundColor: const Color(0xFFFFFFFF),
       body: SafeArea(
@@ -63,11 +68,11 @@ class _MessageScreenState extends State<MessageScreen>
                   width: double.infinity,
                   fit: BoxFit.fitWidth,
                 ),
-                const Padding(
-                  padding: EdgeInsets.only(top: 16, bottom: 20),
+                Padding(
+                  padding: const EdgeInsets.only(top: 16, bottom: 20),
                   child: Text(
-                    'رسالة',
-                    style: TextStyle(
+                    title,
+                    style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF16151A),
@@ -81,36 +86,71 @@ class _MessageScreenState extends State<MessageScreen>
             Padding(
               padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 16),
               child: Row(
-                children: [
-                  // Right Card (Event Info)
-                  Expanded(
-                    child: _buildInfoCard(
-                      bgAsset: R.chatMessageInformationBg,
-                      label: 'معلومات\nالحدث',
-                      badgeCount: 2,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('معلومات الحدث قريباً')),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Left Card (System Notification)
-                  Expanded(
-                    child: _buildInfoCard(
-                      bgAsset: R.chatMessageSystemBg,
-                      label: 'إشعار\nالنظام',
-                      badgeCount: 3,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                children: isAr
+                    ? [
+                        // Right Card (Event Info)
+                        Expanded(
+                          child: _buildInfoCard(
+                            bgAsset: R.chatMessageInformationBg,
+                            label: eventInfoLabel,
+                            badgeCount: 2,
+                            isAr: isAr,
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(isAr ? 'معلومات الحدث قريباً' : 'Event information coming soon')),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Left Card (System Notification)
+                        Expanded(
+                          child: _buildInfoCard(
+                            bgAsset: R.chatMessageSystemBg,
+                            label: systemNotifLabel,
+                            badgeCount: 3,
+                            isAr: isAr,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                              );
+                            },
+                          ),
+                        ),
+                      ]
+                    : [
+                        // Left Card (System Notification)
+                        Expanded(
+                          child: _buildInfoCard(
+                            bgAsset: R.chatMessageSystemBg,
+                            label: systemNotifLabel,
+                            badgeCount: 3,
+                            isAr: isAr,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Right Card (Event Info)
+                        Expanded(
+                          child: _buildInfoCard(
+                            bgAsset: R.chatMessageInformationBg,
+                            label: eventInfoLabel,
+                            badgeCount: 2,
+                            isAr: isAr,
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text(isAr ? 'معلومات الحدث قريباً' : 'Event information coming soon')),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
               ),
             ),
 
@@ -128,9 +168,9 @@ class _MessageScreenState extends State<MessageScreen>
                 unselectedLabelColor: const Color(0xFF16151A),
                 labelPadding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                tabs: const [
-                  Tab(text: 'الكل'),
-                  Tab(text: 'الرسائل'),
+                tabs: [
+                  Tab(text: isAr ? 'الكل' : 'All'),
+                  Tab(text: isAr ? 'الرسائل' : 'Messages'),
                 ],
               ),
             ),
@@ -154,6 +194,7 @@ class _MessageScreenState extends State<MessageScreen>
     required String bgAsset,
     required String label,
     required int badgeCount,
+    required bool isAr,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
@@ -168,10 +209,11 @@ class _MessageScreenState extends State<MessageScreen>
             ),
             Positioned(
               top: 14,
-              right: 16,
+              left: isAr ? null : 16,
+              right: isAr ? 16 : null,
               child: Text(
                 label,
-                textAlign: TextAlign.right,
+                textAlign: isAr ? TextAlign.right : TextAlign.left,
                 style: const TextStyle(
                   fontSize: 12,
                   color: Colors.white,
@@ -183,7 +225,8 @@ class _MessageScreenState extends State<MessageScreen>
             if (badgeCount > 0)
               Positioned(
                 top: -5,
-                left: -5,
+                left: isAr ? -5 : null,
+                right: isAr ? null : -5,
                 child: Container(
                   width: 18,
                   height: 18,
@@ -210,6 +253,9 @@ class _MessageScreenState extends State<MessageScreen>
   }
 
   Widget _buildConversationList() {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final String emptyText = isAr ? 'لا توجد دردشات لـ الكل' : 'No Conversation for All';
+
     if (_conversations.isEmpty) {
       return Center(
         child: Column(
@@ -221,9 +267,9 @@ class _MessageScreenState extends State<MessageScreen>
               height: 140,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'لا توجد دردشات لـ الكل',
-              style: TextStyle(
+            Text(
+              emptyText,
+              style: const TextStyle(
                 fontSize: 15,
                 color: Color(0xFF16151A),
                 fontWeight: FontWeight.w500,
