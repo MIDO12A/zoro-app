@@ -58,6 +58,8 @@ class SupabaseClient {
         return _rpcAgencySetSupervisor(params, isSupervisor: false);
       case 'agency_view_once_open':
         return <String, dynamic>{'status': 'ok'};
+      case 'agency_create':
+        return _rpcAgencyCreate(params);
     }
     throw StateError(
       'RPC "$fn" is not migrated to Firebase yet. '
@@ -172,6 +174,80 @@ class SupabaseClient {
     await snap.docs.first.reference
         .update({'role': isSupervisor ? 'supervisor' : 'host'});
     return {'status': 'ok'};
+  }
+
+  Future<Map<String, dynamic>> _rpcAgencyCreate(
+      Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      return {'status': 'error', 'message': 'not_authenticated'};
+    }
+
+    final name = (p?['p_name']?.toString() ?? '').trim();
+    if (name.isEmpty) {
+      return {'status': 'error', 'message': 'name_required'};
+    }
+
+    // Check: already member of any agency?
+    final existing = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (existing.docs.isNotEmpty) {
+      return {'status': 'error', 'message': 'already_member'};
+    }
+
+    // Create agency doc
+    final agencyRef = _db.collection('host_agencies').doc();
+    final agencyData = <String, dynamic>{
+      'id': agencyRef.id,
+      'name': name,
+      'owner_id': uid,
+      'owner_user_id': uid,
+      'description': (p?['p_description']?.toString() ?? '').isEmpty
+          ? null
+          : p!['p_description'].toString(),
+      'photo_url': (p?['p_photo_url']?.toString() ?? '').isEmpty
+          ? null
+          : p!['p_photo_url'].toString(),
+      'phone': (p?['p_phone']?.toString() ?? '').isEmpty
+          ? null
+          : p!['p_phone'].toString(),
+      'country': (p?['p_country']?.toString() ?? '').isEmpty
+          ? null
+          : p!['p_country'].toString(),
+      'tier': 'bronze',
+      'is_active': true,
+      'member_count': 1,
+      'commission_rate': 0.05,
+      'specialty': 'mixed',
+      'total_diamonds_earned': 0,
+      'monthly_diamonds': 0,
+      'total_diamonds_monthly': 0,
+      'is_hall_of_fame': false,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    await agencyRef.set(agencyData);
+
+    // Add owner as member
+    final memberRef = _db.collection('host_agency_members').doc();
+    await memberRef.set({
+      'id': memberRef.id,
+      'agency_id': agencyRef.id,
+      'user_id': uid,
+      'role': 'owner',
+      'status': 'active',
+      'diamonds_earned_monthly': 0,
+      'diamonds_earned_cumulative': 0,
+      'diamonds_balance': 0,
+      'diamonds_pending_withdrawal': 0,
+      'diamonds_available': 0,
+      'joined_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'agency_id': agencyRef.id};
   }
 
   RealtimeChannel channel(String topic) => RealtimeChannel(topic);
