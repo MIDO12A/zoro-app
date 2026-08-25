@@ -41,7 +41,13 @@ service cloud.firestore {
     // ── بيانات المستخدمين ──────────────────────────────────────────────
     match /users/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && request.auth.uid == uid;
+      // صاحب الحساب يعدل كل شيء؛ الآخرون فقط حقول الهدايا الواردة
+      // (خصم العملات من المرسل + إضافة الماس للمستلم تحدث في نفس الـ transaction)
+      allow write: if signedIn() && (
+        request.auth.uid == uid ||
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['diamonds', 'total_gifts_received'])
+      );
     }
 
     match /profiles/{uid} {
@@ -51,7 +57,10 @@ service cloud.firestore {
 
     match /user_wallets/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
-      allow write: if isAdmin();
+      // كتابة محدودة بحقول المحفظة فقط عند استلام الهدايا (نفس نموذج الغرف المفتوح)
+      allow write: if signedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['user_id', 'diamond_balance', 'gold_balance']);
     }
 
     // ── الإشعارات: المستخدم يقرأ/يعدل إشعاراته فقط ─────────────────────
