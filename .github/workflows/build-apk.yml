@@ -47,12 +47,12 @@ jobs:
         id: ver
         run: echo "ver=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)" >> "$GITHUB_OUTPUT"
 
-      # Build number = run number + 10000 so it is always higher than any
+      # Build number = run number + 50000 so it is always higher than any
       # locally-built APK; each push therefore produces a strictly newer build.
       # Split per ABI: arm64 (~1/3 the size) is what most phones download;
       # arm32 and x86_64 are published as separate assets.
       - name: Build release APKs
-        run: flutter build apk --release --split-per-abi --build-number=$((10000 + ${{ github.run_number }}))
+        run: flutter build apk --release --split-per-abi --build-number=$((50000 + ${{ github.run_number }}))
 
       - name: Rename APKs
         run: |
@@ -66,7 +66,7 @@ jobs:
           RUN_NUM: ${{ github.run_number }}
           SHA: ${{ github.sha }}
         run: |
-          bn=$((10000 + RUN_NUM))
+          bn=$((50000 + RUN_NUM))
           printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$bn" "$SHA" > build_info.json
           cat build_info.json
 
@@ -80,6 +80,6 @@ jobs:
             "zero-app-arm32.apk#zero-app-arm32.apk (arm32)" \
             "zero-app-x86_64.apk#zero-app-x86_64.apk (x86_64)" \
             "build_info.json#build_info.json" \
-            --title "Zero App v${{ steps.ver.outputs.ver }} (build $((10000 + ${{ github.run_number }})))" \
+            --title "Zero App v${{ steps.ver.outputs.ver }} (build $((50000 + ${{ github.run_number }})))" \
             --notes "Auto-build of commit ${{ github.sha }}" \
             --latest
