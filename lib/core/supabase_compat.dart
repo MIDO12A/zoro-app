@@ -62,6 +62,42 @@ class SupabaseClient {
         return _rpcAgencyCreate(params);
       case 'agency_get_dashboard':
         return _rpcAgencyGetDashboard(params);
+      case 'agency_get_engine_settings':
+        return _rpcAgencyGetEngineSettings(params);
+      case 'agency_get_leaderboard':
+        return _rpcAgencyGetLeaderboard(params);
+      case 'agency_get_profile':
+        return _rpcAgencyGetProfile(params);
+      case 'agency_get_owner_dashboard':
+        return _rpcAgencyGetOwnerDashboard(params);
+      case 'agency_request_join':
+        return _rpcAgencyRequestJoin(params);
+      case 'agency_request_exit':
+        return _rpcAgencyRequestExit(params);
+      case 'agency_pay_penalty_exit':
+        return _rpcAgencyPayPenaltyExit(params);
+      case 'agency_exchange_diamonds':
+        return _rpcAgencyExchangeDiamonds(params);
+      case 'agency_request_withdrawal':
+        return _rpcAgencyRequestWithdrawal(params);
+      case 'agency_transfer_to_recharge':
+        return _rpcAgencyTransferToRecharge(params);
+      case 'host_transfer_diamonds_to_agent':
+        return _rpcHostTransferDiamondsToAgent(params);
+      case 'agency_send_announcement':
+        return _rpcAgencySendAnnouncement(params);
+      case 'agency_owner_exchange_diamonds':
+        return _rpcAgencyOwnerExchangeDiamonds(params);
+      case 'agency_owner_request_withdrawal':
+        return _rpcAgencyOwnerRequestWithdrawal(params);
+      case 'agency_accept_member':
+        return _rpcAgencyAcceptMember(params);
+      case 'agency_kick_member':
+        return _rpcAgencyKickMember(params);
+      case 'get_host_dashboard_v2':
+        return _rpcGetHostDashboardV2(params);
+      case 'get_host_dashboard_v3':
+        return _rpcGetHostDashboardV3(params);
     }
     throw StateError(
       'RPC "$fn" is not migrated to Firebase yet. '
@@ -352,6 +388,830 @@ class SupabaseClient {
       'members': members,
       'milestones': milestones,
       'pending_members_count': pendingCount,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_get_engine_settings
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyGetEngineSettings(
+      Map<String, dynamic>? p) async {
+    try {
+      final snap = await _db.collection('commission_settings').limit(1).get();
+      if (snap.docs.isNotEmpty) {
+        return Map<String, dynamic>.from(snap.docs.first.data());
+      }
+    } catch (_) {}
+    return <String, dynamic>{
+      'exchange_rate': 0.9,
+      'min_withdrawal': 100,
+      'max_withdrawal': 50000,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_get_leaderboard
+  // ═══════════════════════════════════════════════════════════════
+  Future<List<Map<String, dynamic>>> _rpcAgencyGetLeaderboard(
+      Map<String, dynamic>? p) async {
+    final country = p?['p_country']?.toString();
+    final limit = (p?['p_limit'] as num?)?.toInt() ?? 50;
+    final offset = (p?['p_offset'] as num?)?.toInt() ?? 0;
+
+    Query<Map<String, dynamic>> q = _db
+        .collection('host_agencies')
+        .where('is_active', isEqualTo: true);
+    if (country != null && country.isNotEmpty) {
+      q = q.where('country', isEqualTo: country);
+    }
+
+    final snap = await q
+        .orderBy('total_diamonds_monthly', descending: true)
+        .limit(offset + limit)
+        .get();
+
+    final list = snap.docs.map((d) {
+      final data = d.data();
+      return <String, dynamic>{
+        'agency_id': d.id,
+        'name': data['name'] ?? '',
+        'photo_url': data['photo_url'],
+        'tier': data['tier'] ?? 'bronze',
+        'monthly_diamonds': data['total_diamonds_monthly'] ?? 0,
+        'member_count': data['member_count'] ?? 0,
+        'country': data['country'],
+        'is_hall_of_fame': data['is_hall_of_fame'] ?? false,
+      };
+    }).toList();
+    // Apply offset client-side
+    final sliced = list.length > offset ? list.sublist(offset) : <Map<String, dynamic>>[];
+    // Add rank
+    for (var i = 0; i < sliced.length; i++) {
+      sliced[i]['rank'] = offset + i + 1;
+    }
+    return sliced.take(limit).toList();
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_get_profile
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyGetProfile(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    if (agencyId == null || agencyId.isEmpty) return <String, dynamic>{};
+    final snap = await _db.collection('host_agencies').doc(agencyId).get();
+    if (!snap.exists) return <String, dynamic>{};
+    final d = snap.data()!;
+    return <String, dynamic>{
+      'id': snap.id,
+      'name': d['name'] ?? '',
+      'description': d['description'],
+      'photo_url': d['photo_url'],
+      'cover_url': d['cover_url'],
+      'tier': d['tier'] ?? 'bronze',
+      'country': d['country'],
+      'member_count': d['member_count'] ?? 0,
+      'total_diamonds_monthly': d['total_diamonds_monthly'] ?? 0,
+      'total_diamonds_earned': d['total_diamonds_earned'] ?? 0,
+      'is_hall_of_fame': d['is_hall_of_fame'] ?? false,
+      'is_active': d['is_active'] ?? true,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_get_owner_dashboard
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyGetOwnerDashboard(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    if (agencyId == null) return <String, dynamic>{};
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return <String, dynamic>{};
+
+    final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
+    if (!agencySnap.exists) return <String, dynamic>{};
+    final ad = agencySnap.data()!;
+
+    // Owner's member row
+    int diamondsBalance = 0;
+    int diamondsAvailable = 0;
+    int diamondsPending = 0;
+    int earnedTotal = 0;
+    try {
+      final memberSnap = await _db
+          .collection('host_agency_members')
+          .where('agency_id', isEqualTo: agencyId)
+          .where('user_id', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (memberSnap.docs.isNotEmpty) {
+        final md = memberSnap.docs.first.data();
+        diamondsBalance = (md['diamonds_balance'] as num?)?.toInt() ?? 0;
+        diamondsAvailable = (md['diamonds_available'] as num?)?.toInt() ?? 0;
+        diamondsPending = (md['diamonds_pending_withdrawal'] as num?)?.toInt() ?? 0;
+        earnedTotal = (md['diamonds_earned_cumulative'] as num?)?.toInt() ?? 0;
+      }
+    } catch (_) {}
+
+    // Ledger
+    List<Map<String, dynamic>> ledger = [];
+    try {
+      final ledgerSnap = await _db
+          .collection('agency_diamond_ledger')
+          .where('user_id', isEqualTo: uid)
+          .orderBy('created_at', descending: true)
+          .limit(20)
+          .get();
+      ledger = ledgerSnap.docs.map((e) => e.data()).toList();
+    } catch (_) {}
+
+    // Engine settings
+    final engine = await _rpcAgencyGetEngineSettings(null);
+
+    return <String, dynamic>{
+      'wallet': {
+        'balance': diamondsBalance,
+        'pending': diamondsPending,
+        'available': diamondsAvailable,
+        'earned_total': earnedTotal,
+      },
+      'rates': engine,
+      'ledger': ledger,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_request_join
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyRequestJoin(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (agencyId == null || uid == null) {
+      return {'status': 'error', 'message': 'missing_params'};
+    }
+
+    // Check not already member
+    final existing = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (existing.docs.isNotEmpty) {
+      return {'status': 'error', 'message': 'already_member'};
+    }
+
+    // Create join request or add as active member directly
+    final docRef = _db.collection('host_agency_join_requests').doc();
+    await docRef.set({
+      'id': docRef.id,
+      'agency_id': agencyId,
+      'user_id': uid,
+      'status': 'pending',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok'};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_request_exit
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyRequestExit(
+      Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return {'status': 'error'};
+
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return {'status': 'error', 'message': 'not_member'};
+
+    final memberId = memberSnap.docs.first.id;
+    final freeUntil = DateTime.now().toUtc().add(const Duration(days: 7));
+
+    await _db.collection('host_agency_members').doc(memberId).update({
+      'status': 'pending_exit',
+    });
+
+    // Mark as free agent for 7 days
+    await _db.collection('agency_free_agents').doc(uid).set({
+      'user_id': uid,
+      'free_until': freeUntil.toIso8601String(),
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'free_until': freeUntil.toIso8601String()};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_pay_penalty_exit
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyPayPenaltyExit(
+      Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return {'status': 'error'};
+
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return {'status': 'error'};
+
+    final memberId = memberSnap.docs.first.id;
+    await _db.collection('host_agency_members').doc(memberId).update({
+      'status': 'left',
+    });
+    await _db.collection('agency_free_agents').doc(uid).set({
+      'user_id': uid,
+      'free_until': DateTime.now().toUtc().toIso8601String(),
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok'};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_exchange_diamonds
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyExchangeDiamonds(
+      Map<String, dynamic>? p) async {
+    final diamonds = (p?['p_diamonds'] as num?)?.toInt() ?? 0;
+    final idempotencyKey = p?['p_idempotency_key']?.toString() ?? '';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || diamonds <= 0) {
+      return {'status': 'error', 'message': 'invalid_params'};
+    }
+
+    // Check idempotency
+    if (idempotencyKey.isNotEmpty) {
+      final existing = await _db
+          .collection('agency_diamond_ledger')
+          .where('idempotency_key', isEqualTo: idempotencyKey)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) {
+        return {'status': 'ok', 'message': 'already_processed'};
+      }
+    }
+
+    // Find member
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return {'status': 'error', 'message': 'not_member'};
+
+    final memberDoc = memberSnap.docs.first;
+    final available = (memberDoc.data()['diamonds_available'] as num?)?.toInt() ?? 0;
+    if (available < diamonds) return {'status': 'error', 'message': 'insufficient'};
+
+    final engine = await _rpcAgencyGetEngineSettings(null);
+    final coinsOut = (diamonds * ((engine['exchange_rate'] as num?)?.toDouble() ?? 0.9)).floor();
+
+    // Deduct from member
+    await memberDoc.reference.update({
+      'diamonds_available': FieldValue.increment(-diamonds),
+      'diamonds_earned_cumulative': FieldValue.increment(-diamonds),
+    });
+
+    // Credit coins to user
+    await _db.collection('users').doc(uid).update({
+      'coins': FieldValue.increment(coinsOut),
+    });
+
+    // Ledger
+    await _db.collection('agency_diamond_ledger').add({
+      'agency_id': memberDoc.data()['agency_id'],
+      'user_id': uid,
+      'txn_type': 'exchange',
+      'amount': diamonds,
+      'direction': -1,
+      'balance_after': available - diamonds,
+      'note': 'exchange $diamonds diamonds → $coinsOut coins',
+      'idempotency_key': idempotencyKey.isNotEmpty ? idempotencyKey : null,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'ok': true, 'diamonds_in': diamonds, 'coins_out': coinsOut};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_request_withdrawal
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyRequestWithdrawal(
+      Map<String, dynamic>? p) async {
+    final diamonds = (p?['p_diamonds'] as num?)?.toInt() ?? 0;
+    final bankDetails = p?['p_bank_details'] as Map<String, dynamic>?;
+    final idempotencyKey = p?['p_idempotency_key']?.toString() ?? '';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || diamonds <= 0) return {'status': 'error'};
+
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return {'status': 'error'};
+
+    final memberDoc = memberSnap.docs.first;
+    final available = (memberDoc.data()['diamonds_available'] as num?)?.toInt() ?? 0;
+    if (available < diamonds) return {'status': 'error', 'message': 'insufficient'};
+
+    // Freeze diamonds
+    await memberDoc.reference.update({
+      'diamonds_available': FieldValue.increment(-diamonds),
+      'diamonds_pending_withdrawal': FieldValue.increment(diamonds),
+    });
+
+    // Create withdrawal request
+    await _db.collection('agency_withdrawal_requests').add({
+      'user_id': uid,
+      'agency_id': memberDoc.data()['agency_id'],
+      'diamonds_amount': diamonds,
+      'bank_details': bankDetails ?? {},
+      'status': 'pending',
+      'idempotency_key': idempotencyKey.isNotEmpty ? idempotencyKey : null,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'ok': true};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_transfer_to_recharge (legacy)
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyTransferToRecharge(
+      Map<String, dynamic>? p) async {
+    final agentId = p?['p_agent_id']?.toString();
+    final diamonds = (p?['p_diamonds'] as num?)?.toInt() ?? 0;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || agentId == null || diamonds <= 0) {
+      return {'status': 'error'};
+    }
+
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: uid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return {'status': 'error'};
+
+    final memberDoc = memberSnap.docs.first;
+    final available = (memberDoc.data()['diamonds_available'] as num?)?.toInt() ?? 0;
+    if (available < diamonds) return {'status': 'error', 'message': 'insufficient'};
+
+    await memberDoc.reference.update({
+      'diamonds_available': FieldValue.increment(-diamonds),
+    });
+
+    // Credit agent wallet
+    await _db.collection('agent_usd_wallets').doc(agentId).set({
+      'user_id': agentId,
+      'diamond_balance': FieldValue.increment(diamonds),
+    }, SetOptions(merge: true));
+
+    await _db.collection('agency_diamond_ledger').add({
+      'agency_id': memberDoc.data()['agency_id'],
+      'user_id': uid,
+      'txn_type': 'transfer',
+      'amount': diamonds,
+      'direction': -1,
+      'balance_after': available - diamonds,
+      'note': 'transfer to agent $agentId',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'ok': true};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  host_transfer_diamonds_to_agent
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcHostTransferDiamondsToAgent(
+      Map<String, dynamic>? p) async {
+    final agentId = p?['p_agent_id']?.toString();
+    final diamonds = (p?['p_diamonds'] as num?)?.toInt() ?? 0;
+    final idempotencyKey = p?['p_idempotency_key']?.toString() ?? '';
+    final source = p?['p_source']?.toString() ?? 'host';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || agentId == null || diamonds <= 0) {
+      return {'status': 'error'};
+    }
+
+    // Idempotency check
+    if (idempotencyKey.isNotEmpty) {
+      final existing = await _db
+          .collection('agency_diamond_ledger')
+          .where('idempotency_key', isEqualTo: idempotencyKey)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) return {'status': 'ok', 'message': 'already_processed'};
+    }
+
+    // Find source member/agency
+    String? agencyId;
+    if (source == 'agency_owner') {
+      final agencySnap = await _db
+          .collection('host_agencies')
+          .where('owner_user_id', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (agencySnap.docs.isNotEmpty) agencyId = agencySnap.docs.first.id;
+    } else {
+      final memberSnap = await _db
+          .collection('host_agency_members')
+          .where('user_id', isEqualTo: uid)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+      if (memberSnap.docs.isNotEmpty) {
+        final memberDoc = memberSnap.docs.first;
+        final available = (memberDoc.data()['diamonds_available'] as num?)?.toInt() ?? 0;
+        if (available < diamonds) return {'status': 'error', 'message': 'insufficient'};
+        agencyId = memberDoc.data()['agency_id']?.toString();
+        await memberDoc.reference.update({
+          'diamonds_available': FieldValue.increment(-diamonds),
+        });
+      }
+    }
+
+    if (agencyId == null) return {'status': 'error', 'message': 'not_found'};
+
+    // Credit agent
+    await _db.collection('agent_usd_wallets').doc(agentId).set({
+      'user_id': agentId,
+      'diamond_balance': FieldValue.increment(diamonds),
+    }, SetOptions(merge: true));
+
+    await _db.collection('agency_diamond_ledger').add({
+      'agency_id': agencyId,
+      'user_id': uid,
+      'txn_type': 'settlement_from_$source',
+      'amount': diamonds,
+      'direction': -1,
+      'balance_after': 0,
+      'note': 'transfer to agent $agentId',
+      'idempotency_key': idempotencyKey.isNotEmpty ? idempotencyKey : null,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'ok': true};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_send_announcement
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencySendAnnouncement(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    final title = p?['p_title']?.toString() ?? '';
+    final body = p?['p_body']?.toString() ?? '';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (agencyId == null || uid == null) return {'status': 'error'};
+
+    await _db.collection('agency_announcements').add({
+      'agency_id': agencyId,
+      'created_by': uid,
+      'title': title,
+      'body': body,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok'};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_owner_exchange_diamonds
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyOwnerExchangeDiamonds(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    final diamonds = (p?['p_diamonds_amount'] as num?)?.toInt() ?? 0;
+    final idempotencyKey = p?['p_idempotency_key']?.toString() ?? '';
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (agencyId == null || uid == null || diamonds <= 0) {
+      return {'status': 'error'};
+    }
+
+    if (idempotencyKey.isNotEmpty) {
+      final existing = await _db
+          .collection('agency_diamond_ledger')
+          .where('idempotency_key', isEqualTo: idempotencyKey)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) return {'status': 'ok', 'message': 'already_processed'};
+    }
+
+    final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
+    if (!agencySnap.exists) return {'status': 'error'};
+    final ad = agencySnap.data()!;
+    final ownerBalance = (ad['owner_diamonds_balance'] as num?)?.toInt() ?? 0;
+    if (ownerBalance < diamonds) return {'status': 'error', 'message': 'insufficient'};
+
+    final engine = await _rpcAgencyGetEngineSettings(null);
+    final coinsOut = (diamonds * ((engine['exchange_rate'] as num?)?.toDouble() ?? 0.9)).floor();
+
+    await agencySnap.reference.update({
+      'owner_diamonds_balance': FieldValue.increment(-diamonds),
+    });
+
+    await _db.collection('users').doc(uid).update({
+      'coins': FieldValue.increment(coinsOut),
+    });
+
+    await _db.collection('agency_diamond_ledger').add({
+      'agency_id': agencyId,
+      'user_id': uid,
+      'txn_type': 'owner_exchange',
+      'amount': diamonds,
+      'direction': -1,
+      'balance_after': ownerBalance - diamonds,
+      'note': 'owner exchange $diamonds diamonds → $coinsOut coins',
+      'idempotency_key': idempotencyKey.isNotEmpty ? idempotencyKey : null,
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'ok': true, 'diamonds_in': diamonds, 'coins_out': coinsOut};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_owner_request_withdrawal
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyOwnerRequestWithdrawal(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    final diamonds = (p?['p_diamonds_amount'] as num?)?.toInt() ?? 0;
+    final paymentMethod = p?['p_payment_method']?.toString() ?? '';
+    final paymentDetails = p?['p_payment_details'] as Map<String, dynamic>?;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (agencyId == null || uid == null || diamonds <= 0) return {'status': 'error'};
+
+    final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
+    if (!agencySnap.exists) return {'status': 'error'};
+    final ad = agencySnap.data()!;
+    final ownerBalance = (ad['owner_diamonds_balance'] as num?)?.toInt() ?? 0;
+    if (ownerBalance < diamonds) return {'status': 'error', 'message': 'insufficient'};
+
+    await agencySnap.reference.update({
+      'owner_diamonds_balance': FieldValue.increment(-diamonds),
+    });
+
+    await _db.collection('agency_withdrawal_requests').add({
+      'user_id': uid,
+      'agency_id': agencyId,
+      'diamonds_amount': diamonds,
+      'payment_method': paymentMethod,
+      'bank_details': paymentDetails ?? {},
+      'status': 'pending',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    return {'status': 'ok', 'ok': true};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_accept_member
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyAcceptMember(
+      Map<String, dynamic>? p) async {
+    final requestId = p?['p_request_id']?.toString();
+    if (requestId == null) return {'status': 'error'};
+
+    final reqSnap = await _db.collection('host_agency_join_requests').doc(requestId).get();
+    if (!reqSnap.exists) return {'status': 'error', 'message': 'not_found'};
+    final req = reqSnap.data()!;
+    final agencyId = req['agency_id']?.toString() ?? '';
+    final userId = req['user_id']?.toString() ?? '';
+
+    // Update request status
+    await reqSnap.reference.update({'status': 'approved'});
+
+    // Add as active member
+    final memberRef = _db.collection('host_agency_members').doc();
+    await memberRef.set({
+      'id': memberRef.id,
+      'agency_id': agencyId,
+      'user_id': userId,
+      'role': 'host',
+      'status': 'active',
+      'diamonds_earned_monthly': 0,
+      'diamonds_earned_cumulative': 0,
+      'diamonds_balance': 0,
+      'diamonds_pending_withdrawal': 0,
+      'diamonds_available': 0,
+      'joined_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    // Update agency member_count
+    await _db.collection('host_agencies').doc(agencyId).update({
+      'member_count': FieldValue.increment(1),
+    });
+
+    return {'status': 'ok'};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_kick_member
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyKickMember(
+      Map<String, dynamic>? p) async {
+    final agencyId = p?['p_agency_id']?.toString();
+    final targetUserId = p?['p_user_id']?.toString();
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (agencyId == null || targetUserId == null || uid == null) {
+      return {'status': 'error'};
+    }
+
+    // Cannot kick owner
+    final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
+    if (!agencySnap.exists) return {'status': 'error'};
+    final ad = agencySnap.data()!;
+    if (ad['owner_user_id']?.toString() == targetUserId || ad['owner_id']?.toString() == targetUserId) {
+      return {'status': 'error', 'message': 'cannot_kick_owner'};
+    }
+
+    // Day-of-month check: only days 1-5
+    final day = DateTime.now().toUtc().day;
+    if (day > 5) {
+      return {'status': 'error', 'message': 'لا يمكن طرد الأعضاء بعد اليوم الخامس من الشهر'};
+    }
+
+    // Find and update member
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('agency_id', isEqualTo: agencyId)
+        .where('user_id', isEqualTo: targetUserId)
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return {'status': 'error', 'message': 'not_found'};
+
+    await memberSnap.docs.first.reference.update({
+      'status': 'kicked',
+      'kicked_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    // Free agent for 7 days
+    final freeUntil = DateTime.now().toUtc().add(const Duration(days: 7));
+    await _db.collection('agency_free_agents').doc(targetUserId).set({
+      'user_id': targetUserId,
+      'free_until': freeUntil.toIso8601String(),
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+
+    // Decrement member count
+    await _db.collection('host_agencies').doc(agencyId).update({
+      'member_count': FieldValue.increment(-1),
+    });
+
+    return {'status': 'ok'};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  get_host_dashboard_v2
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcGetHostDashboardV2(
+      Map<String, dynamic>? p) async {
+    final userId = p?['p_user_id']?.toString();
+    if (userId == null) return {'status': 'not_found'};
+
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: userId)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return {'status': 'not_found'};
+
+    final memberDoc = memberSnap.docs.first;
+    final md = memberDoc.data();
+    final agencyId = md['agency_id']?.toString() ?? '';
+
+    String agencyName = '';
+    double commissionRate = 0.05;
+    try {
+      final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
+      if (agencySnap.exists) {
+        final ad = agencySnap.data()!;
+        agencyName = ad['name']?.toString() ?? '';
+        commissionRate = (ad['commission_rate'] as num?)?.toDouble() ?? 0.05;
+      }
+    } catch (_) {}
+
+    // Engine settings
+    final engine = await _rpcAgencyGetEngineSettings(null);
+
+    return <String, dynamic>{
+      'status': 'ok',
+      'member_id': memberDoc.id,
+      'agency_id': agencyId,
+      'agency_name': agencyName,
+      'role': md['role'] ?? 'host',
+      'commission_rate': commissionRate,
+      'diamonds_balance': md['diamonds_balance'] ?? 0,
+      'diamonds_available': md['diamonds_available'] ?? 0,
+      'diamonds_pending_withdrawal': md['diamonds_pending_withdrawal'] ?? 0,
+      'diamonds_earned_monthly': md['diamonds_earned_monthly'] ?? 0,
+      'diamonds_earned_cumulative': md['diamonds_earned_cumulative'] ?? 0,
+      'is_in_trial': md['trial_ends_at'] != null,
+      'trial_ends_at': md['trial_ends_at'],
+      'join_date': md['joined_at'],
+      'targets': <dynamic>[],
+      'recent_ledger': <dynamic>[],
+      'engine': engine,
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  get_host_dashboard_v3
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcGetHostDashboardV3(
+      Map<String, dynamic>? p) async {
+    final userId = p?['p_user_id']?.toString();
+    if (userId == null) return <String, dynamic>{};
+
+    // Find member
+    final memberSnap = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: userId)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (memberSnap.docs.isEmpty) return <String, dynamic>{};
+
+    final memberDoc = memberSnap.docs.first;
+    final md = memberDoc.data();
+    final agencyId = md['agency_id']?.toString() ?? '';
+
+    String agencyName = '';
+    try {
+      final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
+      if (agencySnap.exists) agencyName = agencySnap.data()!['name']?.toString() ?? '';
+    } catch (_) {}
+
+    // Diamond balance from users doc
+    int diamondBalance = 0;
+    try {
+      final userSnap = await _db.collection('users').doc(userId).get();
+      if (userSnap.exists) diamondBalance = (userSnap.data()!['diamonds'] as num?)?.toInt() ?? 0;
+    } catch (_) {}
+
+    // USD wallet
+    int usdBalance = 0;
+    try {
+      final walletSnap = await _db.collection('host_usd_wallets').doc(userId).get();
+      if (walletSnap.exists) usdBalance = (walletSnap.data()!['usd_balance'] as num?)?.toInt() ?? 0;
+    } catch (_) {}
+
+    // Engine config
+    bool engineEnabled = false;
+    Map<String, dynamic> config = {};
+    try {
+      final cfgSnap = await _db.collection('agency_economy_config').limit(1).get();
+      if (cfgSnap.docs.isNotEmpty) {
+        config = cfgSnap.docs.first.data();
+        engineEnabled = config['engine_enabled'] == true;
+      }
+    } catch (_) {}
+
+    final now = DateTime.now().toUtc();
+    final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+    final secondsRemaining = monthEnd.difference(now).inSeconds;
+
+    return <String, dynamic>{
+      'agency': {'id': agencyId, 'name': agencyName},
+      'progress': {
+        'period_month': '${now.year}-${now.month.toString().padLeft(2, '0')}',
+        'coins_received': md['diamonds_earned_monthly'] ?? 0,
+        'usd_equiv': 0,
+        'current_tier_id': null,
+        'last_gift_at': null,
+      },
+      'wallets': {
+        'diamonds': diamondBalance,
+        'usd_balance': usdBalance,
+        'usd_earned_total': 0,
+        'usd_withdrawn': 0,
+        'diamonds_as_coins': 0,
+        'diamonds_as_usd': 0,
+      },
+      'tiers': <dynamic>[],
+      'claimed_tiers': <dynamic>[],
+      'month_end_at': monthEnd.toIso8601String(),
+      'seconds_remaining': secondsRemaining,
+      'config': config,
+      'is_dry_run': config['dry_run_mode'] == true,
+      'engine_enabled': engineEnabled,
     };
   }
 
