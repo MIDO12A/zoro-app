@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/supabase_service.dart';
 import '../../models/notification_model.dart';
 import '../../providers/user_provider.dart';
+import '../../core/widgets/cached_image.dart';
 import '../../features/cp/cp_service.dart';
 import '../../features/cp/cp_detail_full_screen.dart';
 
@@ -64,7 +65,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               final notif = notifications[index];
               final timeAgo = _timeAgo(notif.sentAt);
               final isCpGift = notif.type == 'cp_gift';
+              final isGift = notif.type == 'gift';
               final action = notif.data?['action'] as String?;
+              final senderPhoto =
+                  notif.data?['sender_photo']?.toString() ?? '';
+              final giftImage = notif.data?['gift_image']?.toString() ?? '';
 
               return Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -88,13 +93,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             : Colors.indigo.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Icon(
-                        isCpGift
-                            ? Icons.favorite
-                            : Icons.notifications_outlined,
-                        color: isCpGift ? Colors.pinkAccent : Colors.indigoAccent,
-                        size: 20,
-                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: isGift && senderPhoto.isNotEmpty
+                          ? CachedNetImage(
+                              senderPhoto,
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                            )
+                          : Icon(
+                              isCpGift
+                                  ? Icons.favorite
+                                  : isGift
+                                      ? Icons.card_giftcard
+                                      : Icons.notifications_outlined,
+                              color: isCpGift
+                                  ? Colors.pinkAccent
+                                  : Colors.indigoAccent,
+                              size: 20,
+                            ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -117,6 +134,35 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               fontSize: 12,
                             ),
                           ),
+                          if (isGift && giftImage.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: _giftThumb(giftImage),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      '${notif.data?['gift_name'] ?? ''} x${notif.data?['count'] ?? 1}',
+                                      style: const TextStyle(
+                                        color: Colors.amberAccent,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           if (isCpGift && action == 'cp_relationship_request')
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
@@ -220,6 +266,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _giftThumb(String url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return CachedNetImage(url, width: 48, height: 48, fit: BoxFit.cover);
+    }
+    if (url.endsWith('.svg') || url.endsWith('.svga')) {
+      return Image.asset(url, width: 48, height: 48, fit: BoxFit.contain);
+    }
+    return Image.asset(url, width: 48, height: 48, fit: BoxFit.cover);
   }
 
   String _timeAgo(DateTime dt) {

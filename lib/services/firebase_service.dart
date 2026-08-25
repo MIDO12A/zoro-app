@@ -476,6 +476,29 @@ class FirebaseService {
       return false;
     }
 
+    // Real-time notification for the receiver (non-fatal)
+    try {
+      await sendNotification(
+        uid: receiverId,
+        type: 'gift',
+        actorUid: senderId,
+        title: '🎁 هدية من $senderName',
+        body: '$senderName أرسل لك "$giftName" x$count ($totalCost)',
+        data: <String, dynamic>{
+          'sender_name': senderName,
+          'sender_photo': senderPhotoUrl,
+          'gift_id': giftId,
+          'gift_name': giftName,
+          'gift_image': animationAsset ?? '',
+          'value': value,
+          'count': count,
+          'room_id': roomId,
+        },
+      );
+    } catch (e) {
+      debugPrint('sendGift: notification error: $e');
+    }
+
     // XP side-effects (non-fatal)
     try {
       final levelService = LevelService();
