@@ -1,6 +1,7 @@
-import 'package:dio/dio.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/update_service.dart';
+import '../../config/r.dart';
 
 class AppUpdateDialog extends StatefulWidget {
   const AppUpdateDialog({super.key, required this.info});
@@ -11,7 +12,7 @@ class AppUpdateDialog extends StatefulWidget {
     return showDialog(
       context: context,
       barrierDismissible: !info.forceUpdate,
-      barrierColor: Colors.black87,
+      barrierColor: Colors.black54,
       builder: (_) => PopScope(
         canPop: !info.forceUpdate,
         child: AppUpdateDialog(info: info),
@@ -26,20 +27,27 @@ class AppUpdateDialog extends StatefulWidget {
 enum _UpdatePhase { idle, downloading, downloaded, installing, error }
 
 class _AppUpdateDialogState extends State<AppUpdateDialog> {
-  static const _tag = 'splash_update';
+  StreamSubscription? _sub;
 
-  _UpdatePhase _phase = _UpdatePhase.idle;
-  int _received = 0;
-  int _total = 0;
-  String _error = '';
-  String _apkPath = '';
+  _UpdatePhase get _phase {
+    final s = UpdateService.instance;
+    if (s.isDownloading) return _UpdatePhase.downloading;
+    if (s.isDownloaded) return _UpdatePhase.downloaded;
+    if (s.downloadError.isNotEmpty) return _UpdatePhase.error;
+    return _UpdatePhase.idle;
+  }
 
-  double get _progress => _total > 0 ? (_received / _total).clamp(0.0, 1.0) : 0;
+  double get _progress => UpdateService.instance.downloadProgress;
+  int get _received => UpdateService.instance.receivedBytes;
+  int get _total => UpdateService.instance.totalBytes;
+  String get _error => UpdateService.instance.downloadError;
+  String get _apkPath => UpdateService.instance.downloadedApkPath;
 
   bool get _force => widget.info.forceUpdate;
 
   String get _phaseText {
-    switch (_phase) {
+    final ph = _phase;
+    switch (ph) {
       case _UpdatePhase.downloading:
         return 'جاري تنزيل التحديث... ${(_progress * 100).toStringAsFixed(0)}%'
             '  (${_mb(_received)} / ${_mb(_total)} ميجابايت)';
@@ -56,48 +64,30 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
 
   String _mb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(1);
 
-  Future<void> _startDownload() async {
-    setState(() => _phase = _UpdatePhase.downloading);
-    try {
-      final file = await UpdateService.instance.downloadApk(
-        widget.info.apkUrl,
-        tag: _tag,
-        onProgress: (received, total) {
-          if (!mounted) return;
-          setState(() {
-            _received = received;
-            _total = total > 0 ? total : received;
-          });
-        },
-      );
-      if (!mounted) return;
-      setState(() {
-        _apkPath = file.path;
-        _phase = _UpdatePhase.downloaded;
-      });
-      await _install();
-    } catch (e) {
-      if (!mounted) return;
-      if (e is DioException && e.type == DioExceptionType.cancel) {
-        setState(() => _phase = _UpdatePhase.idle);
-        return;
-      }
-      setState(() {
-        _error = 'فشل التنزيل، تأكد من الاتصال وحاول مرة أخرى';
-        _phase = _UpdatePhase.error;
-      });
+  @override
+  void initState() {
+    super.initState();
+    _sub = UpdateService.instance.stateStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
+
+  void _startDownload() {
+    UpdateService.instance.startDownloadInBackground(widget.info.apkUrl);
+  }
+
+  void _install() {
+    if (_apkPath.isNotEmpty) {
+      UpdateService.instance.installApk(_apkPath);
+    } else {
+      _startDownload();
     }
-  }
-
-  Future<void> _install() async {
-    if (_apkPath.isEmpty) return;
-    setState(() => _phase = _UpdatePhase.installing);
-    await UpdateService.instance.installApk(_apkPath);
-    if (mounted) setState(() => _phase = _UpdatePhase.downloaded);
-  }
-
-  void _cancel() {
-    UpdateService.instance.cancelDownload(_tag);
   }
 
   @override
@@ -108,40 +98,48 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
         width: 340,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF151A2C),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.15),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // App Logo instead of download icon
             Container(
-              width: 72,
-              height: 72,
+              width: 76,
+              height: 76,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6C5CE7), Color(0xFF4834D4)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(Icons.system_update_alt_rounded, color: Colors.white, size: 36),
+              child: R.image(
+                R.splashImgLogo,
+                width: 76,
+                height: 76,
+                fit: BoxFit.contain,
+              ),
             ),
             const SizedBox(height: 16),
             const Text(
               'تحديث جديد متاح',
               style: TextStyle(
-                color: Colors.white,
+                color: Color(0xFF16151A),
                 fontSize: 19,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               'الإصدار ${widget.info.latestVersion}'
               '  (${widget.info.currentVersion} ← ${widget.info.latestVersion})',
-              style: const TextStyle(color: Color(0xFF9BA1B6), fontSize: 13),
+              style: const TextStyle(color: Colors.black54, fontSize: 13),
             ),
             if (widget.info.notes.isNotEmpty) ...[
               const SizedBox(height: 14),
@@ -151,7 +149,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                   child: Text(
                     widget.info.notes,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Color(0xFFB8BDCC), fontSize: 13, height: 1.6),
+                    style: const TextStyle(color: Colors.black87, fontSize: 13, height: 1.6),
                   ),
                 ),
               ),
@@ -163,14 +161,14 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                 child: LinearProgressIndicator(
                   value: _phase == _UpdatePhase.downloading ? _progress : null,
                   minHeight: 8,
-                  backgroundColor: Colors.white.withOpacity(0.08),
-                  valueColor: const AlwaysStoppedAnimation(Color(0xFF6C5CE7)),
+                  backgroundColor: Colors.black.withOpacity(0.06),
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFFFFD54F)), // Gold color bar
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 _phaseText,
-                style: const TextStyle(color: Color(0xFF9BA1B6), fontSize: 11),
+                style: const TextStyle(color: Colors.black54, fontSize: 11),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -189,10 +187,9 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                   Expanded(
                     child: TextButton(
                       onPressed: () {
-                        if (_phase == _UpdatePhase.downloading) _cancel();
                         Navigator.of(context).pop();
                       },
-                      style: TextButton.styleFrom(foregroundColor: const Color(0xFF9BA1B6)),
+                      style: TextButton.styleFrom(foregroundColor: Colors.black54),
                       child: const Text('لاحقاً'),
                     ),
                   ),
@@ -203,11 +200,12 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                         ? null
                         : (_phase == _UpdatePhase.downloaded ? _install : _startDownload),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF6C5CE7),
+                      backgroundColor: const Color(0xFFFFB300), // Gold button
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: const Color(0xFF6C5CE7).withOpacity(0.5),
+                      disabledBackgroundColor: const Color(0xFFFFB300).withOpacity(0.5),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 1,
                     ),
                     child: Text(
                       switch (_phase) {
@@ -215,7 +213,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                         _UpdatePhase.downloaded || _UpdatePhase.installing => 'تثبيت',
                         _ => 'تحديث الآن',
                       },
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
                     ),
                   ),
                 ),

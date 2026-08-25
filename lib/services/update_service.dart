@@ -172,49 +172,89 @@ class UpdateService {
     return parts[0] * 1000000 + parts[1] * 1000 + parts[2];
   }
 
-  final _cancelTokens = <String, CancelToken>{};
+  double downloadProgress = 0.0;
+  int receivedBytes = 0;
+  int totalBytes = 0;
+  bool isDownloading = false;
+  bool isDownloaded = false;
+  String downloadedApkPath = '';
+  String downloadError = '';
 
-  Future<File> downloadApk(
-    String url, {
-    required void Function(int received, int total) onProgress,
-    required String tag,
-  }) async {
-    final cancelToken = CancelToken();
-    _cancelTokens[tag] = cancelToken;
+  final StreamController<void> _stateController = StreamController<void>.broadcast();
+  Stream<void> get stateStream => _stateController.stream;
 
-    Directory? dir;
-    if (Platform.isAndroid) {
-      dir = await getExternalStorageDirectory();
-    }
-    dir ??= await getTemporaryDirectory();
+  CancelToken? _cancelToken;
 
-    final fileName = 'zero_update_${DateTime.now().millisecondsSinceEpoch}.apk';
-    final savePath = '${dir.path}${Platform.pathSeparator}$fileName';
+  void startDownloadInBackground(String url) async {
+    if (isDownloading) return;
 
-    await Dio().download(
-      url,
-      savePath,
-      onReceiveProgress: onProgress,
-      cancelToken: cancelToken,
-      options: Options(
-        responseType: ResponseType.bytes,
-        receiveTimeout: const Duration(hours: 1),
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
+    isDownloading = true;
+    isDownloaded = false;
+    downloadError = '';
+    downloadProgress = 0.0;
+    receivedBytes = 0;
+    totalBytes = 0;
+    _stateController.add(null);
+
+    _cancelToken = CancelToken();
+
+    try {
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = await getExternalStorageDirectory();
+      }
+      dir ??= await getTemporaryDirectory();
+
+      final fileName = 'zero_update_${DateTime.now().millisecondsSinceEpoch}.apk';
+      final savePath = '${dir.path}${Platform.pathSeparator}$fileName';
+
+      await Dio().download(
+        url,
+        savePath,
+        cancelToken: _cancelToken,
+        onReceiveProgress: (received, total) {
+          receivedBytes = received;
+          totalBytes = total > 0 ? total : received;
+          downloadProgress = totalBytes > 0 ? (receivedBytes / totalBytes) : 0.0;
+          _stateController.add(null);
         },
-      ),
-    );
+        options: Options(
+          responseType: ResponseType.bytes,
+          receiveTimeout: const Duration(hours: 1),
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
+          },
+        ),
+      );
 
-    _cancelTokens.remove(tag);
-    return File(savePath);
+      isDownloading = false;
+      isDownloaded = true;
+      downloadedApkPath = savePath;
+      _stateController.add(null);
+
+      await installApk(savePath);
+    } catch (e) {
+      isDownloading = false;
+      if (e is DioException && e.type == DioExceptionType.cancel) {
+        isDownloaded = false;
+        _stateController.add(null);
+        return;
+      }
+      downloadError = 'فشل التنزيل، تأكد من الاتصال وحاول مرة أخرى';
+      _stateController.add(null);
+    }
   }
 
   Future<void> installApk(String path) async {
     await OpenFilex.open(path, type: 'application/vnd.android.package-archive');
   }
 
-  void cancelDownload(String tag) {
-    _cancelTokens[tag]?.cancel();
-    _cancelTokens.remove(tag);
+  void cancelDownload() {
+    _cancelToken?.cancel();
+    _cancelToken = null;
+    isDownloading = false;
+    isDownloaded = false;
+    downloadProgress = 0.0;
+    _stateController.add(null);
   }
 }
