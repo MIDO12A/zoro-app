@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -80,14 +81,13 @@ class UpdateService {
     bool throwOnError = false,
   }) async {
     try {
-      final res = await Dio().get<Map<String, dynamic>>(
-        // Cache-buster: GitHub Releases CDN serves stale copies of assets for
-        // minutes after each publish, which hid new builds from the updater.
+      // GitHub serves release assets as application/octet-stream, so Dio will
+      // NOT auto-decode JSON - fetch plain text and decode manually.
+      final res = await Dio().get<String>(
         '$_buildInfoUrl?t=${DateTime.now().millisecondsSinceEpoch}',
-        options: Options(responseType: ResponseType.json),
+        options: Options(responseType: ResponseType.plain),
       ).timeout(const Duration(seconds: 8));
-      final d = res.data;
-      if (d == null) return null;
+      final d = jsonDecode(res.data ?? '') as Map<String, dynamic>;
 
       final latestVersion = (d['version'] ?? '').toString().trim();
       final latestBuild = int.tryParse('${d['build_number'] ?? ''}') ?? 0;
