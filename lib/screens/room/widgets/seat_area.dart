@@ -61,7 +61,7 @@ class SeatArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (seatStyle == SeatStyle.circle && seats.length == 10) {
+    if (seatStyle == SeatStyle.circle) {
       return _buildGameLayout(context);
     }
     return Padding(
@@ -112,20 +112,22 @@ class SeatArea extends StatelessWidget {
       children: [
         for (int i = 0; i < 5; i++)
           Expanded(
-            child: Center(
-              child: GestureDetector(
-                onTap: () => onSeatTap(startIdx + i),
-                child: _NormalSeat(
-                  seat: seats[startIdx + i],
-                  emoji: seatEmojis?[startIdx + i],
-                  isModerator: seats[startIdx + i].user != null
-                      ? moderators?.contains(seats[startIdx + i].user!.id) ?? false
-                      : false,
-                  seatStyle: seatStyle,
-                  isCaptain: false,
-                ),
-              ),
-            ),
+            child: (startIdx + i < seats.length)
+                ? Center(
+                    child: GestureDetector(
+                      onTap: () => onSeatTap(startIdx + i),
+                      child: _NormalSeat(
+                        seat: seats[startIdx + i],
+                        emoji: seatEmojis?[startIdx + i],
+                        isModerator: seats[startIdx + i].user != null
+                            ? moderators?.contains(seats[startIdx + i].user!.id) ?? false
+                            : false,
+                        seatStyle: seatStyle,
+                        isCaptain: false,
+                      ),
+                    ),
+                  )
+                : const SizedBox(),
           ),
       ],
     );
