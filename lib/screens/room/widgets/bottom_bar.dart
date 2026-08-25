@@ -2,16 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../config/r.dart';
 import '../../../config/app_colors.dart';
 
-// fragment_room_bottom_operate.xml
-// ConstraintLayout wrap_content
-//   iv_gift      48×48  marginBottom=15  center H+V anchor for others
-//   iv_chat      32×32  marginStart=14   same V center as iv_gift
-//   iv_emoj      32×32  marginStart=10   right of iv_chat
-//   iv_mic_state 32×32  marginStart=10   right of iv_emoj
-//   iv_function  32×32  marginEnd=14     end of parent
-//   iv_msg       32×32  marginEnd=10     left of iv_function
-//   tv_msg_count wrap    marginTop=-4 marginStart=18 from iv_msg  (badge)
-//   iv_music     32×32  marginEnd=10     left of iv_msg
 class BottomBar extends StatelessWidget {
   final bool isMicOn;
   final int msgCount;
@@ -38,12 +28,13 @@ class BottomBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Total height = 48(gift) + 15(marginBottom) = 63, icons centered on gift
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+
     return SizedBox(
       height: 63,
       child: Stack(
         children: [
-          // iv_gift: 48×48, center H, marginBottom=15
+          // iv_gift: Centered gift button
           Positioned(
             left: 0,
             right: 0,
@@ -69,82 +60,124 @@ class BottomBar extends StatelessWidget {
               ),
             ),
           ),
-          // Left row: chat(14) + emoj(10) + mic(10)  — centered on gift center=15+24=39 from bottom
+
+          // Action Group 1 (chat, emoj, mic): Left in LTR, Right in RTL
           Positioned(
-            left: 0,
+            left: isAr ? null : 0,
+            right: isAr ? 0 : null,
             bottom: 15,
             child: SizedBox(
               height: 48,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const SizedBox(width: 14),
-                  _Btn(asset: R.roomChatIc, size: 32, onTap: onChat),
-                  const SizedBox(width: 10),
-                  _Btn(asset: R.roomEmojIc, size: 32, onTap: onEmoj),
-                  const SizedBox(width: 10),
-                  _Btn(
-                    asset: isMicOn ? R.roomMicphoneIc : R.roomMicphoneCloseIc,
-                    size: 32,
-                    onTap: onMic,
-                  ),
-                ],
+                mainAxisSize: MainAxisSize.min,
+                children: isAr
+                    ? [
+                        _Btn(
+                          asset: isMicOn ? R.roomMicphoneIc : R.roomMicphoneCloseIc,
+                          size: 32,
+                          onTap: onMic,
+                        ),
+                        const SizedBox(width: 10),
+                        _Btn(asset: R.roomEmojIc, size: 32, onTap: onEmoj),
+                        const SizedBox(width: 10),
+                        _Btn(asset: R.roomChatIc, size: 32, onTap: onChat),
+                        const SizedBox(width: 14),
+                      ]
+                    : [
+                        const SizedBox(width: 14),
+                        _Btn(asset: R.roomChatIc, size: 32, onTap: onChat),
+                        const SizedBox(width: 10),
+                        _Btn(asset: R.roomEmojIc, size: 32, onTap: onEmoj),
+                        const SizedBox(width: 10),
+                        _Btn(
+                          asset: isMicOn ? R.roomMicphoneIc : R.roomMicphoneCloseIc,
+                          size: 32,
+                          onTap: onMic,
+                        ),
+                      ],
               ),
             ),
           ),
-          // Right row: music(10) + msg+badge(10) + function(14)  — same center
+
+          // Action Group 2 (music, msg, function): Right in LTR, Left in RTL
           Positioned(
-            right: 0,
+            left: isAr ? 0 : null,
+            right: isAr ? null : 0,
             bottom: 15,
             child: SizedBox(
               height: 48,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _Btn(asset: R.roomSetMusicIc, size: 32, onTap: onMusic),
-                  const SizedBox(width: 10),
-                  // iv_msg + tv_msg_count badge
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      _Btn(asset: R.roomMsgIc, size: 32, onTap: onMsg),
-                      if (msgCount > 0)
-                        Positioned(
-                          top: -4,
-                          left: 18,
-                          child: Container(
-                            constraints: const BoxConstraints(
-                              minWidth: 17,
-                              minHeight: 10,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 1,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE82323),
-                              borderRadius: BorderRadius.circular(100),
-                            ),
-                            child: Text(
-                              '$msgCount',
-                              style: const TextStyle(
-                                fontSize: 9,
-                                color: Colors.white,
+                mainAxisSize: MainAxisSize.min,
+                children: isAr
+                    ? [
+                        const SizedBox(width: 14),
+                        _Btn(asset: R.roomFunctionIc, size: 32, onTap: onFunction),
+                        const SizedBox(width: 10),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            _Btn(asset: R.roomMsgIc, size: 32, onTap: onMsg),
+                            if (msgCount > 0)
+                              Positioned(
+                                top: -4,
+                                right: 18,
+                                child: _buildBadge(),
                               ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
+                          ],
                         ),
-                    ],
-                  ),
-                  const SizedBox(width: 10),
-                  _Btn(asset: R.roomFunctionIc, size: 32, onTap: onFunction),
-                  const SizedBox(width: 14),
-                ],
+                        const SizedBox(width: 10),
+                        _Btn(asset: R.roomSetMusicIc, size: 32, onTap: onMusic),
+                      ]
+                    : [
+                        _Btn(asset: R.roomSetMusicIc, size: 32, onTap: onMusic),
+                        const SizedBox(width: 10),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            _Btn(asset: R.roomMsgIc, size: 32, onTap: onMsg),
+                            if (msgCount > 0)
+                              Positioned(
+                                top: -4,
+                                left: 18,
+                                child: _buildBadge(),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(width: 10),
+                        _Btn(asset: R.roomFunctionIc, size: 32, onTap: onFunction),
+                        const SizedBox(width: 14),
+                      ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBadge() {
+    return Container(
+      constraints: const BoxConstraints(
+        minWidth: 17,
+        minHeight: 10,
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 4,
+        vertical: 1,
+      ),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE82323),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Text(
+        '$msgCount',
+        style: const TextStyle(
+          fontSize: 9,
+          color: Colors.white,
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }

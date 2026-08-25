@@ -1294,6 +1294,8 @@ class _RoomScreenState extends State<RoomScreen> {
                 onlineCount: '$_onlineCount',
                 isFollowed: _isFollowed,
                 onExit: () => setState(() => _showExit = true),
+                onMinimize: _minimizeRoom,
+                onRank: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RankScreen())),
                 onInfoTap: () => setState(() => _showRoomInfo = true),
                 onOnlineTap: () => setState(() => _showMembers = true),
                 onGameTap: () {},
