@@ -61,8 +61,14 @@ jobs:
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk zero-app-x86_64.apk
 
       - name: Create build info
+        env:
+          APP_VER: ${{ steps.ver.outputs.ver }}
+          RUN_NUM: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
         run: |
-          echo '{"version":"${{ steps.ver.outputs.ver }}","build_number":$((1000 + ${{ github.run_number }})),"commit":"${{ github.sha }}"}' > build_info.json
+          bn=$((1000 + RUN_NUM))
+          printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$bn" "$SHA" > build_info.json
+          cat build_info.json
 
       - name: Publish to GitHub Release (latest)
         env:
