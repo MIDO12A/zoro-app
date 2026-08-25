@@ -1,6 +1,7 @@
 import 'dart:developer' as developer;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 import '../../services/supabase_service.dart';
 import '../../providers/user_provider.dart';
@@ -83,18 +84,33 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
     setState(() => _isLoading = true);
-    developer.log('_signInWithGoogle: Google OAuth not configured on Firebase yet, falling back to anonymous');
     try {
-      final res = await FirebaseAuth.instance.signInAnonymously();
+      final signIn = GoogleSignIn.instance;
+      await signIn.initialize();
+      final account = await signIn.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null) {
+        throw Exception('Google sign-in returned no idToken');
+      }
+      final credential = GoogleAuthProvider.credential(idToken: idToken);
+      final res = await FirebaseAuth.instance.signInWithCredential(credential);
       final user = res.user;
       if (user == null) return;
       await _handleSignIn(user);
+    } on GoogleSignInException catch (e) {
+      developer.log('_signInWithGoogle: google error ${e.code} = ${e.details}');
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر تسجيل الدخول بجوجل: ${e.description ?? e.code.name}')),
+        );
+      }
     } catch (e) {
       developer.log('_signInWithGoogle: error = $e');
-      debugPrint('Error signing in: $e');
+      debugPrint('Error signing in with Google: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error signing in: $e')),
+          SnackBar(content: Text('تعذر تسجيل الدخول بجوجل، تأكد من إعداد Firebase: $e')),
         );
       }
     } finally {

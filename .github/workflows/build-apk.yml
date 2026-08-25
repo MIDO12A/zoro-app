@@ -26,6 +26,23 @@ jobs:
           flutter-version: 3.47.1
           cache: true
 
+      - name: Restore release signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "WARNING: ANDROID_KEYSTORE_BASE64 not set - falling back to debug signing"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/zero-release-key.jks
+          cat > android/key.properties <<EOF
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEYSTORE_PASSWORD
+          keyAlias=zero
+          storeFile=zero-release-key.jks
+          EOF
+
       - name: Read app version
         id: ver
         run: echo "ver=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)" >> "$GITHUB_OUTPUT"
