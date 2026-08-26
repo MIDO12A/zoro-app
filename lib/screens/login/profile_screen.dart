@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/r.dart';
 import '../../providers/user_provider.dart';
 import '../../services/level_service.dart';
@@ -26,6 +27,7 @@ import '../../features/cp/cp_detail_full_screen.dart';
 import '../../features/host_agency/host_agency_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
 import '../../features/signin/weekly_signin_screen.dart';
+import 'admin_visuals_config_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -625,6 +627,34 @@ class ProfileScreen extends StatelessWidget {
               snap.hasData ? 'v${snap.data!.version}+${snap.data!.buildNumber}' : null,
               () => _checkUpdatesManually(context),
             ),
+          ),
+          FutureBuilder<DocumentSnapshot>(
+            future: user != null
+                ? FirebaseFirestore.instance.collection('admin_users').doc(user.uid).get()
+                : Future.value(null),
+            builder: (context, snap) {
+              final isAdmin = snap.data?.exists ?? false;
+              if (!isAdmin) return const SizedBox.shrink();
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildDivider(),
+                  _buildMenuItem(
+                    R.mineSettingIc,
+                    'لوحة تعديل المظهر والأيقونات',
+                    null,
+                    () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AdminVisualsConfigScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              );
+            },
           ),
 
         ],
