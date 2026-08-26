@@ -33,6 +33,7 @@ import ProfileCustomize from './pages/ProfileCustomize';
 import AdminManagement from './pages/AdminManagement';
 import VisualManager from './pages/VisualManager';
 import ScreenCustomization from './pages/ScreenCustomization';
+import AppVisualDesigner from './pages/AppVisualDesigner';
 import AppIcons from './pages/AppIcons';
 import CpFeatures from './pages/CpFeatures';
 import SigninFeatures from './pages/SigninFeatures';
@@ -115,6 +116,7 @@ export default function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/visual-manager" element={<VisualManager />} />
             <Route path="/screen-customization" element={<ScreenCustomization />} />
+            <Route path="/app-visual-designer" element={<AppVisualDesigner />} />
             <Route path="/app-icons" element={<AppIcons />} />
             <Route path="/cp-features" element={<CpFeatures />} />
             <Route path="/signin-features" element={<SigninFeatures />} />

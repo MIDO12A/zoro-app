@@ -4,7 +4,7 @@ import {
   Building2, Crown, BarChart3, Award, Handshake,
   TrendingUp, Image, Palette, Bug,
   Bell, Settings, Shield, ChevronLeft, LogOut,   SlidersHorizontal, Grid, Gift as GiftIcon,
-  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket,
+  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket, Phone,
 } from 'lucide-react';
 import { logout } from '../lib/auth';
 import { useContext } from 'react';
@@ -24,6 +24,7 @@ const navItems = [
   { to: '/necklaces', icon: Crown, label: 'nav.necklaces' },
   { to: '/badge-necklace-gifts', icon: GiftIcon, label: 'Badge & Necklace Gifts' },
   { to: '/screen-customization', icon: LayoutDashboard, label: 'nav.screenVisuals' },
+  { to: '/app-visual-designer', icon: Phone, label: 'nav.appVisualDesigner' },
   { to: '/app-icons', icon: ImageIcon, label: 'nav.appIcons' },
   { to: '/gift-items', icon: Gift, label: 'nav.giftItems' },
   { to: '/gift-categories', icon: Tag, label: 'nav.giftCategories' },
