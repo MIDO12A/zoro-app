@@ -39,6 +39,13 @@ class DynamicConfigService extends ChangeNotifier {
   Color _headerColor = const Color(0xFFFFFFFF);
   Color _tabBarColor = const Color(0xFFFFFFFF);
   
+  // Bottom Navigation Bar
+  String _bottomNavBgImage = '';
+  Color _bottomNavGradientStart = const Color(0xFFF4DDA9);
+  Color _bottomNavGradientEnd = const Color(0xFFFFFFFF);
+  Color _bottomNavActiveTextColor = const Color(0xFF894916);
+  Color _bottomNavInactiveTextColor = const Color(0xFF894916);
+  
   // Typography & Shape
   String _fontFamily = 'system';
   int _borderRadius = 8;
@@ -183,6 +190,12 @@ class DynamicConfigService extends ChangeNotifier {
   Color get buttonTextColor => _buttonTextColor;
   Color get headerColor => _headerColor;
   Color get tabBarColor => _tabBarColor;
+
+  String get bottomNavBgImage => _bottomNavBgImage;
+  Color get bottomNavGradientStart => _bottomNavGradientStart;
+  Color get bottomNavGradientEnd => _bottomNavGradientEnd;
+  Color get bottomNavActiveTextColor => _bottomNavActiveTextColor;
+  Color get bottomNavInactiveTextColor => _bottomNavInactiveTextColor;
   String get fontFamily => _fontFamily;
   int get borderRadius => _borderRadius;
   String get discoverTitle => _discoverTitle;
@@ -704,6 +717,12 @@ class DynamicConfigService extends ChangeNotifier {
       _buttonTextColor = _parseColor(config['buttonTextColor'], _buttonTextColor);
       _headerColor = _parseColor(config['headerColor'], _headerColor);
       _tabBarColor = _parseColor(config['tabBarColor'], _tabBarColor);
+
+      _bottomNavBgImage = config['bottomNavBgImage'] as String? ?? _bottomNavBgImage;
+      _bottomNavGradientStart = _parseColor(config['bottomNavGradientStart'], _bottomNavGradientStart);
+      _bottomNavGradientEnd = _parseColor(config['bottomNavGradientEnd'], _bottomNavGradientEnd);
+      _bottomNavActiveTextColor = _parseColor(config['bottomNavActiveTextColor'], _bottomNavActiveTextColor);
+      _bottomNavInactiveTextColor = _parseColor(config['bottomNavInactiveTextColor'], _bottomNavInactiveTextColor);
 
       _fontFamily = config['fontFamily'] as String? ?? _fontFamily;
       _borderRadius = (config['borderRadius'] as num?)?.toInt() ?? _borderRadius;

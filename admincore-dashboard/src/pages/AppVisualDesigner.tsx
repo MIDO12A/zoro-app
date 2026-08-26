@@ -139,6 +139,10 @@ const defaultColors = {
   buttonTextColor: '#FFFFFF',
   headerColor: '#FFFFFF',
   tabBarColor: '#FFFFFF',
+  bottomNavGradientStart: '#F4DDA9',
+  bottomNavGradientEnd: '#FFFFFF',
+  bottomNavActiveTextColor: '#894916',
+  bottomNavInactiveTextColor: '#894916',
   vipCardBgColor: '#1A3D1A',
   vipCardBorderColor: '#C9A84C',
 };
@@ -259,6 +263,7 @@ export default function AppVisualDesigner() {
   // App Config states
   const [appName, setAppName] = useState('');
   const [splashGifUrl, setSplashGifUrl] = useState('');
+  const [bottomNavBgImage, setBottomNavBgImage] = useState('');
   const [fontFamily, setFontFamily] = useState('Cairo');
   const [borderRadius, setBorderRadius] = useState(8);
   const [globalColors, setGlobalColors] = useState<Record<string, string>>(defaultColors);
@@ -299,6 +304,7 @@ export default function AppVisualDesigner() {
       if (cfg) {
         if (cfg.appName) setAppName(cfg.appName);
         if (cfg.splashGifUrl) setSplashGifUrl(cfg.splashGifUrl);
+        if (cfg.bottomNavBgImage) setBottomNavBgImage(cfg.bottomNavBgImage);
         if (cfg.fontFamily) setFontFamily(cfg.fontFamily);
         if (Number.isFinite(cfg.borderRadius)) setBorderRadius(cfg.borderRadius!);
         
@@ -360,6 +366,7 @@ export default function AppVisualDesigner() {
       const updates = {
         appName,
         splashGifUrl,
+        bottomNavBgImage,
         fontFamily,
         borderRadius,
         ...globalColors,
@@ -407,6 +414,16 @@ export default function AppVisualDesigner() {
       if (url) setSplashGifUrl(url);
     } catch (e) {
       showMsg(lang === 'ar' ? 'فشل رفع الشاشة الترحيبية' : 'Splash upload failed');
+    }
+  };
+
+  const handleBottomNavBgUpload = async (file: File) => {
+    try {
+      const path = `bottom_nav_bg/${Date.now()}`;
+      const url = await uploadAppAsset(file, path);
+      if (url) setBottomNavBgImage(url);
+    } catch (e) {
+      showMsg(lang === 'ar' ? 'فشل رفع صورة الشريط السفلي' : 'Upload failed');
     }
   };
 
@@ -960,7 +977,14 @@ export default function AppVisualDesigner() {
                               field === 'buttonColor' ? (lang === 'ar' ? 'لون الأزرار العامة' : 'Global Button Color') :
                               field === 'buttonTextColor' ? (lang === 'ar' ? 'لون نصوص الأزرار' : 'Button Text Color') :
                               field === 'headerColor' ? (lang === 'ar' ? 'خلفية شريط العنوان' : 'Header Bar Background') :
-                              field === 'tabBarColor' ? (lang === 'ar' ? 'خلفية شريط التبويبات السفلي' : 'Bottom Tab Bar Background') : field;
+                              field === 'tabBarColor' ? (lang === 'ar' ? 'خلفية شريط التبويبات العلوي' : 'Top Tab Bar Background') :
+                              field === 'bottomNavGradientStart' ? (lang === 'ar' ? 'بداية تدرج الشريط السفلي' : 'Bottom Nav Gradient Start') :
+                              field === 'bottomNavGradientEnd' ? (lang === 'ar' ? 'نهاية تدرج الشريط السفلي' : 'Bottom Nav Gradient End') :
+                              field === 'bottomNavActiveTextColor' ? (lang === 'ar' ? 'لون التبويب السفلي النشط' : 'Bottom Nav Active Text') :
+                              field === 'bottomNavInactiveTextColor' ? (lang === 'ar' ? 'لون التبويب السفلي غير النشط' : 'Bottom Nav Inactive Text') :
+                              field === 'vipCardBgColor' ? (lang === 'ar' ? 'لون خلفية بطاقة VIP' : 'VIP Card Background') :
+                              field === 'vipCardBorderColor' ? (lang === 'ar' ? 'لون إطار بطاقة VIP' : 'VIP Card Border') :
+                              field === 'splashNameColor' ? (lang === 'ar' ? 'لون نص الشاشة الترحيبية' : 'Splash Text Color') : field;
 
                 return (
                   <div key={field} className="space-y-1.5">
@@ -1174,6 +1198,36 @@ export default function AppVisualDesigner() {
               {splashGifUrl && (
                 <div className="mt-2">
                   <img src={splashGifUrl} alt="Splash screen preview" className="w-24 h-24 object-contain rounded-lg border border-white/5 bg-black/20" />
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة الشريط السفلي للملاحة' : 'Bottom Nav Background Image'}</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="https://example.com/bottom_nav.png"
+                  value={bottomNavBgImage}
+                  onChange={e => setBottomNavBgImage(e.target.value)}
+                  className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
+                />
+                <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg flex items-center justify-center">
+                  <Upload className="w-4 h-4" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) handleBottomNavBgUpload(file);
+                    }}
+                  />
+                </label>
+              </div>
+              {bottomNavBgImage && (
+                <div className="mt-2">
+                  <img src={bottomNavBgImage} alt="Bottom Nav bg preview" className="w-full h-12 object-cover rounded-lg border border-white/5 bg-black/20" />
                 </div>
               )}
             </div>

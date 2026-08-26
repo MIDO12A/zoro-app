@@ -97,15 +97,21 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      Color(0xFFF4DDA9),
-                      Color(0xFFFFFFFF),
+                      DynamicConfigService().bottomNavGradientStart,
+                      DynamicConfigService().bottomNavGradientEnd,
                     ],
                   ),
+                  image: DynamicConfigService().bottomNavBgImage.isNotEmpty
+                      ? DecorationImage(
+                          image: R.cachedImage(DynamicConfigService().bottomNavBgImage),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                 ),
                 child: SafeArea(
                   top: false,
@@ -185,10 +191,12 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
             const SizedBox(height: 2),
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.normal,
-                color: Color(0xFF894916),
+                color: isSelected 
+                    ? DynamicConfigService().bottomNavActiveTextColor 
+                    : DynamicConfigService().bottomNavInactiveTextColor,
               ),
             ),
           ],
