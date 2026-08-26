@@ -33,8 +33,6 @@ const navItems = [
   { to: '/signin-features', icon: Calendar, label: 'nav.signin' },
   { to: '/app-updates', icon: Rocket, label: 'App Updates' },
   { to: '/bd', icon: TrendingUp, label: 'nav.bd' },
-  { to: '/visual-manager', icon: Eye, label: 'Visual Manager' },
-  { to: '/app-assets', icon: Grid, label: 'nav.appAssets' },
   { to: '/profile-customize', icon: Shield, label: 'Profile Customize' },
   { to: '/error-analysis', icon: Bug, label: 'nav.errors' },
   { to: '/admins', icon: Shield, label: 'nav.admins' },

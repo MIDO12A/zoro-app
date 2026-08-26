@@ -1,14 +1,36 @@
 import { useEffect, useState, useContext } from 'react';
 import { I18nContext } from '../lib/i18n';
-import { getAppConfig, updateAppConfig } from '../lib/db';
+import { getAppConfig, updateAppConfig, getAppAssets, upsertAppAsset, deleteAppAsset, supabase } from '../lib/db';
 import { uploadAppAsset } from '../lib/storage';
 import { iconRegistry, IconRegistryEntry } from '../lib/iconRegistry';
+import { SCREEN_ASSETS, SCREEN_ORDER } from '../lib/screenAssets';
 import { to6Hex } from '../lib/colors';
 import { 
   Save, RotateCcw, Upload, Phone, ChevronRight, MessageSquare, 
   User, Info, Bell, Search, Compass, Send, Copy, Plus, 
-  Palette, Image, Sparkles, LayoutDashboard, Sliders, Play, Trash2
+  Palette, Image, Sparkles, LayoutDashboard, Sliders, Play, Trash2,
+  ListFilter, Grid, Award, SlidersHorizontal, Settings
 } from 'lucide-react';
+
+interface AppAssetRecord {
+  id: string;
+  key: string;
+  name: string;
+  type: 'image' | 'video' | 'svga' | 'vap' | 'lottie';
+  category: string;
+  subcategory: string;
+  localPath: string;
+  remoteUrl: string;
+  defaultValue: string;
+  mimeType: string;
+  fileSize: number;
+  width: number | null;
+  height: number | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface ScreenVisuals {
   agency: Record<string, string>;
@@ -98,12 +120,136 @@ type ScreenId = typeof screens[number]['id'];
 
 const designerTabs = [
   { id: 'screens', labelAr: '📱 مصمم الشاشات التفاعلي', labelEn: '📱 Screen Designer' },
-  { id: 'colors', labelAr: '🎨 ألوان التطبيق العامة', labelEn: '🎨 App Colors' },
+  { id: 'colors', labelAr: '🎨 ألوان وتدرجات التطبيق', labelEn: '🎨 Colors & Gradients' },
   { id: 'settings', labelAr: '⚙️ صور وإعدادات التطبيق', labelEn: '⚙️ General Assets' },
   { id: 'icons', labelAr: '✨ أيقونات التطبيق', labelEn: '✨ App Icons' },
+  { id: 'assets', labelAr: '📁 أصول الشاشات (Default Assets)', labelEn: '📁 Screen Assets' },
+  { id: 'ranks', labelAr: '🏆 خلفيات وإطارات الرتب', labelEn: '🏆 Rank Frames & BGs' },
 ] as const;
 
 type DesignerTab = typeof designerTabs[number]['id'];
+
+const defaultColors = {
+  primaryBg: '#FFFFFF',
+  textPrimary: '#16151A',
+  splashNameColor: '#16151A',
+  textSecondary: '#9BA1B6',
+  goldColor: '#DE880F',
+  buttonColor: '#6366F1',
+  buttonTextColor: '#FFFFFF',
+  headerColor: '#FFFFFF',
+  tabBarColor: '#FFFFFF',
+  vipCardBgColor: '#1A3D1A',
+  vipCardBorderColor: '#C9A84C',
+};
+
+const defaultRoomGradients: Record<string, [string, string]> = {
+  themeFriend: ['#E447E7', '#A136FF'],
+  themeChat: ['#24D5C3', '#03DF99'],
+  themeMusic: ['#3697FF', '#B534FF'],
+  themeGame: ['#DB9C16', '#F0C724'],
+  themeParty: ['#3590FF', '#294BF7'],
+  themeHobby: ['#26C889', '#86BC1B'],
+};
+
+const defaultChatColors = {
+  bubbleSelf: '#33FFC525',
+  bubbleOther: '#1AFFFFFF',
+  bubbleSelfBorder: '#33FFC525',
+  bubbleOtherBorder: '#1AFFFFFF',
+  bubbleSelfText: '#FFC525',
+  bubbleOtherText: '#FFFFFF',
+};
+
+const rankCategories = ['wealth', 'charm', 'room'] as const;
+const rankCategoryLabels: Record<string, string> = {
+  wealth: '💰 الثروة (Wealth)',
+  charm: '💎 الجاذبية (Charm)',
+  room: '🏠 الغرفة (Room)',
+};
+
+// Words helper for Arabic descriptions
+const _wordMap: Record<string, string> = {
+  room: 'غرفة', bg: 'خلفية', ic: 'أيقونة', pre: 'محدد', nor: 'عادي',
+  mic: 'مايك', seat: 'مقعد', gift: 'هدية', create: 'إنشاء', chat: 'محادثة',
+  emoj: 'إيموجي', exit: 'خروج', follow: 'متابعة', function: 'وظائف',
+  game: 'لعبة', hot: 'نشط', lock: 'قفل', notice: 'إشعار', online: 'متصل',
+  owner: 'مالك', photo: 'صورة', pwd: 'كلمة سر', set: 'إعدادات',
+  user: 'مستخدم', window: 'نافذة', discover: 'استكشاف', search: 'بحث',
+  item: 'عنصر', tab: 'تبويب', mine: 'حسابي', wallet: 'محفظة',
+  level: 'مستوى', backpack: 'حقيبة', mall: 'متجر', setting: 'إعدادات',
+  feedback: 'اقتراح', report: 'بلاغ', phone: 'هاتف', camera: 'كاميرا',
+  avatar: 'صورة شخصية', edit: 'تعديل', delete: 'حذف', black: 'أسود',
+  close: 'إغلاق', back: 'رجوع', next: 'التالي', common: 'عام',
+  gold: 'ذهبي', diamond: 'ألماسة', sex: 'جنس', male: 'ذكر', female: 'أنثى',
+  super: 'مشرف', frame: 'إطار', giftAnim: 'هدية متحركة', speaking: 'متحدث',
+  wave: 'موجة', miao: 'مياو', rank: 'ترتيب', border: 'حدود',
+  splash: 'شاشة البداية', logo: 'شعار', social: 'تواصل', sharing: 'مشاركة',
+  country: 'دولة', more: 'المزيد', header: 'رأس', indicator: 'مؤشر',
+  recent: 'الأخيرة', teaming: 'فريق', music: 'موسيقى', hobby: 'هواية',
+  party: 'حفلة', friend: 'صديق', label: 'تصنيف', star: 'نجمة',
+  lucky: 'محظوظ', combo: 'كومبو', time: 'وقت', numOpen: 'فتح الرقم',
+  bag: 'حقيبة', select: 'اختيار', panel: 'لوحة', member: 'عضو',
+  float: 'عائم', cancel: 'إلغاء', volume: 'صوت', mixer: 'خلاط',
+  effect: 'تأثير', style: 'نمط', info: 'معلومات', operate: 'تحكم',
+  onlineInfo: 'معلومات الاتصال', package: 'حزمة', windowFloat: 'نافذة عائمة',
+  followNor: 'متابعة عادي', followPre: 'متابعة محدد',
+  allSelectNor: 'اختيار الكل عادي', allSelectPre: 'اختيار الكل محدد',
+  luckyGiftAnim: 'رسوم هدية محظوظة', luckyGiftCoin: 'عملة الهدية المحظوظة',
+  luckyGiftBg: 'خلفية الهدية المحظوظة',
+  comboTime: 'وقت الكومبو', comboLuckyNor: 'كومبو محظوظ عادي',
+  comboLuckyPre: 'كومبو محظوظ محدد',
+  starLabel: 'تصنيف نجمة', musicLabel: 'تصنيف موسيقى',
+  luckyLabel: 'تصنيف محظوظ',
+  micCharmMale: 'مايك جاذبية ذكر', micSeatDefault: 'مقعد مايك افتراضي',
+  micSeatBig: 'مقعد مايك كبير', micSeatLock: 'مقعد مايك مقفول',
+  micSeatMute: 'مقعد مايك كتم', micphone: 'مايكروفون',
+  btnDian: 'زر ديان', next2: 'التالي 2', next3: 'التالي 3', next4: 'التالي 4',
+  back2: 'رجوع 2', backWhite: 'رجوع أبيض', nextBlack: 'التالي أسود',
+  nextWhite: 'التالي أبيض',
+  userId: 'معرف المستخدم', idCopy: 'نسخ المعرف',
+  btnEdit: 'زر تعديل', photoAdd: 'إضافة صورة',
+  phoneDown: 'تنزيل الهاتف', googlePay: 'Google Pay',
+  vipCenter: 'مركز VIP', vipLabel: 'تصنيف VIP', vipGo: 'الذهاب إلى VIP',
+  tabVip: 'تبويب VIP',
+  coinBag: 'كيس العملات', detail: 'التفاصيل', filter: 'تصفية',
+  walletHeader: 'رأس المحفظة',
+  roomItem: 'عنصر الغرفة', itemChat: 'عنصر المحادثة',
+  itemMusic: 'عنصر الموسيقى', itemGame: 'عنصر اللعبة',
+  itemHobby: 'عنصر الهواية', itemParty: 'عنصر الحفلة',
+  itemFriend: 'عنصر الصديق', itemRoom: 'عنصر الغرفة',
+  countryMore: 'دولة المزيد', roomHot: 'غرفة نشطة',
+  tabFollow: 'تبويب متابعة', tabRecent: 'تبويب الأخيرة',
+  tabIndicator: 'مؤشر التبويب',
+  superAdmin: 'مشرف',
+  fmWave: 'موجة FM', speakingWave: 'موجة متحدث',
+  rankBorder: 'حدود الترتيب',
+  imgLogo: 'شعار', imgPre: 'الصورة المبدئية',
+  introduceBg: 'خلفية التعريف',
+  headerMember: 'رأس العضو', selectNum: 'اختيار الرقم',
+  lockState: 'حالة القفل', pwdLockOff: 'قفل كلمة السر مغلق',
+  pwdLockOpen: 'قفل كلمة السر مفتوح',
+  micDown: 'مايك لأسفل', micOn: 'مايك شغال', micOff: 'مايك طافي',
+  micOperate: 'تشغيل المايك',
+  userinfo: 'معلومات المستخدم', userInfo: 'معلومات المستخدم',
+  menu: 'قائمة', popup: 'منبثق', options: 'خيارات',
+  banner: 'لافتة', top: 'أعلى', bottom: 'أسفل', center: 'وسط',
+  notification: 'إشعار', message: 'رسالة', system: 'نظام',
+  information: 'معلومات',
+  placeholder: 'مكان',
+  bd: 'مدير', cp: 'منسق', agency: 'وكالة', union: 'نقابة',
+};
+
+function constantToArabic(constant: string): string {
+  let name = constant;
+  name = name.replace(/(Ic|Pre|Nor|Bg|Img|Svga|Webp|Png|Gif|Jpg|Jpeg)$/g, '');
+  const parts = name.split(/(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/g);
+  const mapped = parts.map(p => {
+    const lower = p.toLowerCase();
+    return _wordMap[lower] || lower;
+  });
+  return mapped.join(' ');
+}
 
 export default function AppVisualDesigner() {
   const { lang } = useContext(I18nContext);
@@ -115,18 +261,22 @@ export default function AppVisualDesigner() {
   const [splashGifUrl, setSplashGifUrl] = useState('');
   const [fontFamily, setFontFamily] = useState('Cairo');
   const [borderRadius, setBorderRadius] = useState(8);
-  const [globalColors, setGlobalColors] = useState<Record<string, string>>({
-    primaryBg: '#FFFFFF',
-    textPrimary: '#16151A',
-    textSecondary: '#9BA1B6',
-    goldColor: '#DE880F',
-    buttonColor: '#6366F1',
-    buttonTextColor: '#FFFFFF',
-    headerColor: '#FFFFFF',
-    tabBarColor: '#FFFFFF',
-  });
+  const [globalColors, setGlobalColors] = useState<Record<string, string>>(defaultColors);
+  const [roomGradients, setRoomGradients] = useState<Record<string, [string, string]>>(defaultRoomGradients);
+  const [chatColors, setChatColors] = useState<Record<string, string>>(defaultChatColors);
+  const [rankConfig, setRankConfig] = useState<Record<string, any>>({});
+  
+  // Screen assets browser states
+  const [assets, setAssets] = useState<AppAssetRecord[]>([]);
+  const [selectedAssetScreen, setSelectedAssetScreen] = useState(SCREEN_ORDER[0]);
+  const [assetSearch, setAssetSearch] = useState('');
+  const [uploadingAssetKey, setUploadingAssetKey] = useState<string | null>(null);
 
-  // Icon overrides
+  // Ranks sub-tab states
+  const [activeRankSubTab, setActiveRankSubTab] = useState<'wealth' | 'charm' | 'room'>('wealth');
+  const [rankFrames, setRankFrames] = useState<any[]>([]);
+
+  // Icon overrides states
   const [iconOverrides, setIconOverrides] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -140,42 +290,62 @@ export default function AppVisualDesigner() {
   const showMsg = (text: string) => { setMsg(text); setTimeout(() => setMsg(''), 3000); };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const cfg = await getAppConfig();
-        if (cfg) {
-          if (cfg.appName) setAppName(cfg.appName);
-          if (cfg.splashGifUrl) setSplashGifUrl(cfg.splashGifUrl);
-          if (cfg.fontFamily) setFontFamily(cfg.fontFamily);
-          if (Number.isFinite(cfg.borderRadius)) setBorderRadius(cfg.borderRadius!);
-          
-          const colorsCopy = { ...globalColors };
-          for (const key of Object.keys(globalColors)) {
-            if (cfg[key as keyof typeof cfg]) {
-              colorsCopy[key] = String(cfg[key as keyof typeof cfg]);
-            }
-          }
-          setGlobalColors(colorsCopy);
+    loadAllData();
+  }, []);
 
-          if (cfg.iconOverrides && typeof cfg.iconOverrides === 'object') {
-            setIconOverrides(cfg.iconOverrides as Record<string, string>);
-          }
-
-          const storedVisuals = cfg.screenVisuals;
-          if (storedVisuals && typeof storedVisuals === 'object') {
-            const merged: ScreenVisuals = { ...defaultVisuals };
-            for (const s of Object.keys(defaultVisuals) as Array<keyof ScreenVisuals>) {
-              if (storedVisuals[s] && typeof storedVisuals[s] === 'object') {
-                merged[s] = { ...defaultVisuals[s], ...storedVisuals[s] };
-              }
-            }
-            setVisuals(merged);
+  const loadAllData = async () => {
+    try {
+      const cfg = await getAppConfig();
+      if (cfg) {
+        if (cfg.appName) setAppName(cfg.appName);
+        if (cfg.splashGifUrl) setSplashGifUrl(cfg.splashGifUrl);
+        if (cfg.fontFamily) setFontFamily(cfg.fontFamily);
+        if (Number.isFinite(cfg.borderRadius)) setBorderRadius(cfg.borderRadius!);
+        
+        const colorsCopy = { ...defaultColors };
+        for (const key of Object.keys(defaultColors)) {
+          if (cfg[key as keyof typeof cfg]) {
+            colorsCopy[key as keyof typeof defaultColors] = String(cfg[key as keyof typeof cfg]);
           }
         }
-      } catch (e) { console.warn(e); }
-      setLoading(false);
-    })();
-  }, []);
+        setGlobalColors(colorsCopy);
+
+        if (cfg.roomGradients && typeof cfg.roomGradients === 'object') {
+          setRoomGradients({ ...defaultRoomGradients, ...cfg.roomGradients });
+        }
+        if (cfg.chatColors && typeof cfg.chatColors === 'object') {
+          setChatColors({ ...defaultChatColors, ...cfg.chatColors });
+        }
+        if (cfg.rankConfig && typeof cfg.rankConfig === 'object') {
+          setRankConfig(cfg.rankConfig);
+        }
+        if (cfg.iconOverrides && typeof cfg.iconOverrides === 'object') {
+          setIconOverrides(cfg.iconOverrides as Record<string, string>);
+        }
+
+        const storedVisuals = cfg.screenVisuals;
+        if (storedVisuals && typeof storedVisuals === 'object') {
+          const merged: ScreenVisuals = { ...defaultVisuals };
+          for (const s of Object.keys(defaultVisuals) as Array<keyof ScreenVisuals>) {
+            if (storedVisuals[s] && typeof storedVisuals[s] === 'object') {
+              merged[s] = { ...defaultVisuals[s], ...storedVisuals[s] };
+            }
+          }
+          setVisuals(merged);
+        }
+      }
+
+      // Load screen assets (R.xxx)
+      const resAssets = await getAppAssets({ limit: 5000 });
+      setAssets(resAssets.data || []);
+
+      // Load ranking frames
+      const { data: framesData } = await supabase.from('ranking_frames').select('*').order('category').order('rank');
+      setRankFrames(framesData || []);
+
+    } catch (e) { console.warn(e); }
+    setLoading(false);
+  };
 
   const updateField = (screen: ScreenId, field: string, value: string) => {
     setVisuals(prev => ({
@@ -187,15 +357,17 @@ export default function AppVisualDesigner() {
   const handleSaveAll = async () => {
     setSaving(true);
     try {
-      const cleanVisuals: any = { ...visuals };
       const updates = {
         appName,
         splashGifUrl,
         fontFamily,
         borderRadius,
         ...globalColors,
+        roomGradients,
+        chatColors,
+        rankConfig,
         iconOverrides,
-        screenVisuals: cleanVisuals,
+        screenVisuals: visuals,
       };
       await updateAppConfig(updates as any);
       showMsg(lang === 'ar' ? 'تم حفظ التعديلات الشاملة بنجاح!' : 'All configurations saved successfully!');
@@ -204,15 +376,6 @@ export default function AppVisualDesigner() {
       console.warn(e);
     }
     setSaving(false);
-  };
-
-  const handleResetScreen = () => {
-    if (confirm(lang === 'ar' ? 'إعادة تعيين إعدادات هذه الشاشة؟' : 'Reset this screen\'s visuals?')) {
-      setVisuals(prev => ({
-        ...prev,
-        [activeTab]: { ...defaultVisuals[activeTab] },
-      }));
-    }
   };
 
   const handleImageUpload = async (file: File, screen: ScreenId, field: string) => {
@@ -247,6 +410,81 @@ export default function AppVisualDesigner() {
     }
   };
 
+  const handleAssetOverrideUpload = async (entry: { fullKey: string; constant: string; path: string }) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*,.svga,.mp4,.gif,.vap,.json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setUploadingAssetKey(entry.fullKey);
+      try {
+        const url = await uploadAppAsset(file, entry.fullKey);
+        const existing = assets.find(a => a.key === entry.fullKey);
+        const record: AppAssetRecord = {
+          id: existing?.id || crypto.randomUUID(),
+          key: entry.fullKey,
+          name: entry.constant,
+          type: file.name.endsWith('.svga') ? 'svga' : file.name.endsWith('.vap') ? 'vap' : file.name.endsWith('.json') ? 'lottie' : 'image',
+          category: selectedAssetScreen,
+          subcategory: 'R.xxx',
+          localPath: entry.path,
+          remoteUrl: url,
+          defaultValue: '',
+          mimeType: file.type || 'application/octet-stream',
+          fileSize: file.size,
+          width: null,
+          height: null,
+          sortOrder: 0,
+          isActive: true,
+          createdAt: existing?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        await upsertAppAsset(record);
+        // Refresh local assets state
+        const resAssets = await getAppAssets({ limit: 5000 });
+        setAssets(resAssets.data || []);
+        showMsg(lang === 'ar' ? 'تم رفع الأصل المخصص بنجاح!' : 'Custom asset uploaded!');
+      } catch (err) {
+        alert('فشل الرفع: ' + (err as Error).message);
+      }
+      setUploadingAssetKey(null);
+    };
+    input.click();
+  };
+
+  const handleAssetOverrideDelete = async (fullKey: string) => {
+    const asset = assets.find(a => a.key === fullKey);
+    if (!asset) return;
+    if (!confirm(lang === 'ar' ? `حذف البديل المخصص لـ "${asset.name}"؟` : `Delete custom override for "${asset.name}"?`)) return;
+    try {
+      await deleteAppAsset(asset.id);
+      const resAssets = await getAppAssets({ limit: 5000 });
+      setAssets(resAssets.data || []);
+      showMsg(lang === 'ar' ? 'تم حذف الأصل المخصص والعودة للوضع الافتراضي' : 'Custom asset override deleted');
+    } catch {}
+  };
+
+  const handleSaveFrame = async (category: string, rank: number, assetUrl: string, assetType: string) => {
+    try {
+      await supabase.from('ranking_frames').upsert(
+        { category, rank, asset_url: assetUrl, asset_type: assetType },
+        { onConflict: 'category,rank' }
+      );
+      const { data } = await supabase.from('ranking_frames').select('*').order('category').order('rank');
+      setRankFrames(data || []);
+    } catch {}
+  };
+
+  const handleClearFrame = async (category: string, rank: number) => {
+    if (!confirm(lang === 'ar' ? 'مسح هذا الإطار؟' : 'Delete this frame?')) return;
+    try {
+      await supabase.from('ranking_frames').delete().eq('category', category).eq('rank', rank);
+      const { data } = await supabase.from('ranking_frames').select('*').order('category').order('rank');
+      setRankFrames(data || []);
+    } catch {}
+  };
+
   if (loading) return <div className="text-slate-400 text-sm p-6">Loading Visual Designer Hub...</div>;
 
   const currentConfig = visuals[activeTab] || {};
@@ -262,8 +500,22 @@ export default function AppVisualDesigner() {
     return true;
   });
 
+  // Filtered Screen assets (R.xxx)
+  const screenCategories = SCREEN_ORDER.filter(s => {
+    const data = SCREEN_ASSETS[s];
+    return data && data.assets.length > 0;
+  });
+  const currentAssets = SCREEN_ASSETS[selectedAssetScreen]?.assets || [];
+  const filteredScreenAssets = currentAssets.filter(entry => {
+    if (assetSearch) {
+      const q = assetSearch.toLowerCase();
+      return entry.constant.toLowerCase().includes(q) || entry.path.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <div>
@@ -273,8 +525,8 @@ export default function AppVisualDesigner() {
           </h2>
           <p className="text-slate-400 text-xs mt-1">
             {lang === 'ar'
-              ? 'صمم الألوان، الأيقونات، الخلفيات، والشاشات الترحيبية في مكان واحد مع شاشة محاكي للمعاينة الفورية.'
-              : 'Design app colors, icons, background images, and splash screens in one place with a live phone mockup.'}
+              ? 'صمم الألوان، الأيقونات، التدرجات، أصول الشاشات الافتراضية، وإطارات الرتب في مكان واحد.'
+              : 'Design app colors, icons, gradients, screen assets, and rank frames in one master workspace.'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -292,7 +544,7 @@ export default function AppVisualDesigner() {
           <button
             key={tab.id}
             onClick={() => setActiveDesignerTab(tab.id)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
               activeDesignerTab === tab.id
                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/20'
                 : 'text-slate-400 hover:bg-white/5 hover:text-white'
@@ -303,10 +555,10 @@ export default function AppVisualDesigner() {
         ))}
       </div>
 
-      {/* Screen customization view with Mock Phone Preview (12 columns) */}
+      {/* Screen customization view with Mock Phone Preview */}
       {activeDesignerTab === 'screens' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left: Simulated iPhone (5 cols) */}
+          {/* Simulated iPhone (5 cols) */}
           <div className="lg:col-span-5 flex justify-center">
             <div className="w-[320px] h-[640px] rounded-[40px] border-[10px] border-slate-800 bg-[#09090b] relative overflow-hidden shadow-2xl flex flex-col">
               {/* Notch */}
@@ -316,7 +568,7 @@ export default function AppVisualDesigner() {
 
               {/* Simulated Screen */}
               <div
-                className="flex-1 relative overflow-y-auto pt-8 flex flex-col"
+                className="flex-1 relative overflow-y-auto pt-8 flex flex-col text-right"
                 style={{
                   backgroundColor: currentConfig.backgroundColor || '#111',
                   backgroundImage: currentConfig.backgroundImage ? `url(${currentConfig.backgroundImage})` : 'none',
@@ -344,8 +596,8 @@ export default function AppVisualDesigner() {
                       {[1, 2].map((id) => (
                         <div key={id} className="rounded-xl p-2.5 flex flex-col space-y-2 border border-white/5" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
                           <div className="w-8 h-8 rounded-lg bg-indigo-600/40 flex items-center justify-center text-xs">🎙</div>
-                          <span className="text-[10px] font-semibold truncate" style={{ color: currentConfig.textColor }}>{lang === 'ar' ? `غرفة رقم ${id}` : `Room #${id}`}</span>
-                          <span className="text-[8px]" style={{ color: currentConfig.subTextColor }}>👤 2.4k online</span>
+                          <span className="text-[10px] font-semibold truncate text-right" style={{ color: currentConfig.textColor }}>{lang === 'ar' ? `غرفة رقم ${id}` : `Room #${id}`}</span>
+                          <span className="text-[8px] text-right" style={{ color: currentConfig.subTextColor }}>👤 2.4k online</span>
                         </div>
                       ))}
                     </div>
@@ -359,14 +611,14 @@ export default function AppVisualDesigner() {
                     <div className="flex gap-2">
                       <div className="flex-1 p-2 rounded-xl flex items-center gap-2 border border-white/5" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
                         <div className="w-6 h-6 rounded-lg bg-yellow-500/20 flex items-center justify-center text-xs">📅</div>
-                        <div className="flex flex-col text-[8px]">
+                        <div className="flex flex-col text-[8px] text-right">
                           <span className="font-bold" style={{ color: currentConfig.textColor }}>{lang === 'ar' ? 'الحدث' : 'Event'}</span>
                           <span style={{ color: currentConfig.subTextColor }}>2 updates</span>
                         </div>
                       </div>
                       <div className="flex-1 p-2 rounded-xl flex items-center gap-2 border border-white/5" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
                         <div className="w-6 h-6 rounded-lg bg-indigo-500/20 flex items-center justify-center text-xs">🔔</div>
-                        <div className="flex flex-col text-[8px]">
+                        <div className="flex flex-col text-[8px] text-right">
                           <span className="font-bold" style={{ color: currentConfig.textColor }}>{lang === 'ar' ? 'النظام' : 'System'}</span>
                           <span style={{ color: currentConfig.subTextColor }}>3 updates</span>
                         </div>
@@ -376,7 +628,7 @@ export default function AppVisualDesigner() {
                       {[1, 2].map((id) => (
                         <div key={id} className="p-2.5 rounded-xl flex items-center gap-2 border border-white/5" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
                           <div className="w-8 h-8 rounded-full bg-slate-600/30 flex items-center justify-center text-xs">👤</div>
-                          <div className="flex-1 flex flex-col text-[9px]">
+                          <div className="flex-1 flex flex-col text-[9px] text-right">
                             <span className="font-bold" style={{ color: currentConfig.textColor }}>Ahmed Ali</span>
                             <span style={{ color: currentConfig.subTextColor }}>How is the update looking?</span>
                           </div>
@@ -389,22 +641,22 @@ export default function AppVisualDesigner() {
                 {/* Profile Screen */}
                 {activeTab === 'profile' && (
                   <div className="flex-1 flex flex-col px-3 py-2 space-y-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-row-reverse">
                       <div className="w-12 h-12 rounded-full border-2 border-indigo-500 bg-slate-600/20 flex items-center justify-center">👤</div>
-                      <div className="flex flex-col">
+                      <div className="flex flex-col text-right">
                         <span className="font-bold text-xs" style={{ color: currentConfig.textColor }}>Legendary User</span>
                         <span className="text-[9px]" style={{ color: currentConfig.subTextColor }}>ID: 12345678</span>
                       </div>
                     </div>
                     <div className="p-3 rounded-xl flex items-center justify-between border border-white/5" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
-                      <span className="text-[9px]" style={{ color: currentConfig.textColor }}>💰 10,500 Coins</span>
                       <span className="text-[8px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400">Recharge</span>
+                      <span className="text-[9px]" style={{ color: currentConfig.textColor }}>💰 10,500 Coins</span>
                     </div>
                     <div className="space-y-1">
                       {['My Wallet', 'Badges Cabinet', 'VIP Center'].map((opt, idx) => (
                         <div key={idx} className="p-2.5 rounded-xl flex items-center justify-between border border-white/5" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
+                          <ChevronRight className="w-3.5 h-3.5 rotate-180" style={{ color: currentConfig.subTextColor }} />
                           <span className="text-[9px]" style={{ color: currentConfig.textColor }}>{opt}</span>
-                          <ChevronRight className="w-3.5 h-3.5" style={{ color: currentConfig.subTextColor }} />
                         </div>
                       ))}
                     </div>
@@ -414,20 +666,20 @@ export default function AppVisualDesigner() {
                 {/* Private Chat Screen */}
                 {activeTab === 'chat' && (
                   <div className="flex-1 flex flex-col px-3 py-2 justify-between">
-                    <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2 flex-row-reverse">
                       <span className="font-bold text-xs" style={{ color: currentConfig.textColor }}>Private Chat</span>
                     </div>
                     <div className="flex-1 py-4 space-y-3 flex flex-col justify-end">
-                      <div className="flex items-end gap-2 max-w-[80%]">
+                      <div className="flex items-end gap-2 max-w-[80%] flex-row-reverse">
                         <div className="w-6 h-6 rounded-full bg-slate-600/30 flex items-center justify-center text-[10px]">👤</div>
-                        <div className="p-2 rounded-2xl rounded-bl-none text-[9px]" style={{ backgroundColor: currentConfig.bubbleOtherBgColor || '#fff', color: currentConfig.textColor }}>Custom visual designer deployed!</div>
+                        <div className="p-2 rounded-2xl rounded-br-none text-[9px] text-right" style={{ backgroundColor: currentConfig.bubbleOtherBgColor || '#fff', color: currentConfig.textColor }}>Custom visual designer deployed!</div>
                       </div>
-                      <div className="flex items-end gap-2 max-w-[80%] self-end">
-                        <div className="p-2 rounded-2xl rounded-br-none text-[9px] text-slate-900" style={{ backgroundColor: currentConfig.bubbleSelfBgColor || '#ffe082' }}>Looks awesome.</div>
+                      <div className="flex items-end gap-2 max-w-[80%] self-start flex-row-reverse">
+                        <div className="p-2 rounded-2xl rounded-bl-none text-[9px] text-slate-900 text-right" style={{ backgroundColor: currentConfig.bubbleSelfBgColor || '#ffe082' }}>Looks awesome.</div>
                       </div>
                     </div>
                     <div className="flex gap-1 border-t border-white/5 pt-2 items-center">
-                      <div className="flex-1 bg-white/5 border border-white/10 rounded-full px-3 py-1 flex items-center justify-between">
+                      <div className="flex-1 bg-white/5 border border-white/10 rounded-full px-3 py-1 flex items-center justify-between flex-row-reverse">
                         <span className="text-[9px]" style={{ color: currentConfig.subTextColor }}>Write...</span>
                       </div>
                     </div>
@@ -469,7 +721,7 @@ export default function AppVisualDesigner() {
                       <span className="text-2xl">🏆</span>
                       <span className="text-[10px] font-bold" style={{ color: currentConfig.textColor }}>Summer Cup 2026</span>
                     </div>
-                    <div className="p-2 rounded-lg bg-white/5 flex justify-between text-[8px]">
+                    <div className="p-2 rounded-lg bg-white/5 flex justify-between text-[8px] flex-row-reverse">
                       <span>🥇 1st Prize</span>
                       <span className="font-bold" style={{ color: currentConfig.textColor }}>100k Coins</span>
                     </div>
@@ -479,10 +731,10 @@ export default function AppVisualDesigner() {
                 {/* System Notifications Screen */}
                 {activeTab === 'notifications' && (
                   <div className="flex-1 flex flex-col px-3 py-2 space-y-4">
-                    <span className="font-bold text-xs" style={{ color: currentConfig.textColor }}>Notifications</span>
-                    <div className="p-2.5 rounded-xl border border-white/5 flex items-start gap-2" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
+                    <span className="font-bold text-xs text-right" style={{ color: currentConfig.textColor }}>Notifications</span>
+                    <div className="p-2.5 rounded-xl border border-white/5 flex items-start gap-2 flex-row-reverse text-right" style={{ backgroundColor: currentConfig.cardBgColor || 'rgba(255,255,255,0.05)' }}>
                       <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px]">🔔</div>
-                      <div className="flex-1 flex flex-col text-[8px]">
+                      <div className="flex-1 flex flex-col text-[8px] text-right">
                         <span className="font-bold" style={{ color: currentConfig.textColor }}>System Alert</span>
                         <span style={{ color: currentConfig.subTextColor }}>App visual designer successfully deployed.</span>
                       </div>
@@ -495,15 +747,14 @@ export default function AppVisualDesigner() {
 
           {/* Right: Screen customizer form (7 cols) */}
           <div className="lg:col-span-7 bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-6">
-            {/* Tab selector */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'اختر الشاشة التي تود تصميمها:' : 'Choose App Screen to Design:'}</label>
+              <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'اختر الشاشة لتعديل مظهرها:' : 'Choose App Screen to Design:'}</label>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                 {screens.map(s => (
                   <button
                     key={s.id}
                     onClick={() => setActiveTab(s.id)}
-                    className={`px-3 py-2 rounded-xl text-left text-xs font-semibold border transition-all ${
+                    className={`px-3 py-2 rounded-xl text-right text-xs font-semibold border transition-all ${
                       activeTab === s.id
                         ? 'bg-indigo-600/10 border-indigo-500 text-indigo-300'
                         : 'bg-white/5 border-transparent text-slate-400 hover:bg-white/10 hover:text-white'
@@ -691,57 +942,159 @@ export default function AppVisualDesigner() {
         </div>
       )}
 
-      {/* App general colors tab view */}
+      {/* Colors & Gradients & Chat Bubbles tab view */}
       {activeDesignerTab === 'colors' && (
-        <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-white text-sm font-semibold">{lang === 'ar' ? 'ألوان التطبيق الأساسية' : 'General App Colors'}</h3>
-            <button onClick={() => {
-              if (confirm(lang === 'ar' ? 'إعادة تعيين ألوان التطبيق إلى الافتراضية؟' : 'Reset all global colors?')) {
-                setGlobalColors({
-                  primaryBg: '#FFFFFF',
-                  textPrimary: '#16151A',
-                  textSecondary: '#9BA1B6',
-                  goldColor: '#DE880F',
-                  buttonColor: '#6366F1',
-                  buttonTextColor: '#FFFFFF',
-                  headerColor: '#FFFFFF',
-                  tabBarColor: '#FFFFFF',
-                });
-              }
-            }} className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-[10px] text-rose-400 rounded-lg">Reset Colors</button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {Object.entries(globalColors).map(([field, value]) => {
-              const label = field === 'primaryBg' ? (lang === 'ar' ? 'خلفية التطبيق العامة' : 'Global Background') :
-                            field === 'textPrimary' ? (lang === 'ar' ? 'النصوص الرئيسية' : 'Primary Text') :
-                            field === 'textSecondary' ? (lang === 'ar' ? 'النصوص الفرعية' : 'Secondary Text') :
-                            field === 'goldColor' ? (lang === 'ar' ? 'لون التمييز / الذهبي' : 'Accent / Gold Color') :
-                            field === 'buttonColor' ? (lang === 'ar' ? 'لون الأزرار العامة' : 'Global Button Color') :
-                            field === 'buttonTextColor' ? (lang === 'ar' ? 'لون نصوص الأزرار' : 'Button Text Color') :
-                            field === 'headerColor' ? (lang === 'ar' ? 'خلفية شريط العنوان' : 'Header Bar Background') :
-                            field === 'tabBarColor' ? (lang === 'ar' ? 'خلفية شريط التبويبات السفلي' : 'Bottom Tab Bar Background') : field;
+        <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-8">
+          {/* General Colors */}
+          <div className="space-y-4">
+            <h3 className="text-white text-sm font-semibold flex items-center gap-2">
+              <Palette className="w-4 h-4 text-indigo-400" />
+              {lang === 'ar' ? 'ألوان التطبيق العامة' : 'General App Colors'}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Object.entries(globalColors).map(([field, value]) => {
+                const label = field === 'primaryBg' ? (lang === 'ar' ? 'خلفية التطبيق العامة' : 'Global Background') :
+                              field === 'textPrimary' ? (lang === 'ar' ? 'النصوص الرئيسية' : 'Primary Text') :
+                              field === 'textSecondary' ? (lang === 'ar' ? 'النصوص الفرعية' : 'Secondary Text') :
+                              field === 'goldColor' ? (lang === 'ar' ? 'لون التمييز / الذهبي' : 'Accent / Gold Color') :
+                              field === 'buttonColor' ? (lang === 'ar' ? 'لون الأزرار العامة' : 'Global Button Color') :
+                              field === 'buttonTextColor' ? (lang === 'ar' ? 'لون نصوص الأزرار' : 'Button Text Color') :
+                              field === 'headerColor' ? (lang === 'ar' ? 'خلفية شريط العنوان' : 'Header Bar Background') :
+                              field === 'tabBarColor' ? (lang === 'ar' ? 'خلفية شريط التبويبات السفلي' : 'Bottom Tab Bar Background') : field;
 
-              return (
-                <div key={field} className="space-y-1.5">
-                  <label className="block text-[10px] uppercase text-slate-400 font-bold">{label}</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="color"
-                      value={to6Hex(value)}
-                      onChange={e => setGlobalColors(p => ({ ...p, [field]: e.target.value }))}
-                      className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
-                    />
-                    <input
-                      type="text"
-                      value={value}
-                      onChange={e => setGlobalColors(p => ({ ...p, [field]: e.target.value }))}
-                      className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
-                    />
+                return (
+                  <div key={field} className="space-y-1.5">
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={to6Hex(value)}
+                        onChange={e => setGlobalColors(p => ({ ...p, [field]: e.target.value }))}
+                        className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
+                      />
+                      <input
+                        type="text"
+                        value={value}
+                        onChange={e => setGlobalColors(p => ({ ...p, [field]: e.target.value }))}
+                        className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
+                      />
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          </div>
+
+          <hr className="border-white/5" />
+
+          {/* Room Gradients */}
+          <div className="space-y-4">
+            <h3 className="text-white text-sm font-semibold flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-400" />
+              {lang === 'ar' ? 'ألوان تدرجات شاشات الغرف' : 'Room Category Gradients'}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Object.entries(roomGradients).map(([key, val]) => {
+                const label = key === 'themeFriend' ? (lang === 'ar' ? 'تدرج شاشة الصداقة (Friend)' : 'Friend Theme') :
+                              key === 'themeChat' ? (lang === 'ar' ? 'تدرج شاشة الشات (Chat)' : 'Chat Theme') :
+                              key === 'themeMusic' ? (lang === 'ar' ? 'تدرج شاشة الموسيقى (Music)' : 'Music Theme') :
+                              key === 'themeGame' ? (lang === 'ar' ? 'تدرج شاشة الألعاب (Game)' : 'Game Theme') :
+                              key === 'themeParty' ? (lang === 'ar' ? 'تدرج شاشة الحفلات (Party)' : 'Party Theme') :
+                              key === 'themeHobby' ? (lang === 'ar' ? 'تدرج شاشة الهوايات (Hobby)' : 'Hobby Theme') : key;
+                return (
+                  <div key={key} className="space-y-1.5">
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold">{label}</label>
+                    <div className="flex gap-2">
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="color"
+                          value={to6Hex(val[0])}
+                          onChange={e => {
+                            const copy = { ...roomGradients };
+                            copy[key] = [e.target.value, val[1]];
+                            setRoomGradients(copy);
+                          }}
+                          className="w-8 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
+                        />
+                        <input
+                          type="color"
+                          value={to6Hex(val[1])}
+                          onChange={e => {
+                            const copy = { ...roomGradients };
+                            copy[key] = [val[0], e.target.value];
+                            setRoomGradients(copy);
+                          }}
+                          className="w-8 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
+                        />
+                      </div>
+                      <div className="flex-1 flex gap-1 items-center">
+                        <input
+                          type="text"
+                          value={val[0]}
+                          onChange={e => {
+                            const copy = { ...roomGradients };
+                            copy[key] = [e.target.value, val[1]];
+                            setRoomGradients(copy);
+                          }}
+                          className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-[10px] text-white font-mono"
+                        />
+                        <span className="text-slate-600">→</span>
+                        <input
+                          type="text"
+                          value={val[1]}
+                          onChange={e => {
+                            const copy = { ...roomGradients };
+                            copy[key] = [val[0], e.target.value];
+                            setRoomGradients(copy);
+                          }}
+                          className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-[10px] text-white font-mono"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <hr className="border-white/5" />
+
+          {/* Chat bubble colors */}
+          <div className="space-y-4">
+            <h3 className="text-white text-sm font-semibold flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-emerald-400" />
+              {lang === 'ar' ? 'ألوان فقاعات دردشة الغرف' : 'Room Chat Bubbles Layout'}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Object.entries(chatColors).map(([field, value]) => {
+                const label = field === 'bubbleSelf' ? (lang === 'ar' ? 'خلفية فقاعة المرسل' : 'My Bubble BG') :
+                              field === 'bubbleOther' ? (lang === 'ar' ? 'خلفية فقاعة المستلم' : 'Other Bubble BG') :
+                              field === 'bubbleSelfBorder' ? (lang === 'ar' ? 'حدود فقاعة المرسل' : 'My Bubble Border') :
+                              field === 'bubbleOtherBorder' ? (lang === 'ar' ? 'حدود فقاعة المستلم' : 'Other Bubble Border') :
+                              field === 'bubbleSelfText' ? (lang === 'ar' ? 'نص فقاعة المرسل' : 'My Bubble Text') :
+                              field === 'bubbleOtherText' ? (lang === 'ar' ? 'نص فقاعة المستلم' : 'Other Bubble Text') : field;
+
+                return (
+                  <div key={field} className="space-y-1.5">
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold">{label}</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="color"
+                        value={to6Hex(value)}
+                        onChange={e => setChatColors(p => ({ ...p, [field]: e.target.value }))}
+                        className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
+                      />
+                      <input
+                        type="text"
+                        value={value}
+                        onChange={e => setChatColors(p => ({ ...p, [field]: e.target.value }))}
+                        className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -752,7 +1105,6 @@ export default function AppVisualDesigner() {
           <h3 className="text-white text-sm font-semibold">{lang === 'ar' ? 'إعدادات وأصول التطبيق العامة' : 'General App Assets & Configs'}</h3>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* App name */}
             <div className="space-y-1.5">
               <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'اسم التطبيق' : 'Application Display Name'}</label>
               <input
@@ -764,7 +1116,6 @@ export default function AppVisualDesigner() {
               />
             </div>
 
-            {/* Font Family */}
             <div className="space-y-1.5">
               <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خط التطبيق الرئيسي' : 'Font Family'}</label>
               <select
@@ -780,7 +1131,6 @@ export default function AppVisualDesigner() {
               </select>
             </div>
 
-            {/* Border Radius */}
             <div className="space-y-1.5">
               <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'درجة انحناء زوايا العناصر' : 'Border Radius (Roundedness)'}</label>
               <input
@@ -798,7 +1148,6 @@ export default function AppVisualDesigner() {
               </div>
             </div>
 
-            {/* Splash GIF */}
             <div className="space-y-1.5">
               <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة الشاشة الترحيبية (GIF/PNG)' : 'Splash Screen GIF/Image'}</label>
               <div className="flex gap-2">
@@ -835,10 +1184,9 @@ export default function AppVisualDesigner() {
       {/* App Icons tab view */}
       {activeDesignerTab === 'icons' && (
         <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center justify-between flex-wrap gap-4 flex-row-reverse">
             <h3 className="text-white text-sm font-semibold">{lang === 'ar' ? 'استبدال أيقونات التطبيق' : 'App Icon Overrides'}</h3>
             
-            {/* Search and filters */}
             <div className="flex gap-3 flex-wrap items-center">
               <div className="relative w-48">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
@@ -871,7 +1219,6 @@ export default function AppVisualDesigner() {
             </div>
           </div>
 
-          {/* Icons Grid Table */}
           <div className="overflow-x-auto border border-white/5 rounded-xl">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
@@ -929,6 +1276,312 @@ export default function AppVisualDesigner() {
           </div>
         </div>
       )}
+
+      {/* Screen Assets (Default Assets grid browser) */}
+      {activeDesignerTab === 'assets' && (
+        <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-6">
+          <div className="flex justify-between items-center flex-wrap gap-4 flex-row-reverse">
+            <div>
+              <h3 className="text-white text-sm font-semibold">{lang === 'ar' ? '📁 أصول الشاشات الافتراضية والتعديل عليها' : '📁 Screen Assets Browser'}</h3>
+              <p className="text-slate-500 text-[10px] mt-0.5">{lang === 'ar' ? 'اختر شاشة لرؤية الصور الافتراضية واستبدالها مخصصاً' : 'Browse default assets by screen category and upload custom replacements'}</p>
+            </div>
+            
+            <div className="flex gap-2">
+              <div className="relative w-44">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input
+                  value={assetSearch}
+                  onChange={e => setAssetSearch(e.target.value)}
+                  placeholder={lang === 'ar' ? 'بحث عن أصل...' : 'Search asset...'}
+                  className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 pl-8 pr-3 text-xs text-white focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Screen Tabs filter */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {screenCategories.map(s => {
+              const isActive = selectedAssetScreen === s;
+              return (
+                <button key={s} onClick={() => setSelectedAssetScreen(s)}
+                  className={`shrink-0 px-3 py-1.5 text-[10px] font-semibold rounded-lg transition-colors ${
+                    isActive ? 'bg-indigo-600 text-white shadow-md shadow-indigo-950/20' : 'bg-[#161618] text-slate-400 border border-white/10 hover:bg-white/5'
+                  }`}>
+                  {SCREEN_ASSETS[s]?.label || s}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Grid list of assets */}
+          {filteredScreenAssets.length === 0 ? (
+            <div className="text-slate-500 text-xs py-10 text-center">لا توجد أصول مطابقة للبحث</div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {filteredScreenAssets.map(entry => {
+                const asset = assets.find(a => a.key === entry.fullKey);
+                const isSvg = entry.fullKey.endsWith('_svga');
+                const isJson = entry.fullKey.endsWith('_json');
+                
+                return (
+                  <div key={entry.fullKey} className="bg-[#18181b] rounded-xl border border-white/5 overflow-hidden group flex flex-col justify-between">
+                    {/* Preview Area */}
+                    {asset?.remoteUrl ? (
+                      <div className="relative">
+                        {isSvg ? (
+                          <div className="w-full h-24 flex items-center justify-center bg-black/30 text-[9px] text-emerald-400 font-medium">SVGA Animation</div>
+                        ) : isJson ? (
+                          <div className="w-full h-24 flex items-center justify-center bg-black/30 text-[9px] text-yellow-400 font-medium">Lottie JSON</div>
+                        ) : (
+                          <img src={asset.remoteUrl} className="w-full h-24 object-contain bg-black/30" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <button onClick={() => handleAssetOverrideUpload(entry)} className="text-[9px] px-2.5 py-1 rounded bg-white/10 text-white hover:bg-white/20">تغيير</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative group/nooverride">
+                        {isSvg ? (
+                          <div className="w-full h-24 flex items-center justify-center bg-black/20 text-[9px] text-slate-500 font-bold">SVGA Default</div>
+                        ) : isJson ? (
+                          <div className="w-full h-24 flex items-center justify-center bg-black/20 text-[9px] text-slate-500 font-bold">Lottie Default</div>
+                        ) : !entry.path.endsWith('.xml') ? (
+                          <img src={`/${entry.path}`} className="w-full h-24 object-contain bg-black/20" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                        ) : (
+                          <div className="w-full h-24 flex items-center justify-center bg-black/20 text-[9px] text-slate-500 font-bold">XML Vector</div>
+                        )}
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/45 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <button onClick={() => handleAssetOverrideUpload(entry)} className="text-[9px] px-2.5 py-1.5 rounded bg-indigo-600 text-white font-bold shadow-md hover:bg-indigo-700">رفع بديل</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Metadata Card */}
+                    <div className="p-3 space-y-1 border-t border-white/5">
+                      <div className="text-[10px] text-white font-bold truncate" title={entry.constant}>{constantToArabic(entry.constant)}</div>
+                      <div className="text-[8px] text-slate-500 font-mono truncate" dir="ltr" title={entry.constant}>{entry.constant}</div>
+                      
+                      {asset?.remoteUrl && (
+                        <div className="flex gap-1 pt-1.5 justify-end">
+                          <button onClick={() => window.open(asset.remoteUrl, '_blank')} className="text-[8px] px-2 py-0.5 rounded border border-white/10 text-slate-400 hover:text-white hover:bg-white/5">🔗</button>
+                          <button onClick={() => handleAssetOverrideDelete(entry.fullKey)} className="text-[8px] px-2 py-0.5 rounded border border-rose-500/20 text-rose-400/80 hover:text-rose-400 hover:bg-rose-500/10">🗑</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Ranks frames and visuals tab view (from VisualManager) */}
+      {activeDesignerTab === 'ranks' && (
+        <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-6">
+          <div className="flex justify-between items-center flex-wrap gap-4 flex-row-reverse">
+            <div>
+              <h3 className="text-white text-sm font-semibold">{lang === 'ar' ? '🏆 خلفيات وإطارات لوحة الترتيب' : '🏆 Rank Frames & Backgrounds'}</h3>
+              <p className="text-slate-500 text-[10px] mt-0.5">{lang === 'ar' ? 'خصص خلفيات وإطارات الرتب الذهبية، الفضية، والبرونزية' : 'Configure rank backgrounds and SVGA/video frames'}</p>
+            </div>
+
+            {/* Rank Sub-tabs */}
+            <div className="flex gap-1">
+              {(Object.keys(rankCategoryLabels) as Array<keyof typeof rankCategoryLabels>).map(sub => (
+                <button
+                  key={sub}
+                  onClick={() => setActiveRankSubTab(sub)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    activeRankSubTab === sub
+                      ? 'bg-amber-600/10 border-amber-500 text-amber-300'
+                      : 'bg-white/5 border-transparent text-slate-400 hover:bg-white/10'
+                  }`}
+                >
+                  {rankCategoryLabels[sub]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <hr className="border-white/5" />
+
+          {/* Background customization */}
+          <div className="space-y-4 max-w-xl">
+            <div>
+              <label className="block text-[10px] text-slate-400 font-bold mb-1.5">{lang === 'ar' ? 'رابط أو مفتاح خلفية الترتيب' : 'Rank BG Key/URL'}</label>
+              <input
+                type="text"
+                value={rankConfig[`${activeRankSubTab}_bg`] || ''}
+                onChange={e => setRankConfig(p => ({ ...p, [`${activeRankSubTab}_bg`]: e.target.value }))}
+                placeholder="assets_mipmap-xxhdpi_xxx"
+                className="w-full bg-[#161618] border border-white/10 rounded-lg py-2 px-3 text-xs text-white font-mono"
+              />
+            </div>
+            
+            <RankAssetUpload
+              assetKey={`${activeRankSubTab}_bgAssetKey`}
+              label={lang === 'ar' ? 'ارفع صورة خلفية مخصصة' : 'Upload custom background'}
+              accept="image/*,.svga,.mp4,.gif"
+              config={{ rankConfig }}
+              updateField={(f, v) => setRankConfig(v as any)}
+              assets={assets}
+            />
+          </div>
+
+          <hr className="border-white/5" />
+
+          {/* Ranks frames uploads */}
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-xs text-amber-300 font-semibold mb-1">{lang === 'ar' ? '🎞 إطارات الرتب المتحركة' : '🎞 Animated Rank Frames'}</h4>
+              <p className="text-[9px] text-slate-500">{lang === 'ar' ? 'ارفع ملفات (SVGA / VAP / MP4 / GIF) لكل رتبة من الثلاثة الأوائل' : 'Upload SVGA, VAP, MP4, or GIF frames for top 3 ranks'}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map(rank => {
+                const existing = rankFrames.find((f: any) => f.category === activeRankSubTab && f.rank === rank);
+                const rankLabel = rank === 1 ? (lang === 'ar' ? '🥇 المركز الأول (الذهبي)' : '🥇 Gold Rank') :
+                                  rank === 2 ? (lang === 'ar' ? '🥈 المركز الثاني (الفضي)' : '🥈 Silver Rank') :
+                                               (lang === 'ar' ? '🥉 المركز الثالث (البرونزي)' : '🥉 Bronze Rank');
+                const isVideo = existing?.asset_url?.match(/\.(mp4|webm)$/i);
+                const isImage = existing?.asset_url?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
+
+                return (
+                  <div key={rank} className="p-4 bg-[#18181b] rounded-xl border border-white/5 space-y-3 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold block mb-2">{rankLabel}</span>
+                      
+                      {existing ? (
+                        <div className="space-y-2">
+                          <div className="w-full h-24 bg-black/30 rounded-lg flex items-center justify-center border border-white/5 overflow-hidden">
+                            {isVideo ? (
+                              <video src={existing.asset_url} className="w-full h-full object-contain" muted loop autoPlay />
+                            ) : isImage ? (
+                              <img src={existing.asset_url} className="w-full h-full object-contain" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                            ) : existing.asset_type === 'svga' ? (
+                              <span className="text-[10px] text-emerald-400 font-bold">SVGA Animation</span>
+                            ) : existing.asset_type === 'vap' ? (
+                              <span className="text-[10px] text-emerald-400 font-bold">VAP Video</span>
+                            ) : (
+                              <span className="text-[10px] text-slate-500">File Asset</span>
+                            )}
+                          </div>
+                          <span className="text-[8px] text-slate-500 font-mono block truncate" dir="ltr" title={existing.asset_url}>{existing.asset_url}</span>
+                        </div>
+                      ) : (
+                        <div className="w-full h-24 rounded-lg border border-dashed border-white/5 bg-black/10 flex items-center justify-center text-[9px] text-slate-600">
+                          {lang === 'ar' ? 'لا يوجد إطار حالياً' : 'No Frame uploaded'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 pt-2">
+                      <label className="flex-1 cursor-pointer py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg flex items-center justify-center gap-1 text-[9px] shadow-md shadow-indigo-950/20">
+                        <Upload className="w-3 h-3" /> {lang === 'ar' ? 'رفع إطار' : 'Upload Frame'}
+                        <input
+                          type="file"
+                          accept="image/*,.svga,.mp4,.gif,.vap"
+                          className="hidden"
+                          onChange={async e => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const url = await uploadAppAsset(file, `rank_frame_${activeRankSubTab}_${rank}`);
+                              const type = file.name.endsWith('.svga') ? 'svga' : file.name.endsWith('.vap') ? 'vap' : 'webp';
+                              await handleSaveFrame(activeRankSubTab, rank, url, type);
+                              showMsg(lang === 'ar' ? 'تم حفظ الإطار بنجاح!' : 'Frame saved!');
+                            } catch (err) {
+                              alert('فشل الرفع: ' + (err as Error).message);
+                            }
+                          }}
+                        />
+                      </label>
+                      
+                      {existing && (
+                        <button
+                          onClick={() => handleClearFrame(activeRankSubTab, rank)}
+                          className="px-2.5 py-1.5 rounded-lg border border-rose-500/20 text-rose-400 hover:bg-rose-500/10 text-[9px]"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Re-implemented helper to display rank background upload assets
+function RankAssetUpload({ assetKey, label, accept = 'image/*,.svga,.mp4,.gif,.vap,.json', config, updateField, assets }: {
+  assetKey: string; label: string; accept?: string;
+  config: any; updateField: (field: string, value: unknown) => void;
+  assets?: AppAssetRecord[];
+}) {
+  const [uploading, setUploading] = useState(false);
+  const rc = config.rankConfig || {};
+  const currentKey = rc[assetKey as keyof typeof rc] as string || '';
+  
+  const asset = assets?.find(a => a.key === currentKey);
+  const url = asset?.remoteUrl || (currentKey.startsWith('http') ? currentKey : '');
+  const isVideo = url.match(/\.(mp4|webm)$/i);
+  const isImage = url.match(/\.(png|jpg|jpeg|gif|webp)$/i);
+
+  return (
+    <div className="border-t border-white/5 pt-2 mt-2">
+      <label className="block text-[9px] text-slate-400 font-bold mb-1">{label}</label>
+      <div className="flex gap-2 items-center">
+        {url ? (
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {isVideo ? (
+              <video src={url} className="w-8 h-8 object-contain rounded border border-white/10" muted loop autoPlay />
+            ) : isImage ? (
+              <img src={url} className="w-8 h-8 object-contain rounded border border-white/10" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+            ) : url.endsWith('.svga') ? (
+              <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-emerald-400 font-bold rounded border border-white/10">SVGA</div>
+            ) : url.endsWith('.vap') ? (
+              <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-emerald-400 font-bold rounded border border-white/10">VAP</div>
+            ) : (
+              <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-slate-500 rounded border border-white/10">FILE</div>
+            )}
+            <span className="text-[8px] text-emerald-400 font-mono truncate flex-1">{currentKey}</span>
+          </div>
+        ) : (
+          <span className="text-[8px] text-slate-600 flex-1">لا يوجد أصل مخصص</span>
+        )}
+        <label className="flex items-center gap-1 text-[8px] px-2 py-1 rounded border border-white/10 hover:bg-white/5 cursor-pointer shrink-0">
+          <Upload className="w-2 h-2" />
+          {uploading ? 'جاري...' : 'رفع'}
+          <input type="file" accept={accept} disabled={uploading} className="hidden" onChange={async e => {
+            const file = e.target.files?.[0]; if (!file) return;
+            setUploading(true);
+            try {
+              const url = await uploadAppAsset(file, `rank_${assetKey}`);
+              const record: AppAssetRecord = {
+                id: crypto.randomUUID(), key: `rank_${assetKey}`, name: label,
+                type: file.name.endsWith('.svga') ? 'svga' : file.name.endsWith('.vap') ? 'vap' : file.name.endsWith('.json') ? 'lottie' : 'image',
+                category: 'الترتيب', subcategory: 'خلفيات الترتيب', localPath: '', remoteUrl: url,
+                defaultValue: '', mimeType: file.type || 'application/octet-stream', fileSize: file.size,
+                width: null, height: null, sortOrder: 0, isActive: true,
+                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+              };
+              await upsertAppAsset(record);
+              updateField('rankConfig', { ...rc, [assetKey]: `rank_${assetKey}` });
+            } catch (err) { alert('فشل الرفع: ' + (err as Error).message); }
+            setUploading(false);
+          }} />
+        </label>
+        {currentKey && (
+          <button onClick={() => updateField('rankConfig', { ...rc, [assetKey]: '' })}
+            className="text-[8px] px-2 py-1 rounded border border-rose-500/20 text-rose-400 hover:bg-rose-500/10 shrink-0">مسح</button>
+        )}
+      </div>
     </div>
   );
 }
