@@ -86,6 +86,8 @@ class RoomHeader extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      _buildOnlineButton(),
+                      const SizedBox(width: 8),
                       _buildRankButton(),
                       const SizedBox(width: 8),
                       _buildMinimizeButton(),
@@ -285,6 +287,18 @@ class RoomHeader extends StatelessWidget {
           color: Color(0xFFFFD54F),
           size: 18,
         ),
+      ),
+    );
+  }
+
+  Widget _buildOnlineButton() {
+    return GestureDetector(
+      onTap: onOnlineTap,
+      child: Image.asset(
+        'assets/mipmap-xxhdpi/room_online_icon.png',
+        width: 32,
+        height: 32,
+        fit: BoxFit.contain,
       ),
     );
   }
