@@ -2827,7 +2827,7 @@ class _RoomScreenState extends State<RoomScreen> {
       child: GestureDetector(
         onTap: () => setState(() => _showExit = false),
         child: Container(
-          color: Colors.black54,
+          color: DynamicConfigService().roomExitSheetBgColor.withOpacity(0.9),
           child: Stack(
             children: [
               Center(

@@ -17,6 +17,7 @@ interface ScreenVisuals {
   level: Record<string, string>;
   cp: Record<string, string>;
   signin: Record<string, string>;
+  room: Record<string, string>;
 }
 
 const defaultVisuals: ScreenVisuals = {
@@ -317,9 +318,23 @@ const defaultVisuals: ScreenVisuals = {
     sectionBgColor: '#2e0d15',
     sectionBgImage: '',
   },
+  room: {
+    backgroundImage: '',
+    headerBgColor: 'transparent',
+    headerTextColor: '#ffffff',
+    seatDefaultCircleImage: '',
+    seatLockCircleImage: '',
+    seatDefaultClassicImage: '',
+    seatLockClassicImage: '',
+    seatDefaultVipImage: '',
+    seatLockVipImage: '',
+    exitSheetBgColor: '#16151A',
+    volumePanelBgColor: '#16151A',
+    functionsPanelBgColor: '#16151A',
+  },
 };
 
-const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'wallet', 'level', 'cp', 'signin'] as const;
+const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'wallet', 'level', 'cp', 'signin', 'room'] as const;
 
 const screenLabels: Record<string, Record<string, string>> = {
   agency: { ar: 'شاشة الوكالة', en: 'Agency Screen' },
@@ -333,10 +348,20 @@ const screenLabels: Record<string, Record<string, string>> = {
   level: { ar: 'شاشة المستويات', en: 'Levels Screen' },
   cp: { ar: '💑 شاشة CP', en: '💑 CP Screen' },
   signin: { ar: '📅 تسجيل الدخول اليومي', en: '📅 Weekly Sign-In' },
+  room: { ar: '🎙 شاشة الغرفة', en: '🎙 Room Screen' },
 };
 
 const fieldLabels: Record<string, Record<string, string>> = {
   backgroundImage: { ar: 'صورة الخلفية', en: 'Background Image' },
+  seatDefaultCircleImage: { ar: 'صورة المقعد الدائري المفتوح', en: 'Circular Open Seat Image' },
+  seatLockCircleImage: { ar: 'صورة المقعد الدائري المقفل', en: 'Circular Locked Seat Image' },
+  seatDefaultClassicImage: { ar: 'صورة المقعد الكلاسيك المفتوح', en: 'Classic Open Seat Image' },
+  seatLockClassicImage: { ar: 'صورة المقعد الكلاسيك المقفل', en: 'Classic Locked Seat Image' },
+  seatDefaultVipImage: { ar: 'صورة مقعد الـ VIP المفتوح', en: 'VIP Open Seat Image' },
+  seatLockVipImage: { ar: 'صورة مقعد الـ VIP المقفل', en: 'VIP Locked Seat Image' },
+  exitSheetBgColor: { ar: 'لون خلفية شريحة الخروج', en: 'Exit Sheet Background Color' },
+  volumePanelBgColor: { ar: 'لون لوحة التحكم في الصوت', en: 'Volume Panel Background Color' },
+  functionsPanelBgColor: { ar: 'لون لوحة الوظائف والإعدادات', en: 'Functions Panel Background Color' },
   headerBgColor: { ar: 'لون خلفية الرأس', en: 'Header Background' },
   headerBgImage: { ar: 'صورة خلفية الرأس', en: 'Header Background Image' },
   headerTextColor: { ar: 'لون نص الرأس', en: 'Header Text Color' },
@@ -457,7 +482,7 @@ const fieldLabels: Record<string, Record<string, string>> = {
   buttonImage: { ar: 'صورة زر التسجيل', en: 'Sign-In Button Image' },
 };
 
-const imageFields = ['backgroundImage', 'checkboxCheckedImage', 'checkboxUncheckedImage', 'coinIcon', 'diamondIcon', 'rankIcon', 'crownIcon', 'rankBgImage', 'checkedImage', 'uncheckedImage', 'cardBgImage', 'sectionBgImage', 'badgeBgImage', 'necklaceBgImage', 'headerBgImage', 'headerTextImage', 'cardBorderImage', 'textImage', 'subTextImage', 'accentImage', 'badgeBorderImage', 'necklaceBorderImage', 'lockImage', 'fullScreenBg', 'cabinBg', 'cabinDefaultBg', 'leftFrame', 'rightFrame', 'heartImage', 'noCpHeartSvg', 'tokenBg', 'mineBg', 'tabBgImage', 'invitationBgImage', 'countdownDaySvg', 'countdownHourSvg', 'countdownMinSvg', 'countdownSecSvg', 'rankTagGoldSvg', 'rankTagSilverSvg', 'rankTagBronzeSvg', 'historyCardSvg', 'giftsBannerSvg', 'profileHeartIcon', 'profileLevelBg', 'profileNameFrame', 'profileTopBgSvga', 'checkmarkImage', 'streakIcon', 'topBgSvga', 'buttonImage'];
+const imageFields = ['backgroundImage', 'checkboxCheckedImage', 'checkboxUncheckedImage', 'coinIcon', 'diamondIcon', 'rankIcon', 'crownIcon', 'rankBgImage', 'checkedImage', 'uncheckedImage', 'cardBgImage', 'sectionBgImage', 'badgeBgImage', 'necklaceBgImage', 'headerBgImage', 'headerTextImage', 'cardBorderImage', 'textImage', 'subTextImage', 'accentImage', 'badgeBorderImage', 'necklaceBorderImage', 'lockImage', 'fullScreenBg', 'cabinBg', 'cabinDefaultBg', 'leftFrame', 'rightFrame', 'heartImage', 'noCpHeartSvg', 'tokenBg', 'mineBg', 'tabBgImage', 'invitationBgImage', 'countdownDaySvg', 'countdownHourSvg', 'countdownMinSvg', 'countdownSecSvg', 'rankTagGoldSvg', 'rankTagSilverSvg', 'rankTagBronzeSvg', 'historyCardSvg', 'giftsBannerSvg', 'profileHeartIcon', 'profileLevelBg', 'profileNameFrame', 'profileTopBgSvga', 'checkmarkImage', 'streakIcon', 'topBgSvga', 'buttonImage', 'seatDefaultCircleImage', 'seatLockCircleImage', 'seatDefaultClassicImage', 'seatLockClassicImage', 'seatDefaultVipImage', 'seatLockVipImage'];
 
 const colorRegex = /^(bg|header|text|card|border|accent|tab|gold|silver|bronze|points|section|badge|necklace|member|primary|gradient|countdown|invitation|button|avatar|score|period|rank|shadow|Color)/i;
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/r.dart';
+import '../../../services/dynamic_config_service.dart';
 
 class FunctionPanel extends StatelessWidget {
   final VoidCallback? onClose;
@@ -95,9 +96,9 @@ class FunctionPanel extends StatelessWidget {
     ];
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF151419),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: DynamicConfigService().roomFunctionsPanelBgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       padding: const EdgeInsets.only(top: 20, bottom: 32),
       child: SingleChildScrollView(

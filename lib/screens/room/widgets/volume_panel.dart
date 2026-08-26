@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../config/app_colors.dart';
+import '../../../services/dynamic_config_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 // VolumePanel — layout_room_volume.xml
@@ -35,9 +36,9 @@ class _VolumePanelState extends State<VolumePanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF211211),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: DynamicConfigService().roomVolumePanelBgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 32),
       child: Column(

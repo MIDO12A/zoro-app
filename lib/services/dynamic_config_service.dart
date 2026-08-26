@@ -269,6 +269,20 @@ class DynamicConfigService extends ChangeNotifier {
   Color get agencyTabActive => _screenColor('agency', 'tabActiveColor', const Color(0xFFe94560));
   Color get agencyTabInactive => _screenColor('agency', 'tabInactiveColor', const Color(0xFF555555));
 
+  // Room screen visuals
+  String get roomBackgroundImage => _screenStr('room', 'backgroundImage', '');
+  Color get roomHeaderBg => _screenColor('room', 'headerBgColor', Colors.transparent);
+  Color get roomHeaderTextColor => _screenColor('room', 'headerTextColor', Colors.white);
+  String get roomSeatDefaultCircle => _screenStr('room', 'seatDefaultCircleImage', '');
+  String get roomSeatLockCircle => _screenStr('room', 'seatLockCircleImage', '');
+  String get roomSeatDefaultClassic => _screenStr('room', 'seatDefaultClassicImage', '');
+  String get roomSeatLockClassic => _screenStr('room', 'seatLockClassicImage', '');
+  String get roomSeatDefaultVip => _screenStr('room', 'seatDefaultVipImage', '');
+  String get roomSeatLockVip => _screenStr('room', 'seatLockVipImage', '');
+  Color get roomExitSheetBgColor => _screenColor('room', 'exitSheetBgColor', const Color(0xFF16151A));
+  Color get roomVolumePanelBgColor => _screenColor('room', 'volumePanelBgColor', const Color(0xFF16151A));
+  Color get roomFunctionsPanelBgColor => _screenColor('room', 'functionsPanelBgColor', const Color(0xFF16151A));
+
   // Badges screen visuals
   Color get badgesHeaderBg => _screenColor('badges', 'headerBgColor', const Color(0xFF1a1a2e));
   String get badgesHeaderBgImage => _screenStr('badges', 'headerBgImage', '');
@@ -813,6 +827,31 @@ class DynamicConfigService extends ChangeNotifier {
   //   - legacyKey: mipmap-xxhdpi_file_webp
   //   - undFullKey: assets_mipmap_xxhdpi_file_webp (hyphens→underscores for legacy DB entries)
   String? getAssetOverride(String assetPath) {
+    if (assetPath == 'assets/mipmap-xxhdpi/room_mic_seat_default_circle.png') {
+      final override = roomSeatDefaultCircle;
+      if (override.isNotEmpty) return override;
+    }
+    if (assetPath == 'assets/mipmap-xxhdpi/room_mic_seat_lock_circle.png') {
+      final override = roomSeatLockCircle;
+      if (override.isNotEmpty) return override;
+    }
+    if (assetPath == 'assets/mipmap-xxhdpi/room_mic_seat_default_ic.webp') {
+      final override = roomSeatDefaultClassic;
+      if (override.isNotEmpty) return override;
+    }
+    if (assetPath == 'assets/mipmap-xxhdpi/room_mic_seat_lock_ic.webp') {
+      final override = roomSeatLockClassic;
+      if (override.isNotEmpty) return override;
+    }
+    if (assetPath.contains('room_mic_seat_default_vip_2_ic')) {
+      final override = roomSeatDefaultVip;
+      if (override.isNotEmpty) return override;
+    }
+    if (assetPath == 'assets/mipmap-xxhdpi/room_bg_friend.webp') {
+      final override = roomBackgroundImage;
+      if (override.isNotEmpty) return override;
+    }
+
     final fullKey = _normalizeKey(assetPath);
     final shortKey = assetPath.split('/').last.replaceAll('.', '_');
     final legacyKey = fullKey.startsWith('assets_') ? fullKey.substring(7) : null;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../config/r.dart';
 import '../../../config/app_colors.dart';
+import '../../../services/dynamic_config_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 // SeatStylePanel — room_fragment_seat_style.xml
@@ -91,9 +92,9 @@ class _SeatStylePanelState extends State<SeatStylePanel> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF211211),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: BoxDecoration(
+        color: DynamicConfigService().roomFunctionsPanelBgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
       ),
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
