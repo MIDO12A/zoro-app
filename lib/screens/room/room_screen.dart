@@ -1286,7 +1286,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 final theme = _currentRoom?.theme ?? 'themeFriend';
                 final bgImageUrl = DynamicConfigService().getRoomBgImage(theme);
                 if (bgImageUrl != null && bgImageUrl.isNotEmpty) {
-                  return R.cachedImage(bgImageUrl, fit: BoxFit.cover);
+                  return Image(image: R.cachedImage(bgImageUrl), fit: BoxFit.cover);
                 }
                 
                 final gradient = AppColors.themeFriend; // default
