@@ -1283,7 +1283,7 @@ class _RoomScreenState extends State<RoomScreen> {
           Positioned.fill(
             child: Builder(
               builder: (ctx) {
-                final theme = _currentRoom?.theme ?? 'themeFriend';
+                final theme = _currentRoom?.category ?? 'themeFriend';
                 final bgImageUrl = DynamicConfigService().getRoomBgImage(theme);
                 if (bgImageUrl != null && bgImageUrl.isNotEmpty) {
                   return Image(image: R.cachedImage(bgImageUrl), fit: BoxFit.cover);
