@@ -17,6 +17,7 @@ import '../../models/gift_banner_config_model.dart';
 import '../../models/store_item_model.dart';
 import '../../services/supabase_service.dart';
 import '../../services/media_prefetch_service.dart';
+import '../../services/dynamic_config_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/room_audio_service.dart';
 import '../../services/room_state_service.dart';

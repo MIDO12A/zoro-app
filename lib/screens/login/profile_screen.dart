@@ -28,7 +28,7 @@ import '../../features/cp/cp_detail_full_screen.dart';
 import '../../features/host_agency/host_agency_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
 import '../../features/signin/weekly_signin_screen.dart';
-import 'admin_visuals_config_screen.dart';
+
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -647,26 +647,7 @@ class ProfileScreen extends StatelessWidget {
                 : Future.value(null),
             builder: (context, snap) {
               final isAdmin = snap.data?.exists ?? false;
-              if (!isAdmin) return const SizedBox.shrink();
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildDivider(),
-                  _buildMenuItem(
-                    R.mineSettingIc,
-                    'لوحة تعديل المظهر والأيقونات',
-                    null,
-                    () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AdminVisualsConfigScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              );
+              return const SizedBox.shrink();
             },
           ),
 

@@ -170,8 +170,9 @@ class _MessageScreenState extends State<MessageScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildInfoCard({
     required String bgAsset,
@@ -396,12 +397,11 @@ class _MessageScreenState extends State<MessageScreen> {
                 ],
               ),
             ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+          ),
+        );
+      },
+    );
+  }
 
   String _formatTime(int timestamp) {
     final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);
