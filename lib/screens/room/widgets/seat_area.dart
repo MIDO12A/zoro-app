@@ -87,11 +87,12 @@ class SeatArea extends StatelessWidget {
 
   Widget _buildGameLayout(BuildContext context) {
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
-    const double layoutWidth = 360.0;
-    const double layoutHeight = 340.0;
-    const double centerX = layoutWidth / 2;
-    const double centerY = layoutHeight / 2;
-    const double radius = 105.0;
+    final sw = MediaQuery.of(context).size.width;
+    final double layoutWidth = sw;
+    const double layoutHeight = 350.0;
+    final double centerX = layoutWidth / 2;
+    final double centerY = layoutHeight / 2;
+    const double radius = 120.0;
 
     return Center(
       child: Container(
@@ -345,24 +346,17 @@ class _NormalSeat extends StatelessWidget {
     if (!hasUser) {
       if (seatStyle == SeatStyle.circle) {
         return Center(
-          child: Container(
+          child: SizedBox(
             width: size,
             height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withOpacity(0.06),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.3),
-                width: 1.5,
-              ),
-            ),
-            alignment: Alignment.center,
             child: seat.isLocked
-                ? R.image(R.roomMicSeatLockIc, width: size * 0.45, height: size * 0.45)
-                : Icon(
-                    Icons.mic_none_rounded,
-                    size: size * 0.45,
-                    color: Colors.white54,
+                ? Image.asset(
+                    'assets/mipmap-xxhdpi/room_mic_seat_lock_circle.png',
+                    fit: BoxFit.cover,
+                  )
+                : Image.asset(
+                    'assets/mipmap-xxhdpi/room_mic_seat_default_circle.png',
+                    fit: BoxFit.cover,
                   ),
           ),
         );
