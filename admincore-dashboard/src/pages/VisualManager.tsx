@@ -130,19 +130,40 @@ const screenLabels: Record<string, string> = {
   chat: 'الشات (Chat)',
 };
 
-function RankAssetUpload({ assetKey, label, accept = 'image/*,.svga,.mp4,.gif,.vap,.json', config, updateField }: {
+function RankAssetUpload({ assetKey, label, accept = 'image/*,.svga,.mp4,.gif,.vap,.json', config, updateField, assets }: {
   assetKey: string; label: string; accept?: string;
   config: AppConfig; updateField: (field: string, value: unknown) => void;
+  assets?: AppAssetRecord[];
 }) {
   const [uploading, setUploading] = useState(false);
   const rc = config.rankConfig || {};
   const currentKey = rc[assetKey as keyof typeof rc] as string || '';
+  
+  // Resolve key to URL from assets list
+  const asset = assets?.find(a => a.key === currentKey);
+  const url = asset?.remoteUrl || (currentKey.startsWith('http') ? currentKey : '');
+  const isVideo = url.match(/\.(mp4|webm)$/i);
+  const isImage = url.match(/\.(png|jpg|jpeg|gif|webp)$/i);
+
   return (
     <div className="border-t border-white/5 pt-2 mt-2">
       <label className="block text-[9px] text-slate-400 font-bold mb-1">{label}</label>
       <div className="flex gap-2 items-center">
-        {currentKey ? (
-          <span className="text-[8px] text-emerald-400 font-mono truncate flex-1">{currentKey}</span>
+        {url ? (
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {isVideo ? (
+              <video src={url} className="w-8 h-8 object-contain rounded border border-white/10" muted loop autoPlay />
+            ) : isImage ? (
+              <img src={url} className="w-8 h-8 object-contain rounded border border-white/10" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+            ) : url.endsWith('.svga') ? (
+              <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-emerald-400 font-bold rounded border border-white/10">SVGA</div>
+            ) : url.endsWith('.vap') ? (
+              <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-emerald-400 font-bold rounded border border-white/10">VAP</div>
+            ) : (
+              <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-slate-500 rounded border border-white/10">FILE</div>
+            )}
+            <span className="text-[8px] text-emerald-400 font-mono truncate flex-1">{currentKey}</span>
+          </div>
         ) : (
           <span className="text-[8px] text-slate-600 flex-1">لا يوجد</span>
         )}
@@ -554,7 +575,7 @@ function RankingSection({ config, updateField }: { config: AppConfig; updateFiel
           placeholder="Key أو رابط"
           className="w-full bg-[#161618] border border-white/10 rounded-lg py-2 px-3 text-xs text-white font-mono" />
         <RankAssetUpload assetKey={`${subTab}_bgAssetKey`} label="ارفع صورة خلفية"
-          accept="image/*,.svga,.mp4,.gif" config={config} updateField={updateField} />
+          accept="image/*,.svga,.mp4,.gif" config={config} updateField={updateField} assets={assets} />
       </div>
 
       {/* Per-category frame uploads */}
@@ -564,11 +585,26 @@ function RankingSection({ config, updateField }: { config: AppConfig; updateFiel
         {[1, 2, 3].map(rank => {
           const existing = frames.find((f: any) => f.category === subTab && f.rank === rank);
           const rankLabel = rank === 1 ? 'الذهبي 🥇' : rank === 2 ? 'الفضي 🥈' : 'البرونزي 🥉';
+          const isVideo = existing?.asset_url?.match(/\.(mp4|webm)$/i);
+          const isImage = existing?.asset_url?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
           return (
             <div key={rank} className="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0">
               <span className="text-[9px] text-slate-400 w-20 shrink-0">{rankLabel}</span>
               {existing ? (
-                <span className="text-[8px] text-emerald-400 font-mono truncate flex-1">{existing.asset_url}</span>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {isVideo ? (
+                    <video src={existing.asset_url} className="w-8 h-8 object-contain rounded border border-white/10" muted loop autoPlay />
+                  ) : isImage ? (
+                    <img src={existing.asset_url} className="w-8 h-8 object-contain rounded border border-white/10" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                  ) : existing.asset_url?.endsWith('.svga') ? (
+                    <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-emerald-400 font-bold rounded border border-white/10">SVGA</div>
+                  ) : existing.asset_url?.endsWith('.vap') ? (
+                    <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-emerald-400 font-bold rounded border border-white/10">VAP</div>
+                  ) : (
+                    <div className="w-8 h-8 flex items-center justify-center bg-black/30 text-[7px] text-slate-500 rounded border border-white/10 font-bold">FILE</div>
+                  )}
+                  <span className="text-[8px] text-emerald-400 font-mono truncate flex-1">{existing.asset_url}</span>
+                </div>
               ) : (
                 <span className="text-[8px] text-slate-600 flex-1">لا يوجد إطار</span>
               )}

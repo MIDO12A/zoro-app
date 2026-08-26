@@ -204,9 +204,9 @@ export default function AppAssetsPage() {
                 {asset?.remoteUrl ? (
                   <div className="relative">
                     {isSvg ? (
-                      <div className="w-full h-20 flex items-center justify-center bg-black/30 text-[9px] text-emerald-400/60">SVGA</div>
+                      <div className="w-full h-20 flex items-center justify-center bg-black/30 text-[9px] text-emerald-400/60 font-medium">SVGA Animation</div>
                     ) : isJson ? (
-                      <div className="w-full h-20 flex items-center justify-center bg-black/30 text-[9px] text-emerald-400/60">Lottie</div>
+                      <div className="w-full h-20 flex items-center justify-center bg-black/30 text-[9px] text-yellow-400/60 font-medium">Lottie JSON</div>
                     ) : (
                       <img src={asset.remoteUrl} className="w-full h-20 object-contain bg-black/30"
                         onError={e => { (e.target as HTMLImageElement).src = ''; }} />
@@ -221,18 +221,25 @@ export default function AppAssetsPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="w-full h-20 flex flex-col items-center justify-center bg-black/20 gap-1">
-                    {uploading === entry.fullKey ? (
-                      <span className="text-[9px] text-slate-400">جاري...</span>
+                  <div className="relative group/nooverride">
+                    {isSvg ? (
+                      <div className="w-full h-20 flex items-center justify-center bg-black/20 text-[9px] text-slate-500">SVGA Default</div>
+                    ) : isJson ? (
+                      <div className="w-full h-20 flex items-center justify-center bg-black/20 text-[9px] text-slate-500">Lottie Default</div>
+                    ) : !entry.path.endsWith('.xml') ? (
+                      <img src={`/${entry.path}`} className="w-full h-20 object-contain bg-black/20"
+                        onError={e => { (e.target as HTMLImageElement).src = ''; }} />
                     ) : (
-                      <>
-                        <div className="text-[9px] text-slate-600">لا يوجد بديل</div>
-                        <button onClick={() => handleUpload(entry)}
-                          className="flex items-center gap-1 text-[8px] px-2 py-1 rounded border border-dashed border-white/10 text-slate-500 hover:border-indigo-500/50 hover:text-indigo-300 transition-all">
-                          <Upload className="w-2.5 h-2.5" /> رفع
-                        </button>
-                      </>
+                      <div className="w-full h-20 flex items-center justify-center bg-black/20 text-[9px] text-slate-500">XML Vector</div>
                     )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      {uploading === entry.fullKey ? (
+                        <span className="text-[9px] text-white">جاري...</span>
+                      ) : (
+                        <button onClick={() => handleUpload(entry)}
+                          className="text-[9px] px-2.5 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 shadow-md">رفع بديل</button>
+                      )}
+                    </div>
                   </div>
                 )}
                 <div className="p-2 space-y-1">
