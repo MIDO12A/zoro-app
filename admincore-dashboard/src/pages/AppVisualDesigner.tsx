@@ -268,6 +268,8 @@ export default function AppVisualDesigner() {
   const [borderRadius, setBorderRadius] = useState(8);
   const [globalColors, setGlobalColors] = useState<Record<string, string>>(defaultColors);
   const [roomGradients, setRoomGradients] = useState<Record<string, [string, string]>>(defaultRoomGradients);
+  const [roomBgImages, setRoomBgImages] = useState<Record<string, string>>({});
+  const [globalImages, setGlobalImages] = useState<Record<string, string>>({});
   const [chatColors, setChatColors] = useState<Record<string, string>>(defaultChatColors);
   const [rankConfig, setRankConfig] = useState<Record<string, any>>({});
   
@@ -318,6 +320,12 @@ export default function AppVisualDesigner() {
 
         if (cfg.roomGradients && typeof cfg.roomGradients === 'object') {
           setRoomGradients({ ...defaultRoomGradients, ...cfg.roomGradients });
+        }
+        if (cfg.roomBgImages && typeof cfg.roomBgImages === 'object') {
+          setRoomBgImages(cfg.roomBgImages);
+        }
+        if (cfg.globalImages && typeof cfg.globalImages === 'object') {
+          setGlobalImages(cfg.globalImages);
         }
         if (cfg.chatColors && typeof cfg.chatColors === 'object') {
           setChatColors({ ...defaultChatColors, ...cfg.chatColors });
@@ -371,6 +379,8 @@ export default function AppVisualDesigner() {
         borderRadius,
         ...globalColors,
         roomGradients,
+        roomBgImages,
+        globalImages,
         chatColors,
         rankConfig,
         iconOverrides,
@@ -814,6 +824,11 @@ export default function AppVisualDesigner() {
                     />
                   </label>
                 </div>
+                {currentConfig.backgroundImage && (
+                  <div className="mt-2">
+                    <img src={currentConfig.backgroundImage} alt="Background preview" className="w-full h-24 object-cover rounded-lg border border-white/5 bg-black/20" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                  </div>
+                )}
               </div>
 
               {/* Colors grid */}
@@ -994,15 +1009,46 @@ export default function AppVisualDesigner() {
                         type="color"
                         value={to6Hex(value)}
                         onChange={e => setGlobalColors(p => ({ ...p, [field]: e.target.value }))}
-                        className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
+                        className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0"
                       />
                       <input
                         type="text"
                         value={value}
                         onChange={e => setGlobalColors(p => ({ ...p, [field]: e.target.value }))}
+                        className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
+                      />
+                      <input
+                        type="text"
+                        placeholder={lang === 'ar' ? 'أو رابط صورة...' : 'Or image URL...'}
+                        value={globalImages[field] || ''}
+                        onChange={e => setGlobalImages(p => ({ ...p, [field]: e.target.value }))}
                         className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
                       />
+                      <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg flex items-center justify-center shrink-0">
+                        <Upload className="w-4 h-4" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async e => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const url = await StorageService.uploadFile(file, `globals/${field}`);
+                                setGlobalImages(p => ({ ...p, [field]: url }));
+                              } catch (err: any) {
+                                alert('Upload failed: ' + err.message);
+                              }
+                            }
+                          }}
+                        />
+                      </label>
                     </div>
+                    {globalImages[field] && (
+                      <div className="mt-2">
+                        <img src={globalImages[field]} alt="Preview" className="w-full h-12 object-cover rounded-lg border border-white/5 bg-black/20" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1075,6 +1121,40 @@ export default function AppVisualDesigner() {
                         />
                       </div>
                     </div>
+                    {/* Add Image Uploader below the gradient inputs */}
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        placeholder={lang === 'ar' ? 'أو رابط صورة كخلفية...' : 'Or bg image URL...'}
+                        value={roomBgImages[key] || ''}
+                        onChange={e => setRoomBgImages(p => ({ ...p, [key]: e.target.value }))}
+                        className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
+                      />
+                      <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 rounded-lg flex items-center justify-center shrink-0">
+                        <Upload className="w-4 h-4" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async e => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const url = await StorageService.uploadFile(file, `rooms/${key}`);
+                                setRoomBgImages(p => ({ ...p, [key]: url }));
+                              } catch (err: any) {
+                                alert('Upload failed: ' + err.message);
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                    {roomBgImages[key] && (
+                      <div className="mt-2">
+                        <img src={roomBgImages[key]} alt="Preview" className="w-full h-12 object-cover rounded-lg border border-white/5 bg-black/20" onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                      </div>
+                    )}
                   </div>
                 );
               })}

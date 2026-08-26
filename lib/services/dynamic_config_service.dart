@@ -101,6 +101,8 @@ class DynamicConfigService extends ChangeNotifier {
 
   // Room theme gradients (from app_config.roomGradients)
   Map<String, List<Color>> _roomGradients = {};
+  Map<String, String> _roomBgImages = {};
+  Map<String, String> _globalImages = {};
 
   // Chat bubble colors (from app_config.chatColors)
   Color _chatBubbleSelf = const Color(0x33FFC525);
@@ -230,6 +232,12 @@ class DynamicConfigService extends ChangeNotifier {
 
   // Room gradient getter (returns gradient if found, null otherwise)
   List<Color>? getRoomGradient(String key) => _roomGradients[key];
+  
+  // Room background image getter (returns image url if found, null otherwise)
+  String? getRoomBgImage(String key) => _roomBgImages[key];
+
+  // Global images getter
+  String? getGlobalImage(String key) => _globalImages[key];
 
   // Chat bubble color getters
   Color get chatBubbleSelf => _chatBubbleSelf;
@@ -802,6 +810,16 @@ class DynamicConfigService extends ChangeNotifier {
           }
           return MapEntry(k.toString(), colors);
         });
+      }
+
+      final rbi = config['roomBgImages'];
+      if (rbi is Map) {
+        _roomBgImages = rbi.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+
+      final gi = config['globalImages'];
+      if (gi is Map) {
+        _globalImages = gi.map((k, v) => MapEntry(k.toString(), v.toString()));
       }
 
       final cc = config['chatColors'];

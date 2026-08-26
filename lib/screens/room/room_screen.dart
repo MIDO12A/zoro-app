@@ -1281,9 +1281,28 @@ class _RoomScreenState extends State<RoomScreen> {
           children: [
           // ── Background ───────────────────────────────────────
           Positioned.fill(
-            child: R.image(
-              R.roomBgFriend,
-              fit: BoxFit.cover,
+            child: Builder(
+              builder: (ctx) {
+                final theme = _currentRoom?.theme ?? 'themeFriend';
+                final bgImageUrl = DynamicConfigService().getRoomBgImage(theme);
+                if (bgImageUrl != null && bgImageUrl.isNotEmpty) {
+                  return R.cachedImage(bgImageUrl, fit: BoxFit.cover);
+                }
+                
+                final gradient = AppColors.themeFriend; // default
+                final colors = DynamicConfigService().getRoomGradient(theme);
+                final LinearGradient activeGradient = (colors != null && colors.length >= 2) 
+                    ? LinearGradient(colors: colors, begin: Alignment.topCenter, end: Alignment.bottomCenter)
+                    : (theme == 'themeChat' ? AppColors.themeChat : 
+                       theme == 'themeMusic' ? AppColors.themeMusic :
+                       theme == 'themeGame' ? AppColors.themeGame :
+                       theme == 'themeParty' ? AppColors.themeParty :
+                       theme == 'themeHobby' ? AppColors.themeHobby : AppColors.themeFriend);
+                
+                return Container(
+                  decoration: BoxDecoration(gradient: activeGradient),
+                );
+              },
             ),
           ),
 
