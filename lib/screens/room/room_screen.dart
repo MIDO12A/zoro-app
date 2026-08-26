@@ -182,7 +182,6 @@ class _RoomScreenState extends State<RoomScreen> {
   bool _showProfile = false;
   bool _showRoomInfo = false;
   bool _showExit = false;
-  bool _showMembers = false;
   bool _showNotifications = false;
   bool _showShare = false;
   bool _isMinimized = false;
@@ -1323,7 +1322,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 onMinimize: _minimizeRoom,
                 onRank: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RankScreen())),
                 onInfoTap: () => setState(() => _showRoomInfo = true),
-                onOnlineTap: () => setState(() => _showMembers = true),
+                onOnlineTap: _showMembersSheet,
                 onGameTap: () {},
                 onFollow: _toggleFollow,
               ),
@@ -1620,7 +1619,6 @@ class _RoomScreenState extends State<RoomScreen> {
             ),
 
           if (_showRoomInfo) _buildRoomInfoSheet(sizeH),
-          if (_showMembers) _buildMemberList(),
           if (_showNotifications) _buildNotificationsSheet(),
           if (_showExit) _buildExitDialog(),
           if (_showShare) _buildShare(),
@@ -2479,161 +2477,119 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   // ── Member list ───────────────────────────────────────────────
-  Widget _buildMemberList() {
-    return Positioned.fill(
-      child: GestureDetector(
-        onTap: () => setState(() => _showMembers = false),
-        child: Container(
-          color: Colors.black54,
-          alignment: Alignment.centerRight,
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.8,
-              height: double.infinity,
-              color: const Color(0xFF211211),
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(16),
+  void _showMembersSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.6,
+          decoration: const BoxDecoration(
+            color: Color(0xFF1B1414), // Dark background matching image
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            children: [
+              const SizedBox(height: 16),
+              const Text(
+                'متصل',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'الاستخدام:$_onlineCount',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  itemCount: _seats.where((s) => s.isOccupied && s.user != null).length,
+                  itemBuilder: (context, index) {
+                    final occupiedSeats = _seats.where((s) => s.isOccupied && s.user != null).toList();
+                    final u = occupiedSeats[index].user!;
+                    final isMuted = occupiedSeats[index].isMuted;
+                    
+                    final bool isMale = (u.gender == 1 || u.gender == '1' || u.gender == 'male');
+                    
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 20),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          const Text(
-                            'Online Members',
-                            style: TextStyle(fontSize: 16, color: Colors.white),
+                          ClipOval(child: _memberAvatar(u.avatar, 46)),
+                          const SizedBox(width: 12),
+                          Text(
+                            u.name,
+                            style: const TextStyle(color: Colors.white, fontSize: 14),
                           ),
-                          const Spacer(),
-                          GestureDetector(
-                            onTap: () => setState(() => _showMembers = false),
-                            child: const Icon(Icons.close, color: Colors.white),
+                          const SizedBox(width: 8),
+                          // Wealth / Level badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3B2A15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.person, size: 10, color: Color(0xFFFFD700)),
+                                const SizedBox(width: 2),
+                                Text(
+                                  u.wealth ?? '0',
+                                  style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Mic icon
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFD3A350), // orange-ish bg
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isMuted ? Icons.mic_off : Icons.mic,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Gender icon
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: isMale ? const Color(0xFF4A90E2) : const Color(0xFFE91E63),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isMale ? Icons.male : Icons.female,
+                              size: 14,
+                              color: Colors.white,
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: _seats.length,
-                        itemBuilder: (_, i) {
-                          final seat = _seats[i];
-                          if (!seat.isOccupied || seat.user == null) {
-                            return const SizedBox.shrink();
-                          }
-                          final u = seat.user!;
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
-                            ),
-                            leading: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // أيقونة السوبر أدمن
-                                if (u.isAdmin && !seat.hasFrame)
-                                  Container(
-                                    width: 52,
-                                    height: 52,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: const Color(0xFFFFD700),
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                  ),
-                                // صورة المستخدم
-                                ClipOval(
-                                  child: _memberAvatar(u.avatar, 40),
-                                ),
-                                // إطار SVGA إذا كان المستخدم يملكه (فوق الصورة)
-                                if (seat.hasFrame)
-                                  SvgaFrame(
-                                    svgaPath:
-                                        seat.frameAsset ?? R.superAdminFrame,
-                                    size: 52,
-                                  ),
-                              ],
-                            ),
-                            title: Row(
-                              children: [
-                                Text(
-                                  u.name,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                if (u.isAdmin) ...[
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(
-                                        0xFFFFD700,
-                                      ).withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                        color: const Color(
-                                          0xFFFFD700,
-                                        ).withValues(alpha: 0.5),
-                                      ),
-                                    ),
-                                    child: const Text(
-                                      'Admin',
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        color: Color(0xFFFFD700),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            subtitle: Text(
-                              'ID: ${(u.customId ?? '').isNotEmpty ? u.customId : (u.id != null ? ((1000000 + u.id.hashCode.abs() % 9000000).toString()) : '------')}',
-                              style: const TextStyle(
-                                color: Colors.white38,
-                                fontSize: 11,
-                              ),
-                            ),
-                            trailing: i == 0
-                                ? Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 3,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.gold.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Text(
-                                      'Host',
-                                      style: TextStyle(
-                                        color: AppColors.goldLight,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  )
-                                : null,
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
-            ),
+            ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
+
 
   // ── Notifications sheet ───────────────────────────────────────
   Widget _buildNotificationsSheet() {
