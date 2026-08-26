@@ -3,6 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/r.dart';
+import '../../services/dynamic_config_service.dart';
 import '../../providers/user_provider.dart';
 import '../../services/level_service.dart';
 import '../../services/supabase_service.dart';
@@ -36,20 +37,32 @@ class ProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final user = userProvider.currentUser;
+    final bgImg = DynamicConfigService().profileBackgroundImage;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF2F5FC),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 80),
-          child: Column(
-            children: [
-              _buildInfoSection(context, user),
-              _buildDataSection(context),
-              _buildWalletSection(context, user),
-              _buildVipSection(context),
-              _buildSettingsSection(context),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        color: DynamicConfigService().profileBackgroundColor,
+        image: bgImg.isNotEmpty
+            ? DecorationImage(
+                image: R.cachedImage(bgImg),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 80),
+            child: Column(
+              children: [
+                _buildInfoSection(context, user),
+                _buildDataSection(context),
+                _buildWalletSection(context, user),
+                _buildVipSection(context),
+                _buildSettingsSection(context),
+              ],
+            ),
           ),
         ),
       ),

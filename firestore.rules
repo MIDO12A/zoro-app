@@ -89,7 +89,8 @@ service cloud.firestore {
     // ── نظام الوكالات والشحن ──────────────────────────────────────────
     match /{col}/{id} {
       allow read, write: if signedIn() &&
-        (col.matches('host_agency_.*') ||
+        (col == 'host_agencies' ||
+         col.matches('host_agency_.*') ||
          col.matches('agency_.*') ||
          col.matches('agent_.*') ||
          col == 'bug_reports');

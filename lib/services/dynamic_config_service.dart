@@ -283,6 +283,54 @@ class DynamicConfigService extends ChangeNotifier {
   Color get roomVolumePanelBgColor => _screenColor('room', 'volumePanelBgColor', const Color(0xFF16151A));
   Color get roomFunctionsPanelBgColor => _screenColor('room', 'functionsPanelBgColor', const Color(0xFF16151A));
 
+  // Discover screen visuals
+  String get discoverBackgroundImage => _screenStr('discover', 'backgroundImage', '');
+  Color get discoverBackgroundColor => _screenColor('discover', 'backgroundColor', const Color(0xFFFFFFFF));
+  Color get discoverTextColor => _screenColor('discover', 'textColor', const Color(0xFF16151A));
+  Color get discoverSubTextColor => _screenColor('discover', 'subTextColor', const Color(0xFF9BA1B6));
+  Color get discoverCardBgColor => _screenColor('discover', 'cardBgColor', const Color(0xFFF7F7F8));
+
+  // Message screen visuals
+  String get messageBackgroundImage => _screenStr('message', 'backgroundImage', '');
+  Color get messageBackgroundColor => _screenColor('message', 'backgroundColor', const Color(0xFFFFFFFF));
+  Color get messageTextColor => _screenColor('message', 'textColor', const Color(0xFF16151A));
+  Color get messageSubTextColor => _screenColor('message', 'subTextColor', const Color(0xFF9BA1B6));
+  Color get messageCardBgColor => _screenColor('message', 'cardBgColor', const Color(0xFFF7F7F8));
+
+  // Profile screen visuals
+  String get profileBackgroundImage => _screenStr('profile', 'backgroundImage', '');
+  Color get profileBackgroundColor => _screenColor('profile', 'backgroundColor', const Color(0xFFF6F7F9));
+  Color get profileTextColor => _screenColor('profile', 'textColor', const Color(0xFF000000));
+  Color get profileSubTextColor => _screenColor('profile', 'subTextColor', const Color(0xFF888888));
+  Color get profileCardBg => _screenColor('profile', 'cardBgColor', const Color(0xFFFFFFFF));
+
+  // Chat screen visuals
+  String get chatBackgroundImage => _screenStr('chat', 'backgroundImage', '');
+  Color get chatBackgroundColor => _screenColor('chat', 'backgroundColor', const Color(0xFFF2F3F5));
+  Color get chatTextColor => _screenColor('chat', 'textColor', const Color(0xFF000000));
+  Color get chatBubbleSelfBg => _screenColor('chat', 'bubbleSelfBgColor', const Color(0xFFFFE082));
+  Color get chatBubbleOtherBg => _screenColor('chat', 'bubbleOtherBgColor', const Color(0xFFFFFFFF));
+
+  // UserProfile screen visuals (Mini profile card)
+  String get userProfileBackgroundImage => _screenStr('userProfile', 'backgroundImage', '');
+  Color get userProfileBackgroundColor => _screenColor('userProfile', 'backgroundColor', const Color(0xFF16151A));
+  Color get userProfileTextColor => _screenColor('userProfile', 'textColor', const Color(0xFFFFFFFF));
+  Color get userProfileSubTextColor => _screenColor('userProfile', 'subTextColor', const Color(0xFF9BA1B6));
+  Color get userProfileButtonColor => _screenColor('userProfile', 'buttonColor', const Color(0xFFFFE082));
+
+  // EventInfo screen visuals
+  String get eventInfoBackgroundImage => _screenStr('eventInfo', 'backgroundImage', '');
+  Color get eventInfoBackgroundColor => _screenColor('eventInfo', 'backgroundColor', const Color(0xFFFFFFFF));
+  Color get eventInfoTextColor => _screenColor('eventInfo', 'textColor', const Color(0xFF000000));
+  Color get eventInfoSubTextColor => _screenColor('eventInfo', 'subTextColor', const Color(0xFF888888));
+
+  // Notifications screen visuals
+  String get notificationsBackgroundImage => _screenStr('notifications', 'backgroundImage', '');
+  Color get notificationsBackgroundColor => _screenColor('notifications', 'backgroundColor', const Color(0xFF211211));
+  Color get notificationsTextColor => _screenColor('notifications', 'textColor', const Color(0xFFFFFFFF));
+  Color get notificationsSubTextColor => _screenColor('notifications', 'subTextColor', const Color(0xFFB3B3B3));
+  Color get notificationsCardBg => _screenColor('notifications', 'cardBgColor', const Color(0xFF301C1A));
+
   // Badges screen visuals
   Color get badgesHeaderBg => _screenColor('badges', 'headerBgColor', const Color(0xFF1a1a2e));
   String get badgesHeaderBgImage => _screenStr('badges', 'headerBgImage', '');

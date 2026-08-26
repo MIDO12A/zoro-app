@@ -18,6 +18,13 @@ interface ScreenVisuals {
   cp: Record<string, string>;
   signin: Record<string, string>;
   room: Record<string, string>;
+  discover: Record<string, string>;
+  message: Record<string, string>;
+  profile: Record<string, string>;
+  chat: Record<string, string>;
+  userProfile: Record<string, string>;
+  eventInfo: Record<string, string>;
+  notifications: Record<string, string>;
 }
 
 const defaultVisuals: ScreenVisuals = {
@@ -332,9 +339,57 @@ const defaultVisuals: ScreenVisuals = {
     volumePanelBgColor: '#16151A',
     functionsPanelBgColor: '#16151A',
   },
+  discover: {
+    backgroundImage: '',
+    backgroundColor: '#ffffff',
+    textColor: '#16151a',
+    subTextColor: '#9ba1b6',
+    cardBgColor: '#f7f7f8',
+  },
+  message: {
+    backgroundImage: '',
+    backgroundColor: '#ffffff',
+    textColor: '#16151a',
+    subTextColor: '#9ba1b6',
+    cardBgColor: '#f7f7f8',
+  },
+  profile: {
+    backgroundImage: '',
+    backgroundColor: '#f6f7f9',
+    textColor: '#000000',
+    subTextColor: '#888888',
+    cardBgColor: '#ffffff',
+  },
+  chat: {
+    backgroundImage: '',
+    backgroundColor: '#f2f3f5',
+    textColor: '#000000',
+    bubbleSelfBgColor: '#ffe082',
+    bubbleOtherBgColor: '#ffffff',
+  },
+  userProfile: {
+    backgroundImage: '',
+    backgroundColor: '#16151A',
+    textColor: '#ffffff',
+    subTextColor: '#9BA1B6',
+    buttonColor: '#FFE082',
+  },
+  eventInfo: {
+    backgroundImage: '',
+    backgroundColor: '#ffffff',
+    textColor: '#000000',
+    subTextColor: '#888888',
+  },
+  notifications: {
+    backgroundImage: '',
+    backgroundColor: '#211211',
+    textColor: '#ffffff',
+    subTextColor: '#b3b3b3',
+    cardBgColor: '#301c1a',
+  },
 };
 
-const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'wallet', 'level', 'cp', 'signin', 'room'] as const;
+const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'wallet', 'level', 'cp', 'signin', 'room', 'discover', 'message', 'profile', 'chat', 'userProfile', 'eventInfo', 'notifications'] as const;
 
 const screenLabels: Record<string, Record<string, string>> = {
   agency: { ar: 'شاشة الوكالة', en: 'Agency Screen' },
@@ -349,10 +404,20 @@ const screenLabels: Record<string, Record<string, string>> = {
   cp: { ar: '💑 شاشة CP', en: '💑 CP Screen' },
   signin: { ar: '📅 تسجيل الدخول اليومي', en: '📅 Weekly Sign-In' },
   room: { ar: '🎙 شاشة الغرفة', en: '🎙 Room Screen' },
+  discover: { ar: '🔍 شاشة الاستكشاف', en: '🔍 Discover Screen' },
+  message: { ar: '💬 شاشة الرسائل', en: '💬 Messages Screen' },
+  profile: { ar: '👤 شاشة حسابي', en: '👤 Me/Profile Screen' },
+  chat: { ar: '✉️ شاشة المحادثة الخاصة', en: '✉️ Private Chat Screen' },
+  userProfile: { ar: '🏷️ بطاقة المستخدم المصغرة', en: '🏷️ User Mini Profile Card' },
+  eventInfo: { ar: '📅 تفاصيل الحدث من الداخل', en: '📅 Event Details Screen' },
+  notifications: { ar: '🔔 إشعارات النظام', en: '🔔 System Notifications' },
 };
 
 const fieldLabels: Record<string, Record<string, string>> = {
   backgroundImage: { ar: 'صورة الخلفية', en: 'Background Image' },
+  backgroundColor: { ar: 'لون الخلفية', en: 'Background Color' },
+  bubbleSelfBgColor: { ar: 'لون فقاعة رسائلي', en: 'Self Bubble Background Color' },
+  bubbleOtherBgColor: { ar: 'لون فقاعة رسائل الطرف الآخر', en: 'Other Bubble Background Color' },
   seatDefaultCircleImage: { ar: 'صورة المقعد الدائري المفتوح', en: 'Circular Open Seat Image' },
   seatLockCircleImage: { ar: 'صورة المقعد الدائري المقفل', en: 'Circular Locked Seat Image' },
   seatDefaultClassicImage: { ar: 'صورة المقعد الكلاسيك المفتوح', en: 'Classic Open Seat Image' },

@@ -1940,8 +1940,19 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF2F5FC),
+    final bgImg = DynamicConfigService().chatBackgroundImage;
+    return Container(
+      decoration: BoxDecoration(
+        color: DynamicConfigService().chatBackgroundColor,
+        image: bgImg.isNotEmpty
+            ? DecorationImage(
+                image: R.cachedImage(bgImg),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
@@ -2005,8 +2016,9 @@ class _ChatScreenState extends State<ChatScreen> {
           _buildInputBar(),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildMessageBubble(MessageModel msg, bool isMe) {
     return Align(
@@ -2050,7 +2062,9 @@ class _ChatScreenState extends State<ChatScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isMe ? const Color(0xFF1E90FF) : Colors.white,
+                  color: isMe
+                      ? DynamicConfigService().chatBubbleSelfBg
+                      : DynamicConfigService().chatBubbleOtherBg,
                   borderRadius: BorderRadius.circular(12).copyWith(
                     bottomRight: isMe ? const Radius.circular(0) : null,
                     bottomLeft: !isMe ? const Radius.circular(0) : null,
@@ -2060,7 +2074,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   msg.text,
                   style: TextStyle(
                     fontSize: 14,
-                    color: isMe ? Colors.white : const Color(0xFF16151A),
+                    color: isMe
+                        ? Colors.white
+                        : DynamicConfigService().chatTextColor,
                   ),
                 ),
               ),

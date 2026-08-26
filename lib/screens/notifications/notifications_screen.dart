@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/supabase_service.dart';
+import '../../config/r.dart';
+import '../../services/dynamic_config_service.dart';
 import '../../models/notification_model.dart';
 import '../../providers/user_provider.dart';
 import '../../core/widgets/cached_image.dart';
@@ -27,10 +29,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF211211),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF211211),
+    final bgImg = DynamicConfigService().notificationsBackgroundImage;
+    return Container(
+      decoration: BoxDecoration(
+        color: DynamicConfigService().notificationsBackgroundColor,
+        image: bgImg.isNotEmpty
+            ? DecorationImage(
+                image: R.cachedImage(bgImg),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
         automaticallyImplyLeading: false,
         title: const Text(
           'Notifications',
@@ -239,8 +252,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           );
         },
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _actionButton({
     required String label,

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../core/widgets/cached_image.dart';
 import '../../config/r.dart';
+import '../../services/dynamic_config_service.dart';
 import '../../services/supabase_service.dart';
 import '../../models/banner_config.dart';
 import '../../models/room_model.dart';
@@ -194,23 +195,35 @@ class _RoomDiscoverScreenState extends State<RoomDiscoverScreen>
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final user = userProvider.currentUser;
+    final bgImg = DynamicConfigService().discoverBackgroundImage;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
-      body: Column(
-        children: [
-          _buildHeader(),
-          const _BannerCarousel(),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildDiscoverContent(true, user),
-                _buildDiscoverContent(false, user),
-              ],
+    return Container(
+      decoration: BoxDecoration(
+        color: DynamicConfigService().discoverBackgroundColor,
+        image: bgImg.isNotEmpty
+            ? DecorationImage(
+                image: R.cachedImage(bgImg),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Column(
+          children: [
+            _buildHeader(),
+            const _BannerCarousel(),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildDiscoverContent(true, user),
+                  _buildDiscoverContent(false, user),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

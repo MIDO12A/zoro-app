@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../services/supabase_service.dart';
 import '../../providers/user_provider.dart';
+import '../../services/dynamic_config_service.dart';
 import 'message_reply_detail_screen.dart';
 import '../notifications/notifications_screen.dart';
+import 'event_info_screen.dart';
 
 class MessageScreen extends StatefulWidget {
   const MessageScreen({super.key});
@@ -50,8 +52,19 @@ class _MessageScreenState extends State<MessageScreen> {
     final String eventInfoLabel = isAr ? 'معلومات\nالحدث' : 'Event\ninformation';
     final String systemNotifLabel = isAr ? 'إشعار\nالنظام' : 'System\nnotification';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
+    final bgImg = DynamicConfigService().messageBackgroundImage;
+    return Container(
+      decoration: BoxDecoration(
+        color: DynamicConfigService().messageBackgroundColor,
+        image: bgImg.isNotEmpty
+            ? DecorationImage(
+                image: R.cachedImage(bgImg),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Column(
           children: [
@@ -92,8 +105,9 @@ class _MessageScreenState extends State<MessageScreen> {
                             badgeCount: 2,
                             isAr: isAr,
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(isAr ? 'معلومات الحدث قريباً' : 'Event information coming soon')),
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const EventInfoScreen()),
                               );
                             },
                           ),
@@ -140,8 +154,9 @@ class _MessageScreenState extends State<MessageScreen> {
                             badgeCount: 2,
                             isAr: isAr,
                             onTap: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text(isAr ? 'معلومات الحدث قريباً' : 'Event information coming soon')),
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const EventInfoScreen()),
                               );
                             },
                           ),
@@ -384,8 +399,9 @@ class _MessageScreenState extends State<MessageScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   String _formatTime(int timestamp) {
     final dt = DateTime.fromMillisecondsSinceEpoch(timestamp);

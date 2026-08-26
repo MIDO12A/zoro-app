@@ -205,6 +205,16 @@ class _UserProfileState extends State<UserProfile> {
             ),
           Container(
             margin: const EdgeInsets.only(top: 49),
+            decoration: BoxDecoration(
+              color: DynamicConfigService().userProfileBackgroundColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              image: DynamicConfigService().userProfileBackgroundImage.isNotEmpty
+                  ? DecorationImage(
+                      image: R.cachedImage(DynamicConfigService().userProfileBackgroundImage),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               child: Column(
