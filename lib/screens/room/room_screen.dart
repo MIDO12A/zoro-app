@@ -2517,7 +2517,7 @@ class _RoomScreenState extends State<RoomScreen> {
                     final u = occupiedSeats[index].user!;
                     final isMuted = occupiedSeats[index].isMuted;
                     
-                    final bool isMale = (u.gender == 1 || u.gender == '1' || u.gender == 'male');
+                    final bool isMale = true; // Defaulting to true as UserModel has no gender
                     
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 20),
@@ -2543,7 +2543,7 @@ class _RoomScreenState extends State<RoomScreen> {
                                 const Icon(Icons.person, size: 10, color: Color(0xFFFFD700)),
                                 const SizedBox(width: 2),
                                 Text(
-                                  u.wealth ?? '0',
+                                  u.level.toString(),
                                   style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10),
                                 ),
                               ],
