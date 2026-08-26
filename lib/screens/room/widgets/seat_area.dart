@@ -89,10 +89,10 @@ class SeatArea extends StatelessWidget {
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final sw = MediaQuery.of(context).size.width;
     final double layoutWidth = sw;
-    const double layoutHeight = 350.0;
+    const double layoutHeight = 420.0;
     final double centerX = layoutWidth / 2;
     final double centerY = layoutHeight / 2;
-    const double radius = 120.0;
+    const double radius = 140.0;
 
     return Center(
       child: Container(
@@ -134,14 +134,17 @@ class SeatArea extends StatelessWidget {
   Widget _buildCircularSeatItem(int idx, bool isCaptain) {
     return GestureDetector(
       onTap: () => onSeatTap(idx),
-      child: _NormalSeat(
-        seat: seats[idx],
-        emoji: seatEmojis?[idx],
-        isModerator: seats[idx].user != null
-            ? moderators?.contains(seats[idx].user!.id) ?? false
-            : false,
-        seatStyle: seatStyle,
-        isCaptain: isCaptain,
+      child: Transform.scale(
+        scale: 1.2,
+        child: _NormalSeat(
+          seat: seats[idx],
+          emoji: seatEmojis?[idx],
+          isModerator: seats[idx].user != null
+              ? moderators?.contains(seats[idx].user!.id) ?? false
+              : false,
+          seatStyle: seatStyle,
+          isCaptain: isCaptain,
+        ),
       ),
     );
   }
