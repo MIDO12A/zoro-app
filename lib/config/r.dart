@@ -70,6 +70,8 @@ class R {
       '$_m/room_mic_seat_default_ic.webp';
   static const String roomMicSeatBigIc = '$_m/room_mic_seat_big_ic.webp';
   static const String roomMicSeatLockIc = '$_m/room_mic_seat_lock_ic.webp';
+  static const String roomMicSeatDefaultCircle = 'assets/mipmap-xxhdpi/room_mic_seat_default_circle.png';
+  static const String roomMicSeatLockCircle = 'assets/mipmap-xxhdpi/room_mic_seat_lock_circle.png';
   static const String roomMicSeatMuteIc = '$_m/room_mic_seat_mute_ic.webp';
   static const String roomLockStateIc = '$_m/room_lock_state_ic.webp';
   static const String roomPwdLockOffIc = '$_m/room_pwd_lock_off_ic.webp';

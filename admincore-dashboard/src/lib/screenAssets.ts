@@ -30,6 +30,8 @@ export const SCREEN_ASSETS: Record<string, { label: string; assets: ScreenAssetE
       { constant: 'roomMicSeatDefaultIc', path: 'assets/mipmap-xxhdpi/room_mic_seat_default_ic.webp', fullKey: 'assets_mipmap-xxhdpi_room_mic_seat_default_ic_webp' },
       { constant: 'roomMicSeatBigIc', path: 'assets/mipmap-xxhdpi/room_mic_seat_big_ic.webp', fullKey: 'assets_mipmap-xxhdpi_room_mic_seat_big_ic_webp' },
       { constant: 'roomMicSeatLockIc', path: 'assets/mipmap-xxhdpi/room_mic_seat_lock_ic.webp', fullKey: 'assets_mipmap-xxhdpi_room_mic_seat_lock_ic_webp' },
+      { constant: 'roomMicSeatDefaultCircle', path: 'assets/mipmap-xxhdpi/room_mic_seat_default_circle.png', fullKey: 'assets_mipmap-xxhdpi_room_mic_seat_default_circle_png' },
+      { constant: 'roomMicSeatLockCircle', path: 'assets/mipmap-xxhdpi/room_mic_seat_lock_circle.png', fullKey: 'assets_mipmap-xxhdpi_room_mic_seat_lock_circle_png' },
       { constant: 'roomMicSeatMuteIc', path: 'assets/mipmap-xxhdpi/room_mic_seat_mute_ic.webp', fullKey: 'assets_mipmap-xxhdpi_room_mic_seat_mute_ic_webp' },
       { constant: 'roomLockStateIc', path: 'assets/mipmap-xxhdpi/room_lock_state_ic.webp', fullKey: 'assets_mipmap-xxhdpi_room_lock_state_ic_webp' },
       { constant: 'roomPwdLockOffIc', path: 'assets/mipmap-xxhdpi/room_pwd_lock_off_ic.webp', fullKey: 'assets_mipmap-xxhdpi_room_pwd_lock_off_ic_webp' },

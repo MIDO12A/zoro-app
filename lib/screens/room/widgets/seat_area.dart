@@ -350,14 +350,8 @@ class _NormalSeat extends StatelessWidget {
             width: size,
             height: size,
             child: seat.isLocked
-                ? Image.asset(
-                    'assets/mipmap-xxhdpi/room_mic_seat_lock_circle.png',
-                    fit: BoxFit.cover,
-                  )
-                : Image.asset(
-                    'assets/mipmap-xxhdpi/room_mic_seat_default_circle.png',
-                    fit: BoxFit.cover,
-                  ),
+                ? R.image(R.roomMicSeatLockCircle, fit: BoxFit.cover)
+                : R.image(R.roomMicSeatDefaultCircle, fit: BoxFit.cover),
           ),
         );
       }
