@@ -490,8 +490,6 @@ const fieldLabels: Record<string, Record<string, string>> = {
   rankTagBronzeSvg: { ar: 'وسام البرونزية (SVG)', en: 'Bronze Rank Tag (SVG)' },
   historyCardSvg: { ar: 'خلفية بطاقة التاريخ (SVG)', en: 'History Card BG (SVG)' },
   giftsBannerSvg: { ar: 'خلفية هدايا CP (SVG)', en: 'CP Gifts Banner BG (SVG)' },
-  tabActiveColor: { ar: 'لون التبويب النشط', en: 'Tab Active Color' },
-  tabInactiveColor: { ar: 'لون التبويب غير النشط', en: 'Tab Inactive Color' },
   tabBgColor: { ar: 'لون خلفية التبويب', en: 'Tab Background Color' },
   tabBgImage: { ar: 'صورة خلفية التبويب', en: 'Tab Background Image' },
   countdownTextColor: { ar: 'لون نص العد التنازلي', en: 'Countdown Text Color' },
