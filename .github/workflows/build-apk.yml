@@ -54,7 +54,7 @@ jobs:
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((1790000000 + BUILD_NUM))
+          VERSION_CODE=$((1795000000 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
