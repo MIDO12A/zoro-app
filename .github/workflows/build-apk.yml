@@ -70,16 +70,14 @@ jobs:
           printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$bn" "$SHA" > build_info.json
           cat build_info.json
 
-      - name: Publish to GitHub Release (latest)
+      - name: Publish to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest \
+          gh release create v${{ github.run_number }} \
             "zero-app.apk#zero-app.apk (arm64)" \
             "zero-app-arm32.apk#zero-app-arm32.apk (arm32)" \
             "zero-app-x86_64.apk#zero-app-x86_64.apk (x86_64)" \
             "build_info.json#build_info.json" \
-            --title "Zero App v${{ steps.ver.outputs.ver }} (build $((76000 + ${{ github.run_number }})))" \
-            --notes "Auto-build of commit ${{ github.sha }}" \
-            --latest
+            --title "Update v${{ github.run_number }}" \
+            --notes "Auto-build of commit ${{ github.sha }}"
