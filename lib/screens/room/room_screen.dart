@@ -1326,7 +1326,7 @@ class _RoomScreenState extends State<RoomScreen> {
                     context: context,
                     isScrollControlled: true,
                     backgroundColor: Colors.transparent,
-                    builder: (_) => const RoomRankBottomSheet(),
+                    builder: (_) => RoomRankBottomSheet(roomId: widget.room.id),
                   );
                 },
                 onInfoTap: () => setState(() => _showRoomInfo = true),

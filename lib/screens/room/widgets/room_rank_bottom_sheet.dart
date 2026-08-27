@@ -1,15 +1,72 @@
 import 'package:flutter/material.dart';
+import '../../../../services/firebase_service.dart';
+import '../../../../config/r.dart';
 
 class RoomRankBottomSheet extends StatefulWidget {
-  const RoomRankBottomSheet({Key? key}) : super(key: key);
+  final String roomId;
+  const RoomRankBottomSheet({Key? key, required this.roomId}) : super(key: key);
 
   @override
   State<RoomRankBottomSheet> createState() => _RoomRankBottomSheetState();
 }
 
 class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
-  int _mainTabIndex = 0;
-  int _subTabIndex = 0;
+  int _mainTabIndex = 0; // 0 for Wealth, 1 for Magic
+  int _subTabIndex = 0; // 0 for Daily, 1 for Weekly, 2 for Monthly
+
+  List<Map<String, dynamic>> _rankings = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRankings();
+  }
+
+  void _fetchRankings() async {
+    setState(() => _isLoading = true);
+    final String timeframe = _subTabIndex == 0 ? 'daily' : _subTabIndex == 1 ? 'weekly' : 'monthly';
+    final bool isWealth = _mainTabIndex == 0;
+    
+    try {
+      final data = await FirebaseService.instance.getRoomRankings(
+        roomId: widget.roomId,
+        isWealth: isWealth,
+        timeframe: timeframe,
+      );
+      if (mounted) {
+        setState(() {
+          _rankings = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _rankings = [];
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _onMainTabChanged(int index) {
+    if (_mainTabIndex != index) {
+      setState(() {
+        _mainTabIndex = index;
+      });
+      _fetchRankings();
+    }
+  }
+
+  void _onSubTabChanged(int index) {
+    if (_subTabIndex != index) {
+      setState(() {
+        _subTabIndex = index;
+      });
+      _fetchRankings();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,31 +106,128 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
           Column(
             children: [
               const SizedBox(height: 70),
-              // Main Tabs (الثروة، السحر، باتل)
+              // Main Tabs (الثروة، السحر)
               _buildMainTabs(),
               const SizedBox(height: 30),
-              // Sub Tabs (يوميا، أسبوعيا، تصنيف المجموع)
+              // Sub Tabs (يوميا، أسبوعيا، شهريا)
               _buildSubTabs(),
               const SizedBox(height: 20),
-              // Countdown timer
-              const Text(
-                'العد التنازلي: 02h 39m 09s (GMT+3)',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+              
+              Expanded(
+                child: _isLoading 
+                    ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD54F)))
+                    : _rankings.isEmpty
+                        ? _buildEmptyState()
+                        : _buildRankList(),
               ),
-              const Spacer(),
-              // Empty State / Placeholder
-              const Icon(
-                Icons.emoji_events,
-                color: Color(0xFFFFD54F),
-                size: 80,
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'لا توجد بيانات حالياً',
-                style: TextStyle(color: Colors.white54, fontSize: 14),
-              ),
-              const Spacer(flex: 2),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.emoji_events, color: Color(0xFFFFD54F), size: 80),
+        const SizedBox(height: 10),
+        const Text(
+          'لا توجد بيانات حالياً',
+          style: TextStyle(color: Colors.white54, fontSize: 14),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRankList() {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: _rankings.length,
+      itemBuilder: (context, index) {
+        final item = _rankings[index];
+        return _buildRankItem(item, index + 1);
+      },
+    );
+  }
+
+  Widget _buildRankItem(Map<String, dynamic> item, int rank) {
+    String? frameAsset;
+    if (rank == 1) frameAsset = 'assets/mipmap-xxhdpi/rank_1_frame.png';
+    else if (rank == 2) frameAsset = 'assets/mipmap-xxhdpi/rank_2_frame.png';
+    else if (rank == 3) frameAsset = 'assets/mipmap-xxhdpi/rank_3_frame.png';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
+      ),
+      child: Row(
+        children: [
+          // Rank Number
+          SizedBox(
+            width: 25,
+            child: Text(
+              '$rank',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: rank <= 3 ? const Color(0xFFFFD54F) : Colors.white70,
+                fontSize: rank <= 3 ? 20 : 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(width: 15),
+          
+          // Avatar with Frame
+          SizedBox(
+            width: 70,
+            height: 70,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundImage: item['user_photo_url'] != null && item['user_photo_url'].toString().isNotEmpty
+                      ? NetworkImage(item['user_photo_url'])
+                      : const AssetImage(R.assetsAvatarDefault) as ImageProvider,
+                ),
+                if (frameAsset != null)
+                  Image.asset(frameAsset, width: 70, height: 70, fit: BoxFit.cover),
+              ],
+            ),
+          ),
+          const SizedBox(width: 15),
+          
+          // Name and Value
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  item['user_name'],
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Image.asset(R.assetsIconCoin, width: 14, height: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${item['total_value']}',
+                      style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -84,8 +238,6 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _buildMainTabItem('باتل', 2),
-        const SizedBox(width: 40),
         _buildMainTabItem('السحر', 1),
         const SizedBox(width: 40),
         _buildMainTabItem('الثروة', 0),
@@ -96,11 +248,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
   Widget _buildMainTabItem(String title, int index) {
     bool isActive = _mainTabIndex == index;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _mainTabIndex = index;
-        });
-      },
+      onTap: () => _onMainTabChanged(index),
       child: Column(
         children: [
           Text(
@@ -139,7 +287,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
       ),
       child: Row(
         children: [
-          _buildSubTabItem('تصنيف المجموع', 2),
+          _buildSubTabItem('شهريا', 2),
           _buildSubTabItem('أسبوعيًا', 1),
           _buildSubTabItem('يوميا', 0),
         ],
@@ -151,11 +299,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
     bool isActive = _subTabIndex == index;
     return Expanded(
       child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _subTabIndex = index;
-          });
-        },
+        onTap: () => _onSubTabChanged(index),
         child: Container(
           alignment: Alignment.center,
           decoration: isActive

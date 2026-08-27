@@ -476,6 +476,73 @@ class FirebaseService {
       debugPrint('sendGift: transaction failed (insufficient coins?): $e');
       return false;
     }
+    return true;
+  }
+
+  /// Fetch Top 10 rankings for a room (Wealth = senders, Magic = receivers)
+  Future<List<Map<String, dynamic>>> getRoomRankings({
+    required String roomId,
+    required bool isWealth,
+    required String timeframe,
+  }) async {
+    DateTime now = DateTime.now();
+    DateTime startDate;
+    if (timeframe == 'daily') {
+      startDate = now.subtract(const Duration(hours: 24));
+    } else if (timeframe == 'weekly') {
+      startDate = now.subtract(const Duration(days: 7));
+    } else { // monthly
+      startDate = DateTime(now.year, now.month, 1);
+    }
+    String startStr = startDate.toIso8601String();
+
+    try {
+      final snap = await _db.collection('sent_gifts')
+          .where('room_id', isEqualTo: roomId)
+          .where('created_at', isGreaterThanOrEqualTo: startStr)
+          .get();
+      return _processRankings(snap.docs, isWealth);
+    } catch (e) {
+      // Fallback if composite index is missing
+      final snap = await _db.collection('sent_gifts')
+          .where('room_id', isEqualTo: roomId)
+          .get();
+      final filteredDocs = snap.docs.where((doc) {
+        final d = doc.data();
+        final created = d['created_at'] as String? ?? '';
+        return created.compareTo(startStr) >= 0;
+      }).toList();
+      return _processRankings(filteredDocs, isWealth);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _processRankings(List<dynamic> docs, bool isWealth) async {
+    final Map<String, int> totals = {};
+    for (var doc in docs) {
+      final d = doc.data() as Map<String, dynamic>;
+      final userId = isWealth ? d['sender_id'] : d['receiver_id'];
+      final value = _asInt(d['value']) * _asInt(d['count']);
+      if (userId == null) continue;
+      totals[userId] = (totals[userId] ?? 0) + value;
+    }
+
+    final entries = totals.entries.toList();
+    entries.sort((a, b) => b.value.compareTo(a.value));
+    final top10 = entries.take(10).toList();
+
+    final List<Map<String, dynamic>> results = [];
+    for (var entry in top10) {
+      final userSnap = await _db.collection('users').doc(entry.key).get();
+      final ud = userSnap.data() ?? {};
+      results.add({
+        'user_id': entry.key,
+        'user_name': ud['name'] ?? 'Unknown',
+        'user_photo_url': ud['photo_url'] ?? '',
+        'total_value': entry.value,
+      });
+    }
+    return results;
+  }
 
     // Real-time notification for the receiver (non-fatal)
     try {
