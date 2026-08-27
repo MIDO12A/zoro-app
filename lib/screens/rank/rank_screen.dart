@@ -164,6 +164,11 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildHeader() {
+    final config = context.watch<DynamicConfigService>();
+    final mainBg = config.globalRankMainTabBg;
+    final mainIndicator = config.globalRankMainTabIndicator;
+    final mainTextColor = config.globalRankMainTabTextColor;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: SizedBox(
@@ -180,18 +185,28 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: TabBar(
-                  controller: _mainTabController,
-                  indicatorColor: const Color(0xFFFFD54F),
-                  indicatorWeight: 3,
-                  labelColor: const Color(0xFFFFD54F),
-                  unselectedLabelColor: Colors.white70,
-                  labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  tabs: const [
-                    Tab(text: 'الثروة'),
-                    Tab(text: 'السحر'),
-                    Tab(text: 'الغرف'),
-                  ],
+                child: Container(
+                  decoration: mainBg.isNotEmpty
+                      ? BoxDecoration(
+                          image: DecorationImage(image: NetworkImage(mainBg), fit: BoxFit.fill),
+                        )
+                      : null,
+                  child: TabBar(
+                    controller: _mainTabController,
+                    indicator: mainIndicator.isNotEmpty
+                        ? BoxDecoration(
+                            image: DecorationImage(image: NetworkImage(mainIndicator), fit: BoxFit.fill),
+                          )
+                        : const UnderlineTabIndicator(borderSide: BorderSide(color: Color(0xFFFFD54F), width: 3)),
+                    labelColor: mainTextColor,
+                    unselectedLabelColor: Colors.white70,
+                    labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    tabs: const [
+                      Tab(text: 'الثروة'),
+                      Tab(text: 'السحر'),
+                      Tab(text: 'الغرف'),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -203,6 +218,11 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildRankPage(String type, TabController subTabController) {
+    final config = context.watch<DynamicConfigService>();
+    final subBg = config.globalRankSubTabBg;
+    final subIndicator = config.globalRankSubTabIndicator;
+    final subTextColor = config.globalRankSubTabTextColor;
+
     return Column(
       children: [
         const SizedBox(height: 10),
@@ -210,22 +230,32 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
         Container(
           height: 36,
           margin: const EdgeInsets.symmetric(horizontal: 40),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFFFD54F).withOpacity(0.3)),
-          ),
+          decoration: subBg.isNotEmpty
+              ? BoxDecoration(
+                  image: DecorationImage(image: NetworkImage(subBg), fit: BoxFit.fill),
+                  borderRadius: BorderRadius.circular(18),
+                )
+              : BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFFFD54F).withOpacity(0.3)),
+                ),
           child: TabBar(
             controller: subTabController,
-            indicator: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              gradient: const LinearGradient(
-                colors: [Color(0xFFFFD54F), Color(0xFFF57F17)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-            labelColor: Colors.black,
+            indicator: subIndicator.isNotEmpty
+                ? BoxDecoration(
+                    image: DecorationImage(image: NetworkImage(subIndicator), fit: BoxFit.fill),
+                    borderRadius: BorderRadius.circular(18),
+                  )
+                : BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFFFD54F), Color(0xFFF57F17)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+            labelColor: subTextColor,
             unselectedLabelColor: Colors.white70,
             labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
             tabs: const [
@@ -362,32 +392,32 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
           
           // Name and Details on Banner
           Positioned(
-            bottom: isGold ? 45 : 30,
+            bottom: isGold ? 70 : 50,
             child: SizedBox(
               width: width - 10,
               child: Column(
                 children: [
                   Text(
-                    item['name'],
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    item['name']?.toString() ?? '',
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 2),
-                  if (item['user_id'] != null)
+                  const SizedBox(height: 1),
+                  if ((item['user_id'] ?? item['id']) != null)
                     Text(
-                      'ID: ${item['user_id']}',
+                      'ID: ${item['user_id'] ?? item['id']}',
                       style: const TextStyle(color: Colors.white70, fontSize: 10),
                     ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 12, height: 12),
                       const SizedBox(width: 4),
                       Text(
-                        _formatPoints(item['points']),
+                        _formatPoints(item['points'] ?? 0),
                         style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ],

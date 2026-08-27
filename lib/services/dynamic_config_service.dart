@@ -127,6 +127,12 @@ class DynamicConfigService extends ChangeNotifier {
   String get globalRank2Banner => _screenStr('rank', 'rank2Banner', '');
   String get globalRank3Banner => _screenStr('rank', 'rank3Banner', '');
   String get globalRankListBg => _screenStr('rank', 'listBgImage', '');
+  String get globalRankMainTabBg => _screenStr('rank', 'mainTabBgImage', '');
+  String get globalRankMainTabIndicator => _screenStr('rank', 'mainTabIndicatorImage', '');
+  Color get globalRankMainTabTextColor => _screenColor('rank', 'mainTabTextColor', const Color(0xFFFFD54F));
+  String get globalRankSubTabBg => _screenStr('rank', 'subTabBgImage', '');
+  String get globalRankSubTabIndicator => _screenStr('rank', 'subTabIndicatorImage', '');
+  Color get globalRankSubTabTextColor => _screenColor('rank', 'subTabTextColor', const Color(0xFF000000));
   String _rankBg = '';
   String _rankGoldColor = '#FFD700';
   String _rankSilverColor = '#C0C0C0';
