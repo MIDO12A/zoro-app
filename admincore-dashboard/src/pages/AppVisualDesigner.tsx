@@ -1563,7 +1563,46 @@ export default function AppVisualDesigner() {
             />
           </div>
 
-          <hr className="border-white/5" />
+          {/* New Rank UI Config fields */}
+          <div className="space-y-4 max-w-xl mt-6 p-4 border border-indigo-500/30 rounded-xl bg-indigo-500/5">
+             <h4 className="text-indigo-400 font-bold mb-3">{lang === 'ar' ? '🎨 صور وإطارات الترتيب العام (التصميم الجديد)' : 'Global Rank UI Config'}</h4>
+             {[
+               {key: 'bgImage', labelAr: 'خلفية الشاشة بالكامل'},
+               {key: 'listBgImage', labelAr: 'خلفية القائمة (المركز 4 فما فوق)'},
+               {key: 'rank1Frame', labelAr: 'إطار المركز الأول'},
+               {key: 'rank2Frame', labelAr: 'إطار المركز الثاني'},
+               {key: 'rank3Frame', labelAr: 'إطار المركز الثالث'},
+               {key: 'rank1Banner', labelAr: 'راية المركز الأول'},
+               {key: 'rank2Banner', labelAr: 'راية المركز الثاني'},
+               {key: 'rank3Banner', labelAr: 'راية المركز الثالث'}
+             ].map(f => (
+               <div key={f.key} className="flex flex-col gap-1.5 mb-4">
+                 <label className="text-xs text-white font-semibold">{f.labelAr} ({f.key})</label>
+                 <div className="flex gap-2 items-center">
+                   <input type="text" value={visuals.rank?.[f.key] || ''} onChange={e => updateField('rank', f.key, e.target.value)} className="flex-1 bg-black/40 border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white font-mono" placeholder="URL..." />
+                   <label className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-xs font-bold cursor-pointer text-white flex items-center gap-1">
+                     <Upload className="w-3 h-3" /> {lang === 'ar' ? 'رفع' : 'Upload'}
+                     <input type="file" className="hidden" accept="image/*" onChange={async (e) => {
+                       const file = e.target.files?.[0];
+                       if(!file) return;
+                       try {
+                         const url = await uploadAppAsset(file, `global_rank_${f.key}`);
+                         updateField('rank', f.key, url);
+                         showMsg(lang === 'ar' ? 'تم الرفع' : 'Uploaded');
+                       } catch(err) {
+                         alert(lang === 'ar' ? 'فشل' : 'Failed');
+                       }
+                     }} />
+                   </label>
+                 </div>
+                 {visuals.rank?.[f.key] && (
+                   <img src={visuals.rank[f.key]} className="h-20 w-max object-contain rounded-lg border border-white/10 mt-1 bg-black/50" />
+                 )}
+               </div>
+             ))}
+          </div>
+
+          <hr className="border-white/5 mt-6" />
 
           {/* Ranks frames uploads */}
           <div className="space-y-4">
