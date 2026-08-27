@@ -49,12 +49,12 @@ jobs:
 
       # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
       # strictly increasing and higher than any previously installed APK.
-      # 1788000000 is above all existing UNIX timestamps in this project.
+      # 1789000000 is above all existing UNIX timestamps and old numbers in this project.
       - name: Build release APKs
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((1788000000 + BUILD_NUM))
+          VERSION_CODE=$((1789000000 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
