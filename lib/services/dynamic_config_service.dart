@@ -119,7 +119,14 @@ class DynamicConfigService extends ChangeNotifier {
   Map<String, String> _iconOverrides = {};
 
   // Ranking screen config
-  String _rankBg = '';
+  String get globalRankBg => _screenStr('rank', 'bgImage', '');
+  String get globalRank1Frame => _screenStr('rank', 'rank1Frame', '');
+  String get globalRank2Frame => _screenStr('rank', 'rank2Frame', '');
+  String get globalRank3Frame => _screenStr('rank', 'rank3Frame', '');
+  String get globalRank1Banner => _screenStr('rank', 'rank1Banner', '');
+  String get globalRank2Banner => _screenStr('rank', 'rank2Banner', '');
+  String get globalRank3Banner => _screenStr('rank', 'rank3Banner', '');
+  String get globalRankListBg => _screenStr('rank', 'listBgImage', '');
   String _rankGoldColor = '#FFD700';
   String _rankSilverColor = '#C0C0C0';
   String _rankBronzeColor = '#CD7F32';

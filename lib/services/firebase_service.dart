@@ -1725,4 +1725,28 @@ class FirebaseService {
     }
     return results;
   }
+  Future<List<Map<String, dynamic>>> getRoomGlobalRanking({
+    int limit = 50,
+  }) async {
+    try {
+      final snap = await _db
+          .collection('rooms')
+          .orderBy('total_gifts', descending: true)
+          .limit(limit)
+          .get();
+      return snap.docs.map((doc) {
+        final data = doc.data();
+        return {
+          'id': doc.id,
+          'name': data['title'] ?? 'Room',
+          'photoUrl': data['image'] ?? '',
+          'user_id': data['room_id'] ?? doc.id,
+          'points': (data['total_gifts'] as num?)?.toInt() ?? 0,
+        };
+      }).toList();
+    } catch (e) {
+      debugPrint('getRoomGlobalRanking error: $e');
+      return [];
+    }
+  }
 }

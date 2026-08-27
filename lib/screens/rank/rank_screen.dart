@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../services/supabase_service.dart';
 import '../../services/dynamic_config_service.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 enum _RankPeriod { daily, weekly, monthly, all }
 
@@ -18,6 +19,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   late TabController _mainTabController;
   late TabController _wealthSubTabController;
   late TabController _charmSubTabController;
+  late TabController _roomsSubTabController;
   final SupabaseService _api = SupabaseService();
   final Map<String, List<Map<String, dynamic>>> _cachedRankings = {};
   bool _loading = true;
@@ -39,16 +41,17 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _mainTabController = TabController(length: 2, vsync: this);
+    _mainTabController = TabController(length: 3, vsync: this);
     _mainTabController.addListener(() {
       if (!_mainTabController.indexIsChanging) {
         setState(() {
-          _currentType = ['wealth', 'charm'][_mainTabController.index];
+          _currentType = ['wealth', 'charm', 'rooms'][_mainTabController.index];
         });
       }
     });
     _wealthSubTabController = TabController(length: 3, vsync: this);
     _charmSubTabController = TabController(length: 3, vsync: this);
+    _roomsSubTabController = TabController(length: 3, vsync: this);
     _loadRankings();
 
     _countdownStr = _getCountdownString();
@@ -67,6 +70,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     _mainTabController.dispose();
     _wealthSubTabController.dispose();
     _charmSubTabController.dispose();
+    _roomsSubTabController.dispose();
     super.dispose();
   }
 
@@ -76,11 +80,13 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
       final results = await Future.wait([
         _api.getUserRanking(orderByField: 'total_gifts_sent'),
         _api.getUserRanking(orderByField: 'total_gifts_received'),
+        _api.getRoomGlobalRanking(),
       ]);
       if (mounted) {
         setState(() {
           _cachedRankings['wealth'] = results[0];
           _cachedRankings['charm'] = results[1];
+          _cachedRankings['rooms'] = results[2];
           _loading = false;
         });
       }
@@ -91,6 +97,9 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
 
   List<Map<String, dynamic>> _getRankingData(_RankPeriod period, String type) {
     final data = _cachedRankings[type] ?? [];
+    if (type == 'rooms') {
+       return data;
+    }
     return data.map((e) {
       final points = type == 'wealth'
           ? (e['total_gifts_sent'] ?? 0)
@@ -101,19 +110,34 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
         'photoUrl': e['photo_url'] ?? '',
         'points': points,
         'level': e['level'] ?? 1,
+        'user_id': e['user_id'] ?? e['id'] ?? e['uid'] ?? '',
       };
     }).toList();
   }
 
+  Widget _buildDynamicImage(String remoteUrl, String localFallback, {BoxFit fit = BoxFit.cover}) {
+    if (remoteUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: remoteUrl,
+        fit: fit,
+        errorWidget: (context, url, error) => Image.asset(localFallback, fit: fit),
+      );
+    }
+    return Image.asset(localFallback, fit: fit);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final config = context.watch<DynamicConfigService>();
+    
     return Scaffold(
       body: Stack(
         children: [
           // Background Image
           Positioned.fill(
-            child: Image.asset(
-              'assets/mipmap-xxhdpi/room_rank_bg.png', // Using the grand room background for now
+            child: _buildDynamicImage(
+              config.globalRankBg,
+              'assets/mipmap-xxhdpi/global_rank_asset_2.png',
               fit: BoxFit.cover,
             ),
           ),
@@ -127,6 +151,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                     children: [
                       _buildRankPage('wealth', _wealthSubTabController),
                       _buildRankPage('charm', _charmSubTabController),
+                      _buildRankPage('rooms', _roomsSubTabController),
                     ],
                   ),
                 ),
@@ -154,22 +179,23 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: TabBar(
                   controller: _mainTabController,
                   indicatorColor: const Color(0xFFFFD54F),
                   indicatorWeight: 3,
                   labelColor: const Color(0xFFFFD54F),
                   unselectedLabelColor: Colors.white70,
-                  labelStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   tabs: const [
                     Tab(text: 'الثروة'),
                     Tab(text: 'السحر'),
+                    Tab(text: 'الغرف'),
                   ],
                 ),
               ),
             ),
-            const SizedBox(width: 36), // Balance space for back button
+            const SizedBox(width: 36),
           ],
         ),
       ),
@@ -209,16 +235,6 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             ],
           ),
         ),
-        const SizedBox(height: 15),
-        // Countdown
-        Text(
-          'العد التنازلي: (GMT+3) $_countdownStr',
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.white70,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
         const SizedBox(height: 10),
         
         // List
@@ -255,23 +271,22 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
 
     return Column(
       children: [
-        // Top 3 Podium
         if (data.isNotEmpty)
           Container(
-            height: 400,
+            height: 280,
             padding: const EdgeInsets.only(top: 10),
             child: Stack(
               alignment: Alignment.topCenter,
               children: [
                 if (data.length >= 2)
                   Positioned(
-                    right: 5,
+                    right: 30,
                     bottom: 0,
                     child: _buildTopRankItem(data[1], 2),
                   ),
                 if (data.length >= 3)
                   Positioned(
-                    left: 5,
+                    left: 30,
                     bottom: 0,
                     child: _buildTopRankItem(data[2], 3),
                   ),
@@ -284,7 +299,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             ),
           ),
         
-        const SizedBox(height: 10),
+        const SizedBox(height: 15),
         
         // Ranks 4+ List
         Expanded(
@@ -292,7 +307,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: data.length > 3 ? data.length - 3 : 0,
             itemBuilder: (context, index) {
-              return _buildNormalItem(data[index + 3], index + 4);
+              return _buildNormalItem(data[index + 3], index + 4, type);
             },
           ),
         ),
@@ -301,72 +316,79 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildTopRankItem(Map<String, dynamic> item, int rank) {
+    final config = context.watch<DynamicConfigService>();
     final isGold = rank == 1;
     
-    String bannerAsset;
-    if (rank == 1) bannerAsset = 'assets/mipmap-xxhdpi/global_rank_asset_7.png'; // Red banner
-    else if (rank == 2) bannerAsset = 'assets/mipmap-xxhdpi/global_rank_asset_8.png'; // Purple banner
-    else bannerAsset = 'assets/mipmap-xxhdpi/global_rank_asset_1.png'; // Blue banner
+    String remoteBanner = '';
+    String localBanner = '';
+    String remoteFrame = '';
+    String localFrame = '';
 
-    String frameAsset;
-    if (rank == 1) frameAsset = 'assets/mipmap-xxhdpi/rank_1_frame.png';
-    else if (rank == 2) frameAsset = 'assets/mipmap-xxhdpi/rank_2_frame.png';
-    else frameAsset = 'assets/mipmap-xxhdpi/global_rank_asset_6.png'; // New Top 3 frame
+    if (rank == 1) {
+      remoteBanner = config.globalRank1Banner;
+      localBanner = 'assets/mipmap-xxhdpi/global_rank_asset_7.png';
+      remoteFrame = config.globalRank1Frame;
+      localFrame = 'assets/mipmap-xxhdpi/rank_1_frame.png';
+    } else if (rank == 2) {
+      remoteBanner = config.globalRank2Banner;
+      localBanner = 'assets/mipmap-xxhdpi/global_rank_asset_8.png';
+      remoteFrame = config.globalRank2Frame;
+      localFrame = 'assets/mipmap-xxhdpi/rank_2_frame.png';
+    } else {
+      remoteBanner = config.globalRank3Banner;
+      localBanner = 'assets/mipmap-xxhdpi/global_rank_asset_1.png';
+      remoteFrame = config.globalRank3Frame;
+      localFrame = 'assets/mipmap-xxhdpi/global_rank_asset_6.png';
+    }
 
-    final double frameWidth = isGold ? 360 : 140; // Huge wings for Rank 1
-    final double bannerWidth = isGold ? 140 : 115;
-    final double avatarSize = isGold ? 90 : 64;
-    final double totalHeight = isGold ? 360 : 250;
-    final double bannerHeight = isGold ? 180 : 150;
-    final double avatarTopOffset = isGold ? 60 : 25; 
+    final double width = isGold ? 130 : 100;
+    final double avatarSize = isGold ? 60 : 50;
 
     return SizedBox(
-      width: isGold ? 360 : 140,
-      height: totalHeight,
+      width: width,
+      height: isGold ? 260 : 210,
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
           // Banner
           Positioned(
-            bottom: 0,
+            top: avatarSize / 2 + 15,
             child: SizedBox(
-              width: bannerWidth,
-              height: bannerHeight,
-              child: Image.asset(
-                bannerAsset,
-                fit: BoxFit.fill,
-              ),
+              width: width - 10,
+              height: isGold ? 190 : 150,
+              child: _buildDynamicImage(remoteBanner, localBanner, fit: BoxFit.fill),
             ),
           ),
           
           // Name and Details on Banner
           Positioned(
-            bottom: isGold ? 20 : 15,
+            bottom: isGold ? 45 : 30,
             child: SizedBox(
-              width: bannerWidth - 10,
+              width: width - 10,
               child: Column(
                 children: [
                   Text(
                     item['name'],
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 2),
-                  Text(
-                    'ID: ${item['user_id'] ?? ''}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 10),
-                  ),
-                  const SizedBox(height: 6),
+                  if (item['user_id'] != null)
+                    Text(
+                      'ID: ${item['user_id']}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 10),
+                    ),
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
+                      Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 12, height: 12),
                       const SizedBox(width: 4),
                       Text(
                         _formatPoints(item['points']),
-                        style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 13, fontWeight: FontWeight.bold),
+                        style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ],
                   ),
@@ -379,21 +401,18 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
           Positioned(
             top: 0,
             child: SizedBox(
-              width: frameWidth,
-              height: isGold ? 240 : 130, // Frame image bounds
+              width: width,
+              height: width,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Positioned(
-                    top: avatarTopOffset,
-                    child: CircleAvatar(
-                      radius: avatarSize / 2,
-                      backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
-                          ? NetworkImage(item['photoUrl'])
-                          : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
-                    ),
+                  CircleAvatar(
+                    radius: avatarSize / 2,
+                    backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
+                        ? NetworkImage(item['photoUrl'])
+                        : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
                   ),
-                  Image.asset(frameAsset, width: frameWidth, height: isGold ? 240 : 130, fit: BoxFit.contain),
+                  _buildDynamicImage(remoteFrame, localFrame, fit: BoxFit.contain),
                 ],
               ),
             ),
@@ -403,60 +422,70 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildNormalItem(Map<String, dynamic> item, int rank) {
+  Widget _buildNormalItem(Map<String, dynamic> item, int rank, String type) {
+    final config = context.watch<DynamicConfigService>();
+    final remoteBg = config.globalRankListBg;
+    final localBg = 'assets/mipmap-xxhdpi/global_rank_list_bg.png';
+
     return Container(
       height: 75,
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: const BoxDecoration(
-        image: DecorationImage(
-          image: AssetImage('assets/mipmap-xxhdpi/global_rank_asset_3.png'), // Dark card bg
-          fit: BoxFit.fill,
-        ),
-      ),
-      child: Row(
+      child: Stack(
         children: [
-          const SizedBox(width: 20),
-          SizedBox(
-            width: 30,
-            child: Text(
-              rank < 10 ? '0$rank' : '$rank',
-              style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 16, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(width: 15),
-          CircleAvatar(
-            radius: 22,
-            backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
-                ? NetworkImage(item['photoUrl'])
-                : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
-          ),
-          const SizedBox(width: 15),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item['name'],
-                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+          Positioned.fill(
+            child: _buildDynamicImage(remoteBg, localBg, fit: BoxFit.fill),
           ),
           Row(
             children: [
-              Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
-              const SizedBox(width: 4),
-              Text(
-                '${_formatPoints(item['points'])} ↑',
-                style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
+              const SizedBox(width: 20),
+              SizedBox(
+                width: 30,
+                child: Text(
+                  rank < 10 ? '0$rank' : '$rank',
+                  style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 16, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
               ),
+              const SizedBox(width: 15),
+              CircleAvatar(
+                radius: 22,
+                backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
+                    ? NetworkImage(item['photoUrl'])
+                    : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
+              ),
+              const SizedBox(width: 15),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['name'],
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (item['user_id'] != null)
+                      Text(
+                        'ID: ${item['user_id']}',
+                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                  ],
+                ),
+              ),
+              Row(
+                children: [
+                  Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${_formatPoints(item['points'])} ↑',
+                    style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 25),
             ],
           ),
-          const SizedBox(width: 25),
         ],
       ),
     );
