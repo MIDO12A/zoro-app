@@ -31,7 +31,7 @@ import 'room_settings_screen.dart';
 import 'widgets/room_header.dart';
 import 'widgets/seat_area.dart';
 import 'widgets/room_rank_bottom_sheet.dart';
-import 'widgets/simple_web_svga.dart';
+
 import 'widgets/room_background_bottom_sheet.dart';
 import 'widgets/seat_dialogs.dart';
 import 'widgets/seat_style_panel.dart';

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'package:provider/provider.dart';
 import '../../../models/app_asset_model.dart';
 import '../../../services/dynamic_config_service.dart';
 import '../../../services/supabase_service.dart';
-import '../../../services/user_service.dart';
-import '../../../services/upload_service.dart';
+import '../../../services/cloudinary_service.dart';
+import '../../../providers/user_provider.dart';
 
 class RoomBackgroundBottomSheet extends StatefulWidget {
   final String roomId;
@@ -22,8 +24,7 @@ class RoomBackgroundBottomSheet extends StatefulWidget {
 
 class _RoomBackgroundBottomSheetState extends State<RoomBackgroundBottomSheet> {
   final SupabaseService _db = SupabaseService();
-  final UserService _userService = UserService();
-  final UploadService _uploadService = UploadService();
+  final CloudinaryService _uploadService = CloudinaryService();
   bool _isUploading = false;
 
   void _applyBackground(String url) async {
@@ -74,7 +75,7 @@ class _RoomBackgroundBottomSheetState extends State<RoomBackgroundBottomSheet> {
     
     if (confirm != true) return;
     
-    final currentUser = _userService.currentUser;
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (currentUser == null) return;
     
     if (currentUser.coins < price) {
@@ -100,8 +101,7 @@ class _RoomBackgroundBottomSheetState extends State<RoomBackgroundBottomSheet> {
       }
       
       // Upload image
-      final bytes = await image.readAsBytes();
-      final url = await _uploadService.uploadImage(bytes, 'room_backgrounds/${widget.roomId}_${DateTime.now().millisecondsSinceEpoch}');
+      final url = await _uploadService.uploadImage(File(image.path), publicId: 'room_backgrounds/${widget.roomId}_${DateTime.now().millisecondsSinceEpoch}');
       
       // Apply background
       _applyBackground(url);
