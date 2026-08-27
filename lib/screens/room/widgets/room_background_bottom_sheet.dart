@@ -94,7 +94,7 @@ class _RoomBackgroundBottomSheetState extends State<RoomBackgroundBottomSheet> {
     try {
       // Deduct coins
       if (price > 0) {
-        final success = await _db.deductCoins(currentUser.id, price, 'custom_room_bg');
+        final success = await _db.deductCoins(currentUser.uid, price, 'custom_room_bg');
         if (!success) {
           throw Exception('Failed to deduct coins');
         }
