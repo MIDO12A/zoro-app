@@ -21,6 +21,7 @@ class RoomModel {
   final int hotValue;
   final List<String> moderators;
   final String country;
+  final String bgImage;
 
   RoomModel({
     required this.roomId,
@@ -43,6 +44,7 @@ class RoomModel {
     this.hotValue = 0,
     this.moderators = const [],
     this.country = '',
+    this.bgImage = '',
   });
 
   RoomModel copyWith({
@@ -66,6 +68,7 @@ class RoomModel {
     int? hotValue,
     List<String>? moderators,
     String? country,
+    String? bgImage,
   }) {
     return RoomModel(
       roomId: roomId ?? this.roomId,
@@ -88,6 +91,7 @@ class RoomModel {
       hotValue: hotValue ?? this.hotValue,
       moderators: moderators ?? this.moderators,
       country: country ?? this.country,
+      bgImage: bgImage ?? this.bgImage,
     );
   }
 
@@ -126,6 +130,7 @@ class RoomModel {
           ? List<String>.from(map['moderators'] as List)
           : const [],
       country: map['country']?.toString() ?? '',
+      bgImage: map['bgImage']?.toString() ?? map['bg_image']?.toString() ?? '',
     );
   }
 
@@ -152,5 +157,6 @@ class RoomModel {
         'hot_value': hotValue,
         'moderators': moderators,
         'country': country,
+        'bg_image': bgImage,
       };
 }

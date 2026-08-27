@@ -59,11 +59,16 @@ class FunctionPanel extends StatelessWidget {
         'label': isAr ? 'مستوى صوت الغرفة' : 'Room Volume',
         'asset': R.roomSetVolumeIc,
       },
-      if (isOwner)
         {
           'key': 'Seat Style',
-          'label': isAr ? 'خلفية الغرفة' : 'Room Background',
+          'label': isAr ? 'شكل المقاعد' : 'Seat Style',
           'asset': R.roomSetSeatStyle,
+        },
+      if (isOwner)
+        {
+          'key': 'Room Background',
+          'label': isAr ? 'خلفية الغرفة' : 'Room Background',
+          'asset': R.roomSetSeatStyle, // Reusing icon for now
         },
       {
         'key': 'Mute Mic',

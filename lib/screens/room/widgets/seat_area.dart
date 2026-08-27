@@ -44,6 +44,8 @@ Widget _emptyCircle(double s) => Container(
 class SeatArea extends StatelessWidget {
   final List<SeatModel> seats;
   final void Function(int index) onSeatTap;
+  final void Function()? onCharmTap;
+  final bool showCharmValues;
   final Map<int, String>? seatEmojis;
   final Set<String>? moderators;
   final String? hostUid;
@@ -53,6 +55,8 @@ class SeatArea extends StatelessWidget {
     super.key,
     required this.seats,
     required this.onSeatTap,
+    this.onCharmTap,
+    this.showCharmValues = true,
     this.seatEmojis,
     this.moderators,
     this.hostUid,
@@ -144,6 +148,8 @@ class SeatArea extends StatelessWidget {
               : false,
           seatStyle: seatStyle,
           isCaptain: isCaptain,
+          showCharmValues: showCharmValues,
+          onCharmTap: onCharmTap,
         ),
       ),
     );
@@ -174,6 +180,8 @@ class SeatArea extends StatelessWidget {
                           : false,
                       seatStyle: seatStyle,
                       isCaptain: false,
+                      showCharmValues: showCharmValues,
+                      onCharmTap: onCharmTap,
                     ),
                   ),
                 ),
@@ -197,6 +205,8 @@ class _NormalSeat extends StatelessWidget {
   final bool isModerator;
   final SeatStyle seatStyle;
   final bool isCaptain;
+  final bool showCharmValues;
+  final void Function()? onCharmTap;
 
   const _NormalSeat({
     required this.seat,
@@ -204,6 +214,8 @@ class _NormalSeat extends StatelessWidget {
     this.isModerator = false,
     this.seatStyle = SeatStyle.classic,
     this.isCaptain = false,
+    this.showCharmValues = true,
+    this.onCharmTap,
   });
 
   @override
@@ -214,7 +226,7 @@ class _NormalSeat extends StatelessWidget {
     final charm = user?.charm;
     final avatar = user?.avatar;
     final hasFrame = seat.hasFrame;
-    final frameAsset = seat.frameAsset ?? R.superAdminFrame;
+    final frameAsset = seat.frameAsset;
 
     Widget child = Column(
       mainAxisSize: MainAxisSize.min,
@@ -231,19 +243,19 @@ class _NormalSeat extends StatelessWidget {
                 child: _buildAvatarPart(hasUser, avatar, hasFrame, frameAsset),
               ),
               if (emoji != null && emoji!.isNotEmpty && hasUser)
-                Positioned(
-                  top: 0,
-                  right: 0,
+                Positioned.fill(
                   child: Container(
-                    padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
+                      color: Colors.black.withOpacity(0.4),
                       shape: BoxShape.circle,
                     ),
-                    child: Text(
-                      emoji!,
-                      style: const TextStyle(fontSize: 16),
-                    ),
+                    alignment: Alignment.center,
+                    child: emoji!.startsWith('http')
+                        ? Image.network(emoji!, width: 64, height: 64, fit: BoxFit.contain)
+                        : Text(
+                            emoji!,
+                            style: const TextStyle(fontSize: 48),
+                          ),
                   ),
                 ),
               if (!hasUser && seat.isLocked)
@@ -311,22 +323,27 @@ class _NormalSeat extends StatelessWidget {
         if (hasUser && charm != null)
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(4, 1, 4, 1),
-              decoration: BoxDecoration(
-                color: const Color(0x33000000),
-                borderRadius: BorderRadius.circular(7),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  R.image(R.roomMicCharmMaleIc, width: 9, height: 9),
-                  const SizedBox(width: 1),
-                  Text(
-                    charm,
-                    style: const TextStyle(fontSize: 9, color: Colors.white),
-                  ),
-                ],
+            child: GestureDetector(
+              onTap: onCharmTap,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(4, 1, 4, 1),
+                decoration: BoxDecoration(
+                  color: const Color(0x33000000),
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    R.image(R.roomMicCharmMaleIc, width: 9, height: 9),
+                    if (showCharmValues) ...[
+                      const SizedBox(width: 1),
+                      Text(
+                        _formatCharm(charm),
+                        style: const TextStyle(fontSize: 9, color: Colors.white),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -342,7 +359,17 @@ class _NormalSeat extends StatelessWidget {
     return child;
   }
 
-  Widget _buildAvatarPart(bool hasUser, String? avatar, bool hasFrame, String frameAsset) {
+  String _formatCharm(String charmStr) {
+    final value = int.tryParse(charmStr.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}m';
+    } else if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}k';
+    }
+    return charmStr;
+  }
+
+  Widget _buildAvatarPart(bool hasUser, String? avatar, bool hasFrame, String? frameAsset) {
     const double size = 52.0;
     const double borderSize = 64.0;
 
@@ -392,7 +419,7 @@ class _NormalSeat extends StatelessWidget {
       ),
     );
 
-    if (hasFrame) {
+    if (hasFrame && frameAsset != null) {
       return Stack(
         alignment: Alignment.center,
         children: [

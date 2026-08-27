@@ -879,6 +879,11 @@ class DynamicConfigService extends ChangeNotifier {
     });
   }
 
+  List<AppAssetModel> getAssetsByCategory(String category) {
+    return _appAssets.values.where((a) => a.category == category && a.isActive).toList()
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
   // Parse color from string (e.g. #FFFFFF or 0xFFFFFFFF or color name)
   Color _parseColor(dynamic val, Color fallback) {
     if (val == null) return fallback;

@@ -193,6 +193,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                       : null,
                   child: TabBar(
                     controller: _mainTabController,
+                    dividerColor: Colors.transparent,
                     indicator: mainIndicator.isNotEmpty
                         ? BoxDecoration(
                             image: DecorationImage(image: NetworkImage(mainIndicator), fit: BoxFit.fill),
@@ -242,6 +243,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                 ),
           child: TabBar(
             controller: subTabController,
+            dividerColor: Colors.transparent,
             indicator: subIndicator.isNotEmpty
                 ? BoxDecoration(
                     image: DecorationImage(image: NetworkImage(subIndicator), fit: BoxFit.fill),
@@ -392,7 +394,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
           
           // Name and Details on Banner
           Positioned(
-            bottom: isGold ? 70 : 50,
+            bottom: isGold ? 90 : 70,
             child: SizedBox(
               width: width - 10,
               child: Column(

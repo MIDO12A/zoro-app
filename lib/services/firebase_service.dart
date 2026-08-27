@@ -214,6 +214,10 @@ class FirebaseService {
     await _db.collection('rooms').doc(roomId).update({'seat_color': seatColorIndex});
   }
 
+  Future<void> updateRoomBackground(String roomId, String bgUrl) async {
+    await _db.collection('rooms').doc(roomId).update({'bgImage': bgUrl});
+  }
+
   Future<RoomModel?> getRoom(String roomId) async {
     final doc = await _db.collection('rooms').doc(roomId).get();
     if (!doc.exists) return null;
@@ -602,6 +606,7 @@ class FirebaseService {
         final d = e.data();
         return <String, dynamic>{
           'uid': e.id,
+          'id': d['id']?.toString() ?? '',
           'name': (d['name'] ?? '').toString(),
           'photo_url': (d['photo_url'] ?? d['photoUrl'] ?? '').toString(),
           'level': d['level'] ?? 1,
@@ -1097,6 +1102,25 @@ class FirebaseService {
       await levelService.addExp(uid: uid, type: 'recharge', amount: amount);
     } catch (e) {
       debugPrint('addCoins: recharge XP error: $e');
+    }
+  }
+
+  Future<bool> deductCoins(String uid, int amount, String reason) async {
+    if (amount <= 0) return true;
+    try {
+      final ref = _db.collection('users').doc(uid);
+      return await _db.runTransaction((txn) async {
+        final snap = await txn.get(ref);
+        if (!snap.exists) return false;
+        final d = snap.data()!;
+        final curCoins = (d['coins'] ?? 0) as int;
+        if (curCoins < amount) return false;
+        txn.update(ref, {'coins': curCoins - amount});
+        return true;
+      });
+    } catch (e) {
+      debugPrint('deductCoins error: $e');
+      return false;
     }
   }
 

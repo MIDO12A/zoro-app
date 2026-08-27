@@ -272,6 +272,7 @@ export default function AppVisualDesigner() {
   const [globalImages, setGlobalImages] = useState<Record<string, string>>({});
   const [chatColors, setChatColors] = useState<Record<string, string>>(defaultChatColors);
   const [rankConfig, setRankConfig] = useState<Record<string, any>>({});
+  const [roomBgPrice, setRoomBgPrice] = useState(0);
   
   // Screen assets browser states
   const [assets, setAssets] = useState<AppAssetRecord[]>([]);
@@ -309,6 +310,7 @@ export default function AppVisualDesigner() {
         if (cfg.bottomNavBgImage) setBottomNavBgImage(cfg.bottomNavBgImage);
         if (cfg.fontFamily) setFontFamily(cfg.fontFamily);
         if (Number.isFinite(cfg.borderRadius)) setBorderRadius(cfg.borderRadius!);
+        if (Number.isFinite(cfg.roomBgPrice)) setRoomBgPrice(cfg.roomBgPrice);
         
         const colorsCopy = { ...defaultColors };
         for (const key of Object.keys(defaultColors)) {
@@ -383,6 +385,7 @@ export default function AppVisualDesigner() {
         globalImages,
         chatColors,
         rankConfig,
+        roomBgPrice,
         iconOverrides,
         screenVisuals: visuals,
       };
@@ -1250,6 +1253,17 @@ export default function AppVisualDesigner() {
                 <span className="text-white font-mono">{borderRadius}px</span>
                 <span>24px (الدائري)</span>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'سعر تغيير خلفية الغرفة (بالعملات)' : 'Custom Room Background Price'}</label>
+              <input
+                type="number"
+                min="0"
+                value={roomBgPrice}
+                onChange={e => setRoomBgPrice(Number(e.target.value))}
+                className="w-full bg-[#161618] border border-white/10 rounded-lg py-2 px-3 text-xs text-white"
+              />
             </div>
 
             <div className="space-y-1.5">

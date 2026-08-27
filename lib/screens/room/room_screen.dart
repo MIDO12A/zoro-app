@@ -29,8 +29,10 @@ import 'models/seat_model.dart' hide SeatStyle;
 import 'models/seat_model.dart' as seat_model;
 import 'room_settings_screen.dart';
 import 'widgets/room_header.dart';
-import 'widgets/room_rank_bottom_sheet.dart';
 import 'widgets/seat_area.dart';
+import 'widgets/room_rank_bottom_sheet.dart';
+import 'widgets/simple_web_svga.dart';
+import 'widgets/room_background_bottom_sheet.dart';
 import 'widgets/seat_dialogs.dart';
 import 'widgets/seat_style_panel.dart';
 import 'widgets/volume_panel.dart';
@@ -205,8 +207,8 @@ class _RoomScreenState extends State<RoomScreen> {
   int? _selectedSeatIdx;
   UserModel? _selectedUser;
 
-  // Track emoji on seats
   final Map<int, String> _seatEmojis = {};
+  bool _showCharmValues = true;
   // Track followed users
   final Set<String> _followedUsers = {};
   // Track blocked users
@@ -467,7 +469,7 @@ class _RoomScreenState extends State<RoomScreen> {
           if (cachedUser != null) {
             final af = cachedUser.activeFrame;
             final isFrameUrl = af != null && af.startsWith('http');
-            final frameAsset = isFrameUrl ? af! : index[af]?.svgaAsset ?? R.superAdminFrame;
+            final frameAsset = isFrameUrl ? af : index[af]?.svgaAsset;
             final carStoreItem = cachedUser.activeCar != null
                 ? index[cachedUser.activeCar!]
                 : null;
@@ -618,7 +620,7 @@ class _RoomScreenState extends State<RoomScreen> {
         final cachedUser = _cachedUsers[uid];
         final activeFrame = data['active_frame']?.toString() ?? cachedUser?.activeFrame;
         final isFrameUrl = activeFrame != null && activeFrame.startsWith('http');
-        final frameAsset = isFrameUrl ? activeFrame! : _storeItemsIndex[activeFrame]?.svgaAsset ?? R.superAdminFrame;
+        final frameAsset = isFrameUrl ? activeFrame! : _storeItemsIndex[activeFrame]?.svgaAsset;
         final activeCar = data['active_car']?.toString() ?? cachedUser?.activeCar;
         final carStoreItem = activeCar != null ? _storeItemsIndex[activeCar] : null;
         final carAsset = carStoreItem?.svgaAsset;
@@ -638,7 +640,7 @@ class _RoomScreenState extends State<RoomScreen> {
             charm: giftTotal.toString(),
           ),
           isMuted: isMuted,
-          hasFrame: true,
+          hasFrame: activeFrame != null && activeFrame.isNotEmpty,
           frameAsset: frameAsset,
           carAsset: carAsset,
         );
@@ -1190,6 +1192,19 @@ class _RoomScreenState extends State<RoomScreen> {
     );
   }
 
+  void _openRoomBackground() {
+    _closeAllPanels();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => RoomBackgroundBottomSheet(
+        roomId: widget.roomId,
+        currentBackground: _currentRoom?.bgImage ?? '',
+      ),
+    );
+  }
+
   void _openMixer() {
     _closeAllPanels();
     showModalBottomSheet(
@@ -1283,6 +1298,11 @@ class _RoomScreenState extends State<RoomScreen> {
           Positioned.fill(
             child: Builder(
               builder: (ctx) {
+                final customBg = _currentRoom?.bgImage;
+                if (customBg != null && customBg.isNotEmpty) {
+                  return Image.network(customBg, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.black));
+                }
+
                 final theme = _currentRoom?.category ?? 'themeFriend';
                 final bgImageUrl = DynamicConfigService().getRoomBgImage(theme);
                 if (bgImageUrl != null && bgImageUrl.isNotEmpty) {
@@ -1343,6 +1363,8 @@ class _RoomScreenState extends State<RoomScreen> {
                 moderators: _moderators,
                 hostUid: _currentRoom?.hostUid,
                 seatStyle: _roomSeatStyle,
+                showCharmValues: _showCharmValues,
+                onCharmTap: () => setState(() => _showCharmValues = !_showCharmValues),
               ),
 
               // Chat area fills remaining
@@ -1763,7 +1785,10 @@ class _RoomScreenState extends State<RoomScreen> {
         if (_isOwnerOrModerator) _openSettings();
         break;
       case 'Seat Style':
-        if (_isOwner) _openSeatStyle();
+        if (_isOwnerOrModerator) _openSeatStyle();
+        break;
+      case 'Room Background':
+        if (_isOwner) _openRoomBackground();
         break;
       case 'Mixer':
         _openMixer();
@@ -2070,9 +2095,17 @@ class _RoomScreenState extends State<RoomScreen> {
   // ── Emoji panel ───────────────────────────────────────────────
   Widget _buildEmojPanel() {
     final navH = MediaQuery.of(context).padding.bottom;
-    final emojis = ['😀', '😂', '🥰', '😎', '🤔', '😅', '😊', '🙂',
+    final staticEmojis = ['😀', '😂', '🥰', '😎', '🤔', '😅', '😊', '🙂',
                    '❤️', '🔥', '💯', '✨', '🎉', '🎁', '👍', '👏',
                    '😢', '😡', '😱', '🤩', '😴', '🤗', '😇', '🤫'];
+    
+    final config = context.read<DynamicConfigService>();
+    final dynamicEmojis = config.appAssets.values
+        .where((a) => a.category == 'emoji' && a.isActive && (a.remoteUrl?.isNotEmpty ?? false))
+        .map((a) => a.remoteUrl!)
+        .toList();
+        
+    final emojis = [...dynamicEmojis, ...staticEmojis];
     
     // Find current user's seat
     int? currentUserSeat;
@@ -2123,8 +2156,6 @@ class _RoomScreenState extends State<RoomScreen> {
                     itemCount: emojis.length,
                     itemBuilder: (_, idx) => GestureDetector(
                       onTap: () {
-                        // Add emoji to chat
-                        _chatCtrl.text += emojis[idx];
                         // Show emoji on current user's seat
                         if (currentUserSeat != null) {
                           final seat = currentUserSeat;
@@ -2142,10 +2173,29 @@ class _RoomScreenState extends State<RoomScreen> {
                             }
                           });
                         }
+                        
+                        // Send emoji directly to chat
+                        final userProvider = Provider.of<UserProvider>(context, listen: false);
+                        final user = userProvider.currentUser;
+                        if (user != null) {
+                          if (emojis[idx].startsWith('http')) {
+                            _firebaseService.sendImageMessage(
+                              widget.roomId, emojis[idx], user.uid, user.name, user.photoUrl,
+                            );
+                          } else {
+                            _firebaseService.sendMessage(
+                              widget.roomId, emojis[idx], user.uid, user.name, user.photoUrl,
+                              activeBubble: user.activeBubble,
+                            );
+                          }
+                        }
+                        
                         setState(() => _showEmoj = false);
                       },
                       child: Center(
-                        child: Text(emojis[idx], style: const TextStyle(fontSize: 26)),
+                        child: emojis[idx].startsWith('http')
+                            ? Image.network(emojis[idx], width: 40, height: 40, fit: BoxFit.contain)
+                            : Text(emojis[idx], style: const TextStyle(fontSize: 26)),
                       ),
                     ),
                   ),
