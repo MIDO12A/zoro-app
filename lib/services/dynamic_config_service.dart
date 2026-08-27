@@ -98,6 +98,7 @@ class DynamicConfigService extends ChangeNotifier {
 
   // Diamond-to-coin exchange rate (e.g. 2 means 2 diamonds = 1 coin)
   int _diamondToCoinRate = 2;
+  int _roomBgPrice = 100;
 
   // Room theme gradients (from app_config.roomGradients)
   Map<String, List<Color>> _roomGradients = {};
@@ -243,6 +244,7 @@ class DynamicConfigService extends ChangeNotifier {
   String get vipBuyBtnImgUrl => _vipBuyBtnImgUrl;
   int get coinsPerRechargeXp => _coinsPerRechargeXp;
   int get diamondToCoinRate => _diamondToCoinRate;
+  int get roomBgPrice => _roomBgPrice;
 
   // Room gradient getter (returns gradient if found, null otherwise)
   List<Color>? getRoomGradient(String key) => _roomGradients[key];
@@ -786,8 +788,9 @@ class DynamicConfigService extends ChangeNotifier {
         _lastSystemMessage = msg.cast<String, dynamic>();
       }
 
-      _coinsPerRechargeXp = (config['coinsPerRechargeXp'] as num?)?.toInt() ?? _coinsPerRechargeXp;
-      _diamondToCoinRate = (config['diamondToCoinRate'] as num?)?.toInt() ?? _diamondToCoinRate;
+      _coinsPerRechargeXp = (config['coinsPerRechargeXp'] ?? 10).toInt();
+      _diamondToCoinRate = (config['diamondToCoinRate'] ?? 2).toInt();
+      _roomBgPrice = (config['roomBgPrice'] ?? 100).toInt();
 
       final rc = config['rankConfig'];
       if (rc is Map) {
