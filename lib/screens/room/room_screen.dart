@@ -29,6 +29,7 @@ import 'models/seat_model.dart' hide SeatStyle;
 import 'models/seat_model.dart' as seat_model;
 import 'room_settings_screen.dart';
 import 'widgets/room_header.dart';
+import 'widgets/room_rank_bottom_sheet.dart';
 import 'widgets/seat_area.dart';
 import 'widgets/seat_dialogs.dart';
 import 'widgets/seat_style_panel.dart';
@@ -1320,7 +1321,14 @@ class _RoomScreenState extends State<RoomScreen> {
                 isFollowed: _isFollowed,
                 onExit: () => setState(() => _showExit = true),
                 onMinimize: _minimizeRoom,
-                onRank: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RankScreen())),
+                onRank: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => const RoomRankBottomSheet(),
+                  );
+                },
                 onInfoTap: () => setState(() => _showRoomInfo = true),
                 onOnlineTap: _showMembersSheet,
                 onGameTap: () {},
