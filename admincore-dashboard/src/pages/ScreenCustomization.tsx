@@ -117,6 +117,14 @@ const defaultVisuals: ScreenVisuals = {
     trophyIcon: 'emoji_events',
     crownIcon: '',
     rankBgImage: '',
+    bgImage: '',
+    listBgImage: '',
+    rank1Frame: '',
+    rank2Frame: '',
+    rank3Frame: '',
+    rank1Banner: '',
+    rank2Banner: '',
+    rank3Banner: '',
   },
   checkbox: {
     checkedImage: '',
@@ -466,6 +474,14 @@ const fieldLabels: Record<string, Record<string, string>> = {
   trophyIcon: { ar: 'أيقونة الكأس', en: 'Trophy Icon' },
   crownIcon: { ar: 'أيقونة التاج', en: 'Crown Icon' },
   rankBgImage: { ar: 'صورة خلفية الترتيب', en: 'Rank Background' },
+  bgImage: { ar: 'صورة خلفية الشاشة بالكامل', en: 'Full Screen Background' },
+  listBgImage: { ar: 'صورة خلفية القائمة (من المركز 4 فما فوق)', en: 'List Background (Rank 4+)' },
+  rank1Frame: { ar: 'إطار المركز الأول', en: 'Rank 1 Frame' },
+  rank2Frame: { ar: 'إطار المركز الثاني', en: 'Rank 2 Frame' },
+  rank3Frame: { ar: 'إطار المركز الثالث', en: 'Rank 3 Frame' },
+  rank1Banner: { ar: 'راية المركز الأول', en: 'Rank 1 Banner' },
+  rank2Banner: { ar: 'راية المركز الثاني', en: 'Rank 2 Banner' },
+  rank3Banner: { ar: 'راية المركز الثالث', en: 'Rank 3 Banner' },
   checkedImage: { ar: 'صورة محدد', en: 'Checked Image' },
   uncheckedImage: { ar: 'صورة غير محدد', en: 'Unchecked Image' },
   lockImage: { ar: 'صورة القفل (لم تحصل عليه)', en: 'Lock Image (Not Owned)' },
@@ -545,7 +561,7 @@ const fieldLabels: Record<string, Record<string, string>> = {
   buttonImage: { ar: 'صورة زر التسجيل', en: 'Sign-In Button Image' },
 };
 
-const imageFields = ['backgroundImage', 'checkboxCheckedImage', 'checkboxUncheckedImage', 'coinIcon', 'diamondIcon', 'rankIcon', 'crownIcon', 'rankBgImage', 'checkedImage', 'uncheckedImage', 'cardBgImage', 'sectionBgImage', 'badgeBgImage', 'necklaceBgImage', 'headerBgImage', 'headerTextImage', 'cardBorderImage', 'textImage', 'subTextImage', 'accentImage', 'badgeBorderImage', 'necklaceBorderImage', 'lockImage', 'fullScreenBg', 'cabinBg', 'cabinDefaultBg', 'leftFrame', 'rightFrame', 'heartImage', 'noCpHeartSvg', 'tokenBg', 'mineBg', 'tabBgImage', 'invitationBgImage', 'countdownDaySvg', 'countdownHourSvg', 'countdownMinSvg', 'countdownSecSvg', 'rankTagGoldSvg', 'rankTagSilverSvg', 'rankTagBronzeSvg', 'historyCardSvg', 'giftsBannerSvg', 'profileHeartIcon', 'profileLevelBg', 'profileNameFrame', 'profileTopBgSvga', 'checkmarkImage', 'streakIcon', 'topBgSvga', 'buttonImage', 'seatDefaultCircleImage', 'seatLockCircleImage', 'seatDefaultClassicImage', 'seatLockClassicImage', 'seatDefaultVipImage', 'seatLockVipImage'];
+const imageFields = ['bgImage', 'listBgImage', 'rank1Frame', 'rank2Frame', 'rank3Frame', 'rank1Banner', 'rank2Banner', 'rank3Banner', 'backgroundImage', 'checkboxCheckedImage', 'checkboxUncheckedImage', 'coinIcon', 'diamondIcon', 'rankIcon', 'crownIcon', 'rankBgImage', 'checkedImage', 'uncheckedImage', 'cardBgImage', 'sectionBgImage', 'badgeBgImage', 'necklaceBgImage', 'headerBgImage', 'headerTextImage', 'cardBorderImage', 'textImage', 'subTextImage', 'accentImage', 'badgeBorderImage', 'necklaceBorderImage', 'lockImage', 'fullScreenBg', 'cabinBg', 'cabinDefaultBg', 'leftFrame', 'rightFrame', 'heartImage', 'noCpHeartSvg', 'tokenBg', 'mineBg', 'tabBgImage', 'invitationBgImage', 'countdownDaySvg', 'countdownHourSvg', 'countdownMinSvg', 'countdownSecSvg', 'rankTagGoldSvg', 'rankTagSilverSvg', 'rankTagBronzeSvg', 'historyCardSvg', 'giftsBannerSvg', 'profileHeartIcon', 'profileLevelBg', 'profileNameFrame', 'profileTopBgSvga', 'checkmarkImage', 'streakIcon', 'topBgSvga', 'buttonImage', 'seatDefaultCircleImage', 'seatLockCircleImage', 'seatDefaultClassicImage', 'seatLockClassicImage', 'seatDefaultVipImage', 'seatLockVipImage'];
 
 const colorRegex = /^(bg|header|text|card|border|accent|tab|gold|silver|bronze|points|section|badge|necklace|member|primary|gradient|countdown|invitation|button|avatar|score|period|rank|shadow|Color)/i;
 
