@@ -47,14 +47,16 @@ jobs:
         id: ver
         run: echo "ver=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)" >> "$GITHUB_OUTPUT"
 
-      # Build number is derived from the UNIX timestamp to guarantee it is ALWAYS
+      # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
       # strictly increasing and higher than any previously installed APK.
-      # Android max versionCode is 2.1 billion (UNIX time fits until year 2036).
+      # 1788000000 is above all existing UNIX timestamps in this project.
       - name: Build release APKs
+        env:
+          BUILD_NUM: ${{ github.run_number }}
         run: |
-          TIMESTAMP=$(date +%s)
-          flutter build apk --release --split-per-abi --build-number=$TIMESTAMP
-          echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          VERSION_CODE=$((1788000000 + BUILD_NUM))
+          flutter build apk --release --split-per-abi --build-number=$VERSION_CODE
+          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
       - name: Rename APKs
         run: |
@@ -65,10 +67,9 @@ jobs:
       - name: Create build info
         env:
           APP_VER: ${{ steps.ver.outputs.ver }}
-          RUN_NUM: ${{ github.run_number }}
           SHA: ${{ github.sha }}
         run: |
-          printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$TIMESTAMP" "$SHA" > build_info.json
+          printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$VERSION_CODE" "$SHA" > build_info.json
           cat build_info.json
 
       - name: Publish to GitHub Release
