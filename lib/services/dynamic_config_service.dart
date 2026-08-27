@@ -127,6 +127,7 @@ class DynamicConfigService extends ChangeNotifier {
   String get globalRank2Banner => _screenStr('rank', 'rank2Banner', '');
   String get globalRank3Banner => _screenStr('rank', 'rank3Banner', '');
   String get globalRankListBg => _screenStr('rank', 'listBgImage', '');
+  String _rankBg = '';
   String _rankGoldColor = '#FFD700';
   String _rankSilverColor = '#C0C0C0';
   String _rankBronzeColor = '#CD7F32';
