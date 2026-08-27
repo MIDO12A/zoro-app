@@ -367,7 +367,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                     radius: avatarSize / 2,
                     backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
                         ? NetworkImage(item['photoUrl'])
-                        : const AssetImage(R.assetsAvatarDefault) as ImageProvider,
+                        : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
                   ),
                   Image.asset(frameAsset, width: width, height: width, fit: BoxFit.contain),
                 ],
@@ -405,7 +405,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             radius: 22,
             backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
                 ? NetworkImage(item['photoUrl'])
-                : const AssetImage(R.assetsAvatarDefault) as ImageProvider,
+                : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
           ),
           const SizedBox(width: 15),
           Expanded(
@@ -424,7 +424,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
           ),
           Row(
             children: [
-              Image.asset(R.assetsIconCoin, width: 14, height: 14),
+              Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
               const SizedBox(width: 4),
               Text(
                 '${_formatPoints(item['points'])} ↑',

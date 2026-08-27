@@ -29,7 +29,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
     final bool isWealth = _mainTabIndex == 0;
     
     try {
-      final data = await FirebaseService.instance.getRoomRankings(
+      final data = await FirebaseService().getRoomRankings(
         roomId: widget.roomId,
         isWealth: isWealth,
         timeframe: timeframe,
@@ -194,7 +194,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
                   radius: 22,
                   backgroundImage: item['user_photo_url'] != null && item['user_photo_url'].toString().isNotEmpty
                       ? NetworkImage(item['user_photo_url'])
-                      : const AssetImage(R.assetsAvatarDefault) as ImageProvider,
+                      : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
                 ),
                 if (frameAsset != null)
                   Image.asset(frameAsset, width: 70, height: 70, fit: BoxFit.cover),
@@ -218,7 +218,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Image.asset(R.assetsIconCoin, width: 14, height: 14),
+                    Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
                     const SizedBox(width: 6),
                     Text(
                       '${item['total_value']}',
