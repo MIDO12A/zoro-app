@@ -258,20 +258,20 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
         // Top 3 Podium
         if (data.isNotEmpty)
           Container(
-            height: 280,
+            height: 400,
             padding: const EdgeInsets.only(top: 10),
             child: Stack(
-              alignment: Alignment.center,
+              alignment: Alignment.topCenter,
               children: [
                 if (data.length >= 2)
                   Positioned(
-                    right: 15,
+                    right: 5,
                     bottom: 0,
                     child: _buildTopRankItem(data[1], 2),
                   ),
                 if (data.length >= 3)
                   Positioned(
-                    left: 15,
+                    left: 5,
                     bottom: 0,
                     child: _buildTopRankItem(data[2], 3),
                   ),
@@ -284,7 +284,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             ),
           ),
         
-        const SizedBox(height: 15),
+        const SizedBox(height: 10),
         
         // Ranks 4+ List
         Expanded(
@@ -302,7 +302,6 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
 
   Widget _buildTopRankItem(Map<String, dynamic> item, int rank) {
     final isGold = rank == 1;
-    final isSilver = rank == 2;
     
     String bannerAsset;
     if (rank == 1) bannerAsset = 'assets/mipmap-xxhdpi/global_rank_asset_7.png'; // Red banner
@@ -314,21 +313,25 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     else if (rank == 2) frameAsset = 'assets/mipmap-xxhdpi/rank_2_frame.png';
     else frameAsset = 'assets/mipmap-xxhdpi/global_rank_asset_6.png'; // New Top 3 frame
 
-    final double width = isGold ? 130 : 100;
-    final double avatarSize = isGold ? 60 : 50;
+    final double frameWidth = isGold ? 360 : 140; // Huge wings for Rank 1
+    final double bannerWidth = isGold ? 140 : 115;
+    final double avatarSize = isGold ? 90 : 64;
+    final double totalHeight = isGold ? 360 : 250;
+    final double bannerHeight = isGold ? 180 : 150;
+    final double avatarTopOffset = isGold ? 60 : 25; 
 
     return SizedBox(
-      width: width,
-      height: isGold ? 260 : 210,
+      width: isGold ? 360 : 140,
+      height: totalHeight,
       child: Stack(
         alignment: Alignment.topCenter,
         children: [
           // Banner
           Positioned(
-            top: avatarSize / 2 + 15,
+            bottom: 0,
             child: SizedBox(
-              width: width - 10,
-              height: isGold ? 190 : 150,
+              width: bannerWidth,
+              height: bannerHeight,
               child: Image.asset(
                 bannerAsset,
                 fit: BoxFit.fill,
@@ -336,21 +339,39 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             ),
           ),
           
-          // Name and Points on Banner
+          // Name and Details on Banner
           Positioned(
-            bottom: isGold ? 65 : 45,
-            child: Column(
-              children: [
-                Text(
-                  item['name'],
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${_formatPoints(item['points'])}',
-                  style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 12),
-                ),
-              ],
+            bottom: isGold ? 20 : 15,
+            child: SizedBox(
+              width: bannerWidth - 10,
+              child: Column(
+                children: [
+                  Text(
+                    item['name'],
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'ID: ${item['user_id'] ?? ''}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatPoints(item['points']),
+                        style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -358,18 +379,21 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
           Positioned(
             top: 0,
             child: SizedBox(
-              width: width,
-              height: width,
+              width: frameWidth,
+              height: isGold ? 240 : 130, // Frame image bounds
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  CircleAvatar(
-                    radius: avatarSize / 2,
-                    backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
-                        ? NetworkImage(item['photoUrl'])
-                        : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
+                  Positioned(
+                    top: avatarTopOffset,
+                    child: CircleAvatar(
+                      radius: avatarSize / 2,
+                      backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
+                          ? NetworkImage(item['photoUrl'])
+                          : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
+                    ),
                   ),
-                  Image.asset(frameAsset, width: width, height: width, fit: BoxFit.contain),
+                  Image.asset(frameAsset, width: frameWidth, height: isGold ? 240 : 130, fit: BoxFit.contain),
                 ],
               ),
             ),
