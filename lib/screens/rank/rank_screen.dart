@@ -14,35 +14,17 @@ class RankScreen extends StatefulWidget {
   State<RankScreen> createState() => _RankScreenState();
 }
 
-class _RankScreenState extends State<RankScreen>
-    with TickerProviderStateMixin {
+class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   late TabController _mainTabController;
   late TabController _wealthSubTabController;
   late TabController _charmSubTabController;
-  late TabController _roomSubTabController;
   final SupabaseService _api = SupabaseService();
-  DynamicConfigService get _cfg => DynamicConfigService();
   final Map<String, List<Map<String, dynamic>>> _cachedRankings = {};
   bool _loading = true;
   String _currentType = 'wealth';
 
   Timer? _countdownTimer;
-  String _countdownStr = '00 h 00 m 00 s';
-
-  IconData _rankIcon(String iconName) {
-    const map = {
-      'Icons.emoji_events': Icons.emoji_events,
-      'Icons.stars': Icons.stars,
-      'Icons.military_tech': Icons.military_tech,
-      'Icons.workspace_premium': Icons.workspace_premium,
-      'Icons.verified': Icons.verified,
-      'Icons.favorite': Icons.favorite,
-      'Icons.whatshot': Icons.whatshot,
-      'Icons.auto_awesome': Icons.auto_awesome,
-      'Icons.diamond': Icons.diamond,
-    };
-    return map[iconName] ?? Icons.emoji_events;
-  }
+  String _countdownStr = '00h 00m 00s';
 
   String _getCountdownString() {
     final now = DateTime.now().toUtc().add(const Duration(hours: 3));
@@ -51,23 +33,22 @@ class _RankScreenState extends State<RankScreen>
     final h = diff.inHours.toString().padLeft(2, '0');
     final m = (diff.inMinutes % 60).toString().padLeft(2, '0');
     final s = (diff.inSeconds % 60).toString().padLeft(2, '0');
-    return '$h h $m m $s s';
+    return '${h}h ${m}m ${s}s';
   }
 
   @override
   void initState() {
     super.initState();
-    _mainTabController = TabController(length: 3, vsync: this);
+    _mainTabController = TabController(length: 2, vsync: this);
     _mainTabController.addListener(() {
       if (!_mainTabController.indexIsChanging) {
         setState(() {
-          _currentType = ['wealth', 'charm', 'room'][_mainTabController.index];
+          _currentType = ['wealth', 'charm'][_mainTabController.index];
         });
       }
     });
     _wealthSubTabController = TabController(length: 3, vsync: this);
     _charmSubTabController = TabController(length: 3, vsync: this);
-    _roomSubTabController = TabController(length: 3, vsync: this);
     _loadRankings();
 
     _countdownStr = _getCountdownString();
@@ -86,7 +67,6 @@ class _RankScreenState extends State<RankScreen>
     _mainTabController.dispose();
     _wealthSubTabController.dispose();
     _charmSubTabController.dispose();
-    _roomSubTabController.dispose();
     super.dispose();
   }
 
@@ -96,13 +76,11 @@ class _RankScreenState extends State<RankScreen>
       final results = await Future.wait([
         _api.getUserRanking(orderByField: 'total_gifts_sent'),
         _api.getUserRanking(orderByField: 'total_gifts_received'),
-        _api.getRoomRanking(),
       ]);
       if (mounted) {
         setState(() {
           _cachedRankings['wealth'] = results[0];
           _cachedRankings['charm'] = results[1];
-          _cachedRankings['room'] = results[2];
           _loading = false;
         });
       }
@@ -111,10 +89,8 @@ class _RankScreenState extends State<RankScreen>
     }
   }
 
-  List<Map<String, dynamic>> _getRankingData(
-      _RankPeriod period, String type) {
+  List<Map<String, dynamic>> _getRankingData(_RankPeriod period, String type) {
     final data = _cachedRankings[type] ?? [];
-    if (type == 'room') return data;
     return data.map((e) {
       final points = type == 'wealth'
           ? (e['total_gifts_sent'] ?? 0)
@@ -125,27 +101,20 @@ class _RankScreenState extends State<RankScreen>
         'photoUrl': e['photo_url'] ?? '',
         'points': points,
         'level': e['level'] ?? 1,
-        'hasFrame': false,
-        'frameAsset': null,
       };
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    context.watch<DynamicConfigService>();
     return Scaffold(
       body: Stack(
         children: [
+          // Background Image
           Positioned.fill(
-            child: ListenableBuilder(
-              listenable: _cfg,
-              builder: (context, _) {
-                final bg = _cfg.rankBgFor(_currentType);
-                return bg.isNotEmpty
-                    ? R.loadImage(bg, fit: BoxFit.cover)
-                    : R.image('assets/mipmap-xxhdpi/rank_wealth_bg.webp', fit: BoxFit.cover);
-              },
+            child: Image.asset(
+              'assets/mipmap-xxhdpi/room_rank_bg.png', // Using the grand room background for now
+              fit: BoxFit.cover,
             ),
           ),
           SafeArea(
@@ -158,7 +127,6 @@ class _RankScreenState extends State<RankScreen>
                     children: [
                       _buildRankPage('wealth', _wealthSubTabController),
                       _buildRankPage('charm', _charmSubTabController),
-                      _buildRankPage('room', _roomSubTabController),
                     ],
                   ),
                 ),
@@ -171,42 +139,37 @@ class _RankScreenState extends State<RankScreen>
   }
 
   Widget _buildHeader() {
-    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: SizedBox(
-        height: 56,
+        height: 50,
         child: Row(
           children: [
             GestureDetector(
               onTap: () => Navigator.pop(context),
-              child: Padding(
-                padding: const EdgeInsets.all(8),
-                child: R.image(R.backIc, width: 24, height: 24),
+              child: const Padding(
+                padding: EdgeInsets.all(8),
+                child: Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
               ),
             ),
-            const SizedBox(width: 8),
             Expanded(
-              child: TabBar(
-                controller: _mainTabController,
-                indicator: const BoxDecoration(
-                  image: DecorationImage(
-                    image: AssetImage(
-                      'assets/mipmap-xxhdpi/rank_tab_item_bg.webp',
-                    ),
-                    fit: BoxFit.contain,
-                  ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: TabBar(
+                  controller: _mainTabController,
+                  indicatorColor: const Color(0xFFFFD54F),
+                  indicatorWeight: 3,
+                  labelColor: const Color(0xFFFFD54F),
+                  unselectedLabelColor: Colors.white70,
+                  labelStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  tabs: const [
+                    Tab(text: 'الثروة'),
+                    Tab(text: 'السحر'),
+                  ],
                 ),
-                indicatorSize: TabBarIndicatorSize.label,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white60,
-                tabs: [
-                  Tab(text: isAr ? 'الثروة' : 'Wealth'),
-                  Tab(text: isAr ? 'السحر' : 'Charm'),
-                  Tab(text: isAr ? 'باتل' : 'Battle'),
-                ],
               ),
             ),
+            const SizedBox(width: 36), // Balance space for back button
           ],
         ),
       ),
@@ -214,44 +177,51 @@ class _RankScreenState extends State<RankScreen>
   }
 
   Widget _buildRankPage(String type, TabController subTabController) {
-    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Column(
       children: [
+        const SizedBox(height: 10),
+        // Sub Tabs
         Container(
           height: 36,
-          margin: const EdgeInsets.symmetric(horizontal: 16),
+          margin: const EdgeInsets.symmetric(horizontal: 40),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.15),
+            color: Colors.black.withOpacity(0.3),
             borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFFFD54F).withOpacity(0.3)),
           ),
           child: TabBar(
             controller: subTabController,
             indicator: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(18),
+              gradient: const LinearGradient(
+                colors: [Color(0xFFFFD54F), Color(0xFFF57F17)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
             ),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-            tabs: [
-              Tab(text: isAr ? 'يومياً' : 'Daily'),
-              Tab(text: isAr ? 'أسبوعياً' : 'Weekly'),
-              Tab(text: isAr ? 'تصنيف المجموع' : 'Total'),
+            labelColor: Colors.black,
+            unselectedLabelColor: Colors.white70,
+            labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+            tabs: const [
+              Tab(text: 'يوميا'),
+              Tab(text: 'أسبوعيًا'),
+              Tab(text: 'شهريا'),
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 4),
-          child: Text(
-            isAr ? 'العد التنازلي: (GMT+3) $_countdownStr' : 'Countdown: (GMT+3) $_countdownStr',
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFFFFF9C4),
-              fontWeight: FontWeight.w500,
-            ),
+        const SizedBox(height: 15),
+        // Countdown
+        Text(
+          'العد التنازلي: (GMT+3) $_countdownStr',
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.white70,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 10),
+        
+        // List
         Expanded(
           child: TabBarView(
             controller: subTabController,
@@ -268,75 +238,61 @@ class _RankScreenState extends State<RankScreen>
 
   Widget _buildRankList(String type, _RankPeriod period) {
     if (_loading) {
-      return Center(
-        child: CircularProgressIndicator(color: _cfg.rankTextColorFor(_currentType)),
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFFFFD54F)),
       );
     }
 
     final data = _getRankingData(period, type);
-    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     if (data.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const SizedBox(height: 80),
-            R.image(
-              R.mipmap('common_empty_ic_1'),
-              width: 140,
-              height: 140,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              isAr ? 'لا توجد بيانات ترتيب حالياً' : 'No ranking data available',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Colors.white70,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+      return const Center(
+        child: Text(
+          'لا توجد بيانات ترتيب حالياً',
+          style: TextStyle(fontSize: 14, color: Colors.white70, fontWeight: FontWeight.w500),
         ),
       );
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (data.length >= 3)
+        // Top 3 Podium
+        if (data.isNotEmpty)
           Container(
-            height: 240,
-            margin: const EdgeInsets.only(top: 4),
+            height: 280,
+            padding: const EdgeInsets.only(top: 10),
             child: Stack(
-              clipBehavior: Clip.hardEdge,
+              alignment: Alignment.center,
               children: [
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: FittedBox(child: _buildTopRankItem(data[0], 1, type)),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: FittedBox(child: _buildTopRankItem(data[1], 2, type)),
+                if (data.length >= 2)
+                  Positioned(
+                    right: 15,
+                    bottom: 0,
+                    child: _buildTopRankItem(data[1], 2),
                   ),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: FittedBox(child: _buildTopRankItem(data[2], 3, type)),
+                if (data.length >= 3)
+                  Positioned(
+                    left: 15,
+                    bottom: 0,
+                    child: _buildTopRankItem(data[2], 3),
                   ),
-                ),
+                if (data.length >= 1)
+                  Positioned(
+                    top: 0,
+                    child: _buildTopRankItem(data[0], 1),
+                  ),
               ],
             ),
           ),
+        
+        const SizedBox(height: 15),
+        
+        // Ranks 4+ List
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: data.length > 3 ? data.length - 3 : 0,
             itemBuilder: (context, index) {
-              return _buildNormalItem(data[index + 3], index + 4, type);
+              return _buildNormalItem(data[index + 3], index + 4);
             },
           ),
         ),
@@ -344,244 +300,143 @@ class _RankScreenState extends State<RankScreen>
     );
   }
 
-  Widget _buildTopRankItem(Map<String, dynamic> item, int rank, String type) {
+  Widget _buildTopRankItem(Map<String, dynamic> item, int rank) {
     final isGold = rank == 1;
     final isSilver = rank == 2;
-    final size = isGold ? 100.0 : 80.0;
-    final borderColor = isGold
-        ? _cfg.rankGoldColorFor(type)
-        : isSilver
-            ? _cfg.rankSilverColorFor(type)
-            : _cfg.rankBronzeColorFor(type);
+    
+    String bannerAsset;
+    if (rank == 1) bannerAsset = 'assets/mipmap-xxhdpi/global_rank_asset_7.png'; // Red banner
+    else if (rank == 2) bannerAsset = 'assets/mipmap-xxhdpi/global_rank_asset_8.png'; // Purple banner
+    else bannerAsset = 'assets/mipmap-xxhdpi/global_rank_asset_1.png'; // Blue banner
 
-    final frameUrl = _getRankingFrame(type, rank);
+    String frameAsset;
+    if (rank == 1) frameAsset = 'assets/mipmap-xxhdpi/rank_1_frame.png';
+    else if (rank == 2) frameAsset = 'assets/mipmap-xxhdpi/rank_2_frame.png';
+    else frameAsset = 'assets/mipmap-xxhdpi/global_rank_asset_6.png'; // New Top 3 frame
 
-    return Container(
-      width: size + 40,
-      height: size + 60,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+    final double width = isGold ? 130 : 100;
+    final double avatarSize = isGold ? 60 : 50;
+
+    return SizedBox(
+      width: width,
+      height: isGold ? 260 : 210,
+      child: Stack(
+        alignment: Alignment.topCenter,
         children: [
-          SizedBox(
-            width: size + 20,
-            height: size + 20,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: size + 12,
-                  height: size + 12,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: borderColor, width: 3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: borderColor.withValues(alpha: 0.3),
-                        blurRadius: 12,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  width: size,
-                  height: size,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.black26,
-                  ),
-                  child: ClipOval(
-                    child: item['photoUrl'] != null &&
-                            item['photoUrl'].toString().isNotEmpty
-                        ? Image(
-                            image: R.cachedImage(item['photoUrl'].toString()),
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _rankAvatarFallback(item),
-                          )
-                        : _rankAvatarFallback(item),
-                  ),
-                ),
-                if (frameUrl != null)
-                  Positioned.fill(
-                    child: R.loadImage(frameUrl, fit: BoxFit.contain),
-                  ),
-                if (item['hasFrame'] == true)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: borderColor,
-                          width: 3,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                '#$rank',
-                style: TextStyle(
-                  fontSize: isGold ? 13 : 11,
-                  fontWeight: FontWeight.bold,
-                  color: borderColor,
-                ),
+          // Banner
+          Positioned(
+            top: avatarSize / 2 + 15,
+            child: SizedBox(
+              width: width - 10,
+              height: isGold ? 190 : 150,
+              child: Image.asset(
+                bannerAsset,
+                fit: BoxFit.fill,
               ),
-              if (isGold) ...[
-                const SizedBox(width: 4),
-                Icon(_rankIcon(_cfg.rankTrophyIcon), size: 16, color: borderColor),
-              ],
-            ],
-          ),
-          Text(
-            item['name'] as String,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: _cfg.rankTextColorFor(type),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-          Text(
-            _formatPoints((item['points'] as int?) ?? 0),
-            style:             TextStyle(fontSize: 11, color: _cfg.rankPointsColorFor(type)),
+          
+          // Name and Points on Banner
+          Positioned(
+            bottom: isGold ? 65 : 45,
+            child: Column(
+              children: [
+                Text(
+                  item['name'],
+                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_formatPoints(item['points'])}',
+                  style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+
+          // Avatar and Frame
+          Positioned(
+            top: 0,
+            child: SizedBox(
+              width: width,
+              height: width,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: avatarSize / 2,
+                    backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
+                        ? NetworkImage(item['photoUrl'])
+                        : const AssetImage(R.assetsAvatarDefault) as ImageProvider,
+                  ),
+                  Image.asset(frameAsset, width: width, height: width, fit: BoxFit.contain),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _rankAvatarFallback(Map<String, dynamic> item) {
-    return Center(
-      child: Text(
-        (item['name'] as String).isNotEmpty
-            ? (item['name'] as String)[0].toUpperCase()
-            : '?',
-        style: TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
-          color: Colors.white.withValues(alpha: 0.7),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNormalItem(Map<String, dynamic> item, int rank, String type) {
-    String label = type == 'room'
-        ? '${item['hostName'] as String}'
-        : '';
-    String suffix = type == 'room' ? '' : 'pts';
-
+  Widget _buildNormalItem(Map<String, dynamic> item, int rank) {
     return Container(
-      height: 68,
+      height: 75,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.9),
-        borderRadius: BorderRadius.circular(12),
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/mipmap-xxhdpi/global_rank_asset_3.png'), // Dark card bg
+          fit: BoxFit.fill,
+        ),
       ),
       child: Row(
         children: [
+          const SizedBox(width: 20),
           SizedBox(
-            width: 36,
+            width: 30,
             child: Text(
-              '$rank',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: rank <= 3
-                    ? const Color(0xFFFFD700)
-                    : const Color(0xFF16151A),
-              ),
+              rank < 10 ? '0$rank' : '$rank',
+              style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 16, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
           ),
-          const SizedBox(width: 8),
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                child: item['photoUrl'] != null &&
-                        item['photoUrl'].toString().isNotEmpty
-                    ? ClipOval(
-                        child: Image(
-                          image: R.cachedImage(item['photoUrl'].toString()),
-                          width: 44,
-                          height: 44,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Text(
-                            (item['name'] as String)[0].toUpperCase(),
-                          ),
-                        ),
-                      )
-                    : Text(
-                        (item['name'] as String).isNotEmpty
-                            ? (item['name'] as String)[0].toUpperCase()
-                            : '?',
-                      ),
-              ),
-              if (item['hasFrame'] == true)
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: const Color(0xFFFFD700),
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+          const SizedBox(width: 15),
+          CircleAvatar(
+            radius: 22,
+            backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
+                ? NetworkImage(item['photoUrl'])
+                : const AssetImage(R.assetsAvatarDefault) as ImageProvider,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 15),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item['name'] as String,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF16151A),
-                  ),
+                  item['name'],
+                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (label.isNotEmpty)
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF9BA1B6),
-                    ),
-                  ),
               ],
             ),
           ),
-          Flexible(
-            child: Text(
-              '${_formatPoints((item['points'] as int?) ?? 0)} $suffix',
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF894916),
+          Row(
+            children: [
+              Image.asset(R.assetsIconCoin, width: 14, height: 14),
+              const SizedBox(width: 4),
+              Text(
+                '${_formatPoints(item['points'])} ↑',
+                style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
+            ],
           ),
+          const SizedBox(width: 25),
         ],
       ),
     );
   }
-
-  String? _getRankingFrame(String category, int rank) => null;
 
   String _formatPoints(int points) {
     if (points >= 1000000) {
