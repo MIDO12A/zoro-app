@@ -38,6 +38,8 @@ const navItems = [
   { to: '/admins', icon: Shield, label: 'nav.admins' },
   { to: '/notifications', icon: Bell, label: 'nav.notifications' },
   { to: '/reports', icon: Shield, label: 'البلاغات' },
+  { to: '/emojis', icon: ImageIcon, label: 'الإيموجي' },
+  { to: '/room-backgrounds', icon: ImageIcon, label: 'خلفيات الغرف' },
   { to: '/settings', icon: Settings, label: 'nav.settings' },
 ];
 

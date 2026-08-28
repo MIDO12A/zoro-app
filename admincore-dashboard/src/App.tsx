@@ -39,6 +39,8 @@ import CpFeatures from './pages/CpFeatures';
 import SigninFeatures from './pages/SigninFeatures';
 import AppUpdates from './pages/AppUpdates';
 import Reports from './pages/Reports';
+import Emojis from './pages/Emojis';
+import RoomBackgrounds from './pages/RoomBackgrounds';
 import t from './lib/i18n';
 
 export default function App() {
@@ -123,6 +125,8 @@ export default function App() {
             <Route path="/signin-features" element={<SigninFeatures />} />
             <Route path="/app-updates" element={<AppUpdates />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/emojis" element={<Emojis />} />
+            <Route path="/room-backgrounds" element={<RoomBackgrounds />} />
           </Route>
         </Routes>
       </BrowserRouter>
