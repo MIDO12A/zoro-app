@@ -81,7 +81,6 @@ class _ZeroAppState extends State<ZeroApp> {
               return AgencyNotificationHandler(
                 child: MaterialApp(
                 scaffoldMessengerKey: KayanInAppToast.messengerKey,
-                key: ValueKey('app_${config.assetVersion}'),
                 title: config.appName,
                 debugShowCheckedModeBanner: false,
                 locale: localeProvider.locale,
