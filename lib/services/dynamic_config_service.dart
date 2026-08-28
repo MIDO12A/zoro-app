@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,6 +22,10 @@ class DynamicConfigService extends ChangeNotifier {
   String _logoUrl = '';
   String _splashUrl = '';
   Color _splashNameColor = const Color(0xFF16151A);
+
+  // Mini Profile overrides
+  String _miniProfileFollowIcon = '';
+  String _miniProfileMessageIcon = '';
 
   // VIP global asset overrides
   String _vipCardBgImgUrl = '';
@@ -199,6 +203,8 @@ class DynamicConfigService extends ChangeNotifier {
   String get logoUrl => _logoUrl;
   String get splashUrl => _splashUrl;
   Color get splashNameColor => _splashNameColor;
+  String get miniProfileFollowIcon => _miniProfileFollowIcon;
+  String get miniProfileMessageIcon => _miniProfileMessageIcon;
   Color get primaryBg => _primaryBg;
   Color get textPrimary => _textPrimary;
   Color get textSecondary => _textSecondary;
@@ -1002,3 +1008,5 @@ class DynamicConfigService extends ChangeNotifier {
     return null;
   }
 }
+
+

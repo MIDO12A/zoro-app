@@ -53,6 +53,8 @@ class _GiftPanelState extends State<GiftPanel> {
   String? _selectedCategoryId;
   StreamSubscription? _giftSub;
   StreamSubscription? _catSub;
+  Timer? _comboTimer;
+  int _comboSeconds = 0;
 
   @override
   void initState() {
@@ -64,6 +66,7 @@ class _GiftPanelState extends State<GiftPanel> {
 
   @override
   void dispose() {
+    _comboTimer?.cancel();
     _giftSub?.cancel();
     _catSub?.cancel();
     super.dispose();
@@ -563,7 +566,28 @@ class _GiftPanelState extends State<GiftPanel> {
       }
     }
 
+    if (allOk) {
+      _startComboTimer();
+    }
+
     setState(() => _sending = false);
+  }
+
+  void _startComboTimer() {
+    _comboTimer?.cancel();
+    setState(() => _comboSeconds = 10);
+    _comboTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _comboSeconds--;
+        if (_comboSeconds <= 0) {
+          timer.cancel();
+        }
+      });
+    });
   }
 
   Widget _buildBottomOperate() {
@@ -645,7 +669,7 @@ class _GiftPanelState extends State<GiftPanel> {
               GestureDetector(
                 onTap: canAfford ? _sendGift : null,
                 child: Container(
-                  width: 72,
+                  width: _comboSeconds > 0 ? 80 : 72,
                   height: 30,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -668,9 +692,13 @@ class _GiftPanelState extends State<GiftPanel> {
                             color: Colors.white,
                           ),
                         )
-                      : const Text(
-                          'إرسال',
-                          style: TextStyle(fontSize: 12, color: Colors.white),
+                      : Text(
+                          _comboSeconds > 0 ? 'GO $_comboSeconds' : 'إرسال',
+                          style: TextStyle(
+                            fontSize: 12, 
+                            color: Colors.white, 
+                            fontWeight: _comboSeconds > 0 ? FontWeight.bold : FontWeight.normal
+                          ),
                         ),
                 ),
               ),

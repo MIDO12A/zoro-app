@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
@@ -120,6 +121,36 @@ class UserProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     startListening(uid);
+    _checkExpiredBackpackItems(uid);
+  }
+
+  Future<void> _checkExpiredBackpackItems(String uid) async {
+    try {
+      final qs = await FirebaseFirestore.instance.collection('user_backpack')
+          .where('user_id', isEqualTo: uid)
+          .where('expires_at', isLessThan: DateTime.now().toIso8601String())
+          .get();
+          
+      if (qs.docs.isNotEmpty) {
+        bool frameExpired = false;
+        for (var d in qs.docs) {
+          if (d['item_type'] == 'frame' && d['item_id'] == _currentUser?.activeFrame) {
+            frameExpired = true;
+          }
+          await d.reference.delete();
+        }
+        
+        if (frameExpired) {
+          await FirebaseFirestore.instance.collection('users').doc(uid).update({
+            'active_frame': FieldValue.delete(),
+          });
+          _currentUser = _currentUser?.copyWith(activeFrame: null);
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking expired backpack items: $e');
+    }
   }
 
   Future<void> updateUser(UserModel user) async {

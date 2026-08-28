@@ -4,6 +4,7 @@ import '../../../config/app_colors.dart';
 
 class BottomBar extends StatelessWidget {
   final bool isMicOn;
+  final bool showMic;
   final int msgCount;
   final VoidCallback? onChat;
   final VoidCallback? onEmoj;
@@ -16,6 +17,7 @@ class BottomBar extends StatelessWidget {
   const BottomBar({
     super.key,
     this.isMicOn = true,
+    this.showMic = true,
     this.msgCount = 0,
     this.onChat,
     this.onEmoj,
@@ -43,17 +45,17 @@ class BottomBar extends StatelessWidget {
               child: GestureDetector(
                 onTap: onGift,
                 child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
+                  width: 60,
+                  height: 60,
+                  decoration: const BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: AppColors.giftBtnGradient,
+                    color: Colors.transparent,
                   ),
                   child: Center(
                     child: R.image(
                       R.roomGiftIc,
-                      width: 26,
-                      height: 26,
+                      width: 46,
+                      height: 46,
                     ),
                   ),
                 ),
@@ -73,12 +75,14 @@ class BottomBar extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: isAr
                     ? [
-                        _Btn(
-                          asset: isMicOn ? R.roomMicphoneIc : R.roomMicphoneCloseIc,
-                          size: 32,
-                          onTap: onMic,
-                        ),
-                        const SizedBox(width: 10),
+                        if (showMic) ...[
+                          _Btn(
+                            asset: isMicOn ? R.roomMicphoneIc : R.roomMicphoneCloseIc,
+                            size: 32,
+                            onTap: onMic,
+                          ),
+                          const SizedBox(width: 10),
+                        ],
                         _Btn(asset: R.roomEmojIc, size: 32, onTap: onEmoj),
                         const SizedBox(width: 10),
                         _Btn(asset: R.roomChatIc, size: 32, onTap: onChat),
@@ -89,12 +93,14 @@ class BottomBar extends StatelessWidget {
                         _Btn(asset: R.roomChatIc, size: 32, onTap: onChat),
                         const SizedBox(width: 10),
                         _Btn(asset: R.roomEmojIc, size: 32, onTap: onEmoj),
-                        const SizedBox(width: 10),
-                        _Btn(
-                          asset: isMicOn ? R.roomMicphoneIc : R.roomMicphoneCloseIc,
-                          size: 32,
-                          onTap: onMic,
-                        ),
+                        if (showMic) ...[
+                          const SizedBox(width: 10),
+                          _Btn(
+                            asset: isMicOn ? R.roomMicphoneIc : R.roomMicphoneCloseIc,
+                            size: 32,
+                            onTap: onMic,
+                          ),
+                        ],
                       ],
               ),
             ),

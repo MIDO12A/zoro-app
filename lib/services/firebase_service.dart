@@ -1,9 +1,10 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:zero/services/agency_target_evaluator.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
 import '../models/gift_model.dart' as gm;
@@ -418,6 +419,15 @@ class FirebaseService {
         final walletRef = _db.collection('user_wallets').doc(receiverId);
         final wSnap = await txn.get(walletRef);
 
+        final memberQs = await _db.collection('host_agency_members')
+            .where('user_id', isEqualTo: receiverId)
+            .limit(1)
+            .get();
+        DocumentSnapshot? agencyMemberSnap;
+        if (memberQs.docs.isNotEmpty) {
+           agencyMemberSnap = await txn.get(memberQs.docs.first.reference);
+        }
+
         // ── THEN ALL WRITES ──
         txn.set(_db.collection('sent_gifts').doc(id), {
           'id': id,
@@ -475,12 +485,23 @@ class FirebaseService {
         } else {
           txn.set(walletRef, {'user_id': receiverId, 'diamond_balance': totalCost, 'gold_balance': 0});
         }
+
+        if (agencyMemberSnap != null && agencyMemberSnap.exists) {
+          final md = agencyMemberSnap.data() as Map<String, dynamic>? ?? {};
+          txn.update(agencyMemberSnap.reference, {
+            'diamonds_available': _asInt(md['diamonds_available']) + totalCost,
+            'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
+            'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
+          });
+        }
       });
     } catch (e) {
       debugPrint('sendGift: transaction failed (insufficient coins?): $e');
       return false;
     }
 
+    // Evaluate targets asynchronously (do not await)
+    AgencyTargetEvaluator.evaluateHostTargets(receiverId);
 
     // Real-time notification for the receiver (non-fatal)
     try {
@@ -1861,6 +1882,42 @@ class FirebaseService {
     } catch (e) {
       debugPrint('getRoomGlobalRanking error: $e');
       return [];
+    }
+  Future<List<Map<String, dynamic>>> getTopMonthlyFans(String uid) async {
+    try {
+      final nowUtc = DateTime.now().toUtc();
+      final ksaTime = nowUtc.add(const Duration(hours: 3));
+      final startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, 1).subtract(const Duration(hours: 3));
+      final startStr = startDateUtc.toIso8601String();
+
+      final snap = await _db.collection('sent_gifts')
+          .where('receiver_id', isEqualTo: uid)
+          .where('created_at', isGreaterThanOrEqualTo: startStr)
+          .get();
+
+      return _processRankings(snap.docs, false);
+    } catch (e) {
+      debugPrint('getTopMonthlyFans error: ');
+      // Fallback
+      try {
+        final snap = await _db.collection('sent_gifts')
+            .where('receiver_id', isEqualTo: uid)
+            .get();
+        final nowUtc = DateTime.now().toUtc();
+        final ksaTime = nowUtc.add(const Duration(hours: 3));
+        final startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, 1).subtract(const Duration(hours: 3));
+        final startStr = startDateUtc.toIso8601String();
+        
+        final filteredDocs = snap.docs.where((doc) {
+          final d = doc.data();
+          final created = d['created_at'] as String? ?? '';
+          return created.compareTo(startStr) >= 0;
+        }).toList();
+        return _processRankings(filteredDocs, false);
+      } catch (innerE) {
+        debugPrint('getTopMonthlyFans fallback error: ');
+        return [];
+      }
     }
   }
 }

@@ -57,7 +57,7 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
     String? imageUrl;
     try {
       if (_screenshot != null) {
-        imageUrl = await CloudinaryService().uploadImage(_screenshot!.path);
+        imageUrl = await CloudinaryService().uploadImage(File(_screenshot!.path));
       }
     } catch (e) {
       if (mounted) {

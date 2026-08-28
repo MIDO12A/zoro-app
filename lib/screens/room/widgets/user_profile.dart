@@ -335,7 +335,7 @@ class _UserProfileState extends State<UserProfile> {
           padding: const EdgeInsets.only(top: 5),
           child: GestureDetector(
             onTap: () {
-              final id = widget.user['id']?.toString() ?? '';
+              final id = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? widget.user['id']?.toString() ?? '';
               if (id.isNotEmpty) {
                 Clipboard.setData(ClipboardData(text: id));
                 ScaffoldMessenger.maybeOf(context)?.showSnackBar(

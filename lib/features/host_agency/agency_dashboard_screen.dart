@@ -1,17 +1,19 @@
 // lib/features/host_agency/agency_dashboard_screen.dart
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Glassmorphic 2035 Agency Dashboard
-// • Team aggregation: total diamonds, top earner
-// • Weekly leaderboard with animated rank bars
-// • Agency milestone progress
-// • Auto-reward display when milestone unlocked
-// ─────────────────────────────────────────────────────────────────────────────
+// â€¢ Team aggregation: total diamonds, top earner
+// â€¢ Weekly leaderboard with animated rank bars
+// â€¢ Agency milestone progress
+// â€¢ Auto-reward display when milestone unlocked
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/supabase_compat.dart';
+import 'package:provider/provider.dart';
+import '../../services/dynamic_config_service.dart';
 
 import '../../core/realtime/realtime_subscription.dart';
 import '../../core/realtime/supabase_realtime_bridge.dart';
@@ -22,19 +24,19 @@ import 'screens/agency_invite_by_id_screen.dart';
 import 'screens/agency_owner_wallet_screen.dart';
 import 'data/agency_chat_models.dart';
 
-// ── palette (same design system as host_dashboard_screen) ────────────────────
-const _bgDeep    = Color(0xFF03030A);
-const _bgCard    = Color(0x800A0820);
-const _border    = Color(0x2D9C6BFF);
-const _purple    = Color(0xFF9C6BFF);
-const _gold      = Color(0xFFF6C453);
-const _cyan      = Color(0xFF00D4FF);
-const _green     = Color(0xFF00E5A0);
-const _red       = Color(0xFFFF4D6D);
-const _textMain  = Color(0xFFE8E6FF);
-const _textMuted = Color(0xFF8A88AA);
+// â”€â”€ palette (same design system as host_dashboard_screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+_bgDeep    = Color(0xFF03030A);
+_bgCard    = Color(0x800A0820);
+_border    = Color(0x2D9C6BFF);
+_purple    = Color(0xFF9C6BFF);
+_gold      = Color(0xFFF6C453);
+_cyan      = Color(0xFF00D4FF);
+_green     = Color(0xFF00E5A0);
+_red       = Color(0xFFFF4D6D);
+_textMain  = Color(0xFFE8E6FF);
+_textMuted = Color(0xFF8A88AA);
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class AgencyDashboardScreen extends StatefulWidget {
   /// Pass either an explicit agencyId or leave null to auto-detect from the
   /// current user's host_agency_members row.
@@ -61,10 +63,10 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
   late final AnimationController _shimmerCtrl;
   late final AnimationController _rewardCtrl;
 
-  // Realtime — يحل محل Timer.periodic
+  // Realtime â€” ÙŠØ­Ù„ Ù…Ø­Ù„ Timer.periodic
   RealtimeSubscription? _rtMembers;
   RealtimeSubscription? _rtTransactions;
-  Timer? _debounce;   // debounce 800ms لمنع التحديثات المتكررة
+  Timer? _debounce;   // debounce 800ms Ù„Ù…Ù†Ø¹ Ø§Ù„ØªØ­Ø¯ÙŠØ«Ø§Øª Ø§Ù„Ù…ØªÙƒØ±Ø±Ø©
   bool   _reloading = false;
 
   @override
@@ -97,7 +99,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
     super.dispose();
   }
 
-  // ── debounced reload ──────────────────────────────────────────────────────
+  // â”€â”€ debounced reload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _scheduleReload() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 800), () {
@@ -105,12 +107,12 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
     });
   }
 
-  // ── subscribe realtime بعد معرفة agencyId ───────────────────────────────
+  // â”€â”€ subscribe realtime Ø¨Ø¹Ø¯ Ù…Ø¹Ø±ÙØ© agencyId â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _bindRealtime(String agencyId) {
     _rtMembers?.dispose();
     _rtTransactions?.dispose();
 
-    // تغييرات أعضاء الوكالة
+    // ØªØºÙŠÙŠØ±Ø§Øª Ø£Ø¹Ø¶Ø§Ø¡ Ø§Ù„ÙˆÙƒØ§Ù„Ø©
     _rtMembers = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_members:$agencyId',
       event: PostgresChangeEvent.all,
@@ -123,7 +125,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
       onPayload: (_) => _scheduleReload(),
     );
 
-    // ✅ تغييرات دفتر الألماس الموحد (الجدول الصحيح: agency_diamond_ledger)
+    // âœ… ØªØºÙŠÙŠØ±Ø§Øª Ø¯ÙØªØ± Ø§Ù„Ø£Ù„Ù…Ø§Ø³ Ø§Ù„Ù…ÙˆØ­Ø¯ (Ø§Ù„Ø¬Ø¯ÙˆÙ„ Ø§Ù„ØµØ­ÙŠØ­: agency_diamond_ledger)
     _rtTransactions = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_ledger:$agencyId',
       event: PostgresChangeEvent.insert,
@@ -137,14 +139,14 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
         final amount    = (payload.newRecord['amount'] as num?)?.toInt() ?? 0;
         final direction = (payload.newRecord['direction'] as num?)?.toInt() ?? 1;
         if (amount > 0 && direction == 1) {
-          KayanInAppToast.agency('الوكالة: +$amount 💎 من أحد الأعضاء');
+          KayanInAppToast.agency('Ø§Ù„ÙˆÙƒØ§Ù„Ø©: +$amount ðŸ’Ž Ù…Ù† Ø£Ø­Ø¯ Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡');
         }
         _scheduleReload();
       },
     );
   }
 
-  // ── data ──────────────────────────────────────────────────────────────────
+  // â”€â”€ data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _loadData() async {
     if (_reloading) return;
     _reloading = true;
@@ -166,7 +168,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
         agencyId = row['agency_id'] as String;
         _resolvedAgencyId = agencyId;
 
-        // ابدأ الـ Realtime فور معرفة agencyId (guard: widget قد يكون تلف أثناء الـ await)
+        // Ø§Ø¨Ø¯Ø£ Ø§Ù„Ù€ Realtime ÙÙˆØ± Ù…Ø¹Ø±ÙØ© agencyId (guard: widget Ù‚Ø¯ ÙŠÙƒÙˆÙ† ØªÙ„Ù Ø£Ø«Ù†Ø§Ø¡ Ø§Ù„Ù€ await)
         if (!mounted) return;
         _bindRealtime(agencyId);
       }
@@ -175,13 +177,13 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
           params: {'p_agency_id': agencyId});
       final parsed = Map<String, dynamic>.from(res as Map);
 
-      // check for newly completed milestones → show reward pop-up + toast
+      // check for newly completed milestones â†’ show reward pop-up + toast
       final rawMilestones = (parsed['milestones'] as List?) ?? const [];
       for (final raw in rawMilestones) {
         final m = Map<String, dynamic>.from(raw as Map);
         if (m['just_completed'] == true && m['reward_type'] != null) {
           _pendingReward = m;
-          KayanInAppToast.agency('أكملت هدف الوكالة: ${m['name'] ?? ''}! 🎉');
+          KayanInAppToast.agency('Ø£ÙƒÙ…Ù„Øª Ù‡Ø¯Ù Ø§Ù„ÙˆÙƒØ§Ù„Ø©: ${m['name'] ?? ''}! ðŸŽ‰');
           break;
         }
       }
@@ -205,17 +207,18 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
     }
   }
 
-  // ── format helpers ────────────────────────────────────────────────────────
+  // â”€â”€ format helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   String _fmt(dynamic v) {
     final n = (v is num ? v : num.tryParse(v.toString()) ?? 0).toInt();
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}م';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}ك';
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}Ù…';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}Ùƒ';
     return n.toString();
   }
 
-  // ── build ─────────────────────────────────────────────────────────────────
+  // â”€â”€ build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
+    context.watch<DynamicConfigService>();
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(statusBarColor: Colors.transparent),
       child: Scaffold(
@@ -238,31 +241,31 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
     child: Column(mainAxisSize: MainAxisSize.min, children: [
       _NeonSpinner(),
       SizedBox(height: 16),
-      Text('جارٍ تحميل بيانات الوكالة…',
+      Text('Ø¬Ø§Ø±Ù ØªØ­Ù…ÙŠÙ„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ÙˆÙƒØ§Ù„Ø©â€¦',
           style: TextStyle(color: _textMuted, fontFamily: 'IBM Plex Sans Arabic')),
     ]),
   );
 
   Widget _buildError() => Center(
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      const Icon(Icons.error_outline, color: _red, size: 48),
+      Icon(Icons.error_outline, color: _red, size: 48),
       const SizedBox(height: 12),
-      Text(_error ?? 'خطأ', style: const TextStyle(color: _red,
+      Text(_error ?? 'Ø®Ø·Ø£', style: TextStyle(color: _red,
           fontFamily: 'IBM Plex Sans Arabic')),
       const SizedBox(height: 16),
-      _GlassButton(label: 'إعادة المحاولة', color: _purple,
+      _GlassButton(label: 'Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©', color: _purple,
           onTap: () { setState(() { _loading = true; _error = null; }); _loadData(); }),
     ]),
   );
 
-  // ── main body ─────────────────────────────────────────────────────────────
+  // â”€â”€ main body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildBody() {
     final d          = _data!;
     final agency     = d['agency']     as Map? ?? {};
     final members    = (d['members']   as List?)?.cast<Map>() ?? [];
     final milestones = (d['milestones'] as List?)?.cast<Map>() ?? [];
 
-    final name          = agency['name']             ?? 'الوكالة';
+    final name          = agency['name']             ?? 'Ø§Ù„ÙˆÙƒØ§Ù„Ø©';
     final spec          = agency['specialty']        ?? '';
     final rate          = agency['commission_rate']  ?? 0.05;
     final totalD        = agency['monthly_diamonds'] ?? 0;
@@ -280,7 +283,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
       child: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // ─ header ─────────────────────────────────────────────────────────
+          // â”€ header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SliverAppBar(
             expandedHeight: 160,
             backgroundColor: Colors.transparent,
@@ -304,26 +307,26 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
               delegate: SliverChildListDelegate([
                 const SizedBox(height: 20),
 
-                // ─ kpi row ──────────────────────────────────────────────────
+                // â”€ kpi row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Row(children: [
                   Expanded(child: _KpiTile(
-                    label: 'ماسة الشهر', value: _fmt(totalD),
-                    icon: '💎', color: _cyan)),
+                    label: 'Ù…Ø§Ø³Ø© Ø§Ù„Ø´Ù‡Ø±', value: _fmt(totalD),
+                    icon: 'ðŸ’Ž', color: _cyan)),
                   const SizedBox(width: 10),
                   Expanded(child: _KpiTile(
-                    label: 'الأعضاء', value: '${members.length}',
-                    icon: '👥', color: _purple)),
+                    label: 'Ø§Ù„Ø£Ø¹Ø¶Ø§Ø¡', value: '${members.length}',
+                    icon: 'ðŸ‘¥', color: _purple)),
                   const SizedBox(width: 10),
                   Expanded(child: _KpiTile(
-                    label: 'العمولة', value: '${(rate * 100).toStringAsFixed(0)}%',
-                    icon: '💰', color: _gold)),
+                    label: 'Ø§Ù„Ø¹Ù…ÙˆÙ„Ø©', value: '${(rate * 100).toStringAsFixed(0)}%',
+                    icon: 'ðŸ’°', color: _gold)),
                 ]),
 
                 const SizedBox(height: 24),
 
-                // ─ weekly leaderboard ────────────────────────────────────────
+                // â”€ weekly leaderboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (ranked.isNotEmpty) ...[
-                  const _SectionHeader(label: 'متصدرو الأسبوع', icon: '🏅'),
+                  const _SectionHeader(label: 'Ù…ØªØµØ¯Ø±Ùˆ Ø§Ù„Ø£Ø³Ø¨ÙˆØ¹', icon: 'ðŸ…'),
                   const SizedBox(height: 12),
                   _LeaderboardList(
                     members:  ranked,
@@ -333,9 +336,9 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
                   const SizedBox(height: 24),
                 ],
 
-                // ─ agency milestones ─────────────────────────────────────────
+                // â”€ agency milestones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 if (milestones.isNotEmpty) ...[
-                  const _SectionHeader(label: 'أهداف الوكالة', icon: '🎯'),
+                  const _SectionHeader(label: 'Ø£Ù‡Ø¯Ø§Ù Ø§Ù„ÙˆÙƒØ§Ù„Ø©', icon: 'ðŸŽ¯'),
                   const SizedBox(height: 12),
                   ...milestones.map((m) => _AgencyMilestoneCard(
                     milestone: m,
@@ -345,12 +348,12 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
                   const SizedBox(height: 24),
                 ],
 
-                // ─ quick actions ──────────────────────────────────────────────
-                const _SectionHeader(label: 'إجراءات سريعة', icon: '⚡'),
+                // â”€ quick actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                const _SectionHeader(label: 'Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª Ø³Ø±ÙŠØ¹Ø©', icon: 'âš¡'),
                 const SizedBox(height: 12),
                 _AgencyQuickActions(
                   agencyId: _resolvedAgencyId ?? widget.agencyId ?? '',
-                  agencyName: ((_data?['agency'] as Map?)?['name'] as String?) ?? 'الوكالة',
+                  agencyName: ((_data?['agency'] as Map?)?['name'] as String?) ?? 'Ø§Ù„ÙˆÙƒØ§Ù„Ø©',
                   pendingCount: ((_data?['pending_members_count'] as num?)?.toInt() ?? 0),
                 ),
 
@@ -363,7 +366,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
     );
   }
 
-  // ── reward pop-up ─────────────────────────────────────────────────────────
+  // â”€â”€ reward pop-up â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildRewardOverlay() {
     final r = _pendingReward!;
     return AnimatedBuilder(
@@ -397,20 +400,20 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
           ],
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('🎉', style: TextStyle(fontSize: 52)),
+          const Text('ðŸŽ‰', style: TextStyle(fontSize: 52)),
           const SizedBox(height: 12),
-          const Text('تهانينا! أكملت الهدف',
+          const Text('ØªÙ‡Ø§Ù†ÙŠÙ†Ø§! Ø£ÙƒÙ…Ù„Øª Ø§Ù„Ù‡Ø¯Ù',
               style: TextStyle(color: _gold, fontSize: 18,
                   fontWeight: FontWeight.bold, fontFamily: 'IBM Plex Sans Arabic')),
           const SizedBox(height: 8),
           Text(r['name'] ?? '',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: _textMuted, fontSize: 14,
+              style: TextStyle(color: _textMuted, fontSize: 14,
                   fontFamily: 'IBM Plex Sans Arabic')),
           const SizedBox(height: 16),
           _RewardChip(type: r['reward_type'], value: r['reward_value']),
           const SizedBox(height: 20),
-          _GlassButton(label: 'رائع! 🚀', color: _gold,
+          _GlassButton(label: 'Ø±Ø§Ø¦Ø¹! ðŸš€', color: _gold,
               onTap: () => setState(() => _pendingReward = null)),
         ]),
       ),
@@ -418,9 +421,9 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Sub-widgets
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _AgencyHeader extends StatelessWidget {
   const _AgencyHeader({
@@ -442,13 +445,14 @@ class _AgencyHeader extends StatelessWidget {
 
   String _fmt(dynamic v) {
     final n = (v is num ? v : num.tryParse(v.toString()) ?? 0).toInt();
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}م';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}ك';
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}Ù…';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}Ùƒ';
     return n.toString();
   }
 
   @override
   Widget build(BuildContext context) {
+    context.watch<DynamicConfigService>();
     return AnimatedBuilder(
       animation: pulseCtrl,
       builder: (_, __) => Container(
@@ -481,16 +485,16 @@ class _AgencyHeader extends StatelessWidget {
                       color: _purple.withOpacity(.3 + .2 * pulseCtrl.value),
                       blurRadius: 16)],
                 ),
-                child: const Center(child: Text('🎙️', style: TextStyle(fontSize: 24))),
+                child: const Center(child: Text('ðŸŽ™ï¸', style: TextStyle(fontSize: 24))),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(name,
-                      style: const TextStyle(color: _textMain, fontSize: 18,
+                      style: TextStyle(color: _textMain, fontSize: 18,
                           fontWeight: FontWeight.bold, fontFamily: 'IBM Plex Sans Arabic')),
                   if (spec.isNotEmpty)
-                    Text(spec, style: const TextStyle(color: _textMuted, fontSize: 12,
+                    Text(spec, style: TextStyle(color: _textMuted, fontSize: 12,
                         fontFamily: 'IBM Plex Sans Arabic')),
                   if (agencyPublicId != null) ...[
                     const SizedBox(height: 4),
@@ -514,7 +518,7 @@ class _AgencyHeader extends StatelessWidget {
               ),
             ]),
             const SizedBox(height: 12),
-            Text('${_fmt(totalDiamonds)} 💎 هذا الشهر',
+            Text('${_fmt(totalDiamonds)} ðŸ’Ž Ù‡Ø°Ø§ Ø§Ù„Ø´Ù‡Ø±',
                 style: TextStyle(
                   color: _cyan, fontSize: 22, fontWeight: FontWeight.bold,
                   fontFamily: 'Space Grotesk',
@@ -527,7 +531,7 @@ class _AgencyHeader extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _KpiTile extends StatelessWidget {
   const _KpiTile({required this.label, required this.value,
       required this.icon, required this.color});
@@ -549,13 +553,13 @@ class _KpiTile extends StatelessWidget {
       Text(value, style: TextStyle(color: color, fontSize: 18,
           fontWeight: FontWeight.bold, fontFamily: 'Space Grotesk',
           shadows: [Shadow(color: color.withOpacity(.5), blurRadius: 6)])),
-      Text(label, style: const TextStyle(color: _textMuted, fontSize: 10,
+      Text(label, style: TextStyle(color: _textMuted, fontSize: 10,
           fontFamily: 'IBM Plex Sans Arabic')),
     ]),
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _LeaderboardList extends StatelessWidget {
   const _LeaderboardList({
     required this.members,
@@ -568,6 +572,7 @@ class _LeaderboardList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<DynamicConfigService>();
     // compute max for bar scaling
     final maxD = members.fold<double>(
       1,
@@ -577,7 +582,7 @@ class _LeaderboardList extends StatelessWidget {
     return Column(
       children: List.generate(members.length, (i) {
         final m     = members[i];
-        final name  = m['display_name'] ?? '—';
+        final name  = m['display_name'] ?? 'â€”';
         final weekD = ((m['week_diamonds'] ?? 0) as num).toDouble();
         final pct   = (weekD / maxD).clamp(0.0, 1.0);
         final barC  = i == 0 ? _gold : i == 1 ? _textMuted : i == 2 ? _cyan : _purple;
@@ -609,7 +614,7 @@ class _LeaderboardList extends StatelessWidget {
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(color: _textMain, fontSize: 13,
+                Text(name, style: TextStyle(color: _textMain, fontSize: 13,
                     fontFamily: 'IBM Plex Sans Arabic')),
                 const SizedBox(height: 6),
                 Stack(children: [
@@ -641,7 +646,7 @@ class _LeaderboardList extends StatelessWidget {
             )),
 
             const SizedBox(width: 10),
-            Text('${fmtFn(weekD)} 💎',
+            Text('${fmtFn(weekD)} ðŸ’Ž',
                 style: TextStyle(color: barC, fontSize: 12,
                     fontFamily: 'Space Grotesk', fontWeight: FontWeight.w600)),
           ]),
@@ -651,7 +656,7 @@ class _LeaderboardList extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _AgencyMilestoneCard extends StatelessWidget {
   const _AgencyMilestoneCard({
     required this.milestone,
@@ -664,6 +669,7 @@ class _AgencyMilestoneCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<DynamicConfigService>();
     final name      = milestone['name']           ?? '';
     final target    = (milestone['target_value']  as num?)?.toDouble() ?? 1;
     final current   = (milestone['current_value'] as num?)?.toDouble() ?? 0;
@@ -699,7 +705,7 @@ class _AgencyMilestoneCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: _gold.withOpacity(.4)),
               ),
-              child: const Text('✅ مكتمل',
+              child: const Text('âœ… Ù…ÙƒØªÙ…Ù„',
                   style: TextStyle(color: _gold, fontSize: 11,
                       fontFamily: 'IBM Plex Sans Arabic')),
             ),
@@ -735,8 +741,8 @@ class _AgencyMilestoneCard extends StatelessWidget {
           Text('${(pct * 100).toStringAsFixed(0)}%',
               style: TextStyle(color: barC, fontSize: 12,
                   fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold)),
-          Text('${fmtFn(current)} / ${fmtFn(target)} 💎',
-              style: const TextStyle(color: _textMuted, fontSize: 11,
+          Text('${fmtFn(current)} / ${fmtFn(target)} ðŸ’Ž',
+              style: TextStyle(color: _textMuted, fontSize: 11,
                   fontFamily: 'Space Grotesk')),
           if (rewardVal != null)
             _RewardChip(type: reward, value: rewardVal),
@@ -746,7 +752,7 @@ class _AgencyMilestoneCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _RewardChip extends StatelessWidget {
   const _RewardChip({required this.type, required this.value});
   final String type;
@@ -754,12 +760,13 @@ class _RewardChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<DynamicConfigService>();
     final emoji = switch (type) {
-      'gold'     => '🪙',
-      'diamonds' => '💎',
-      'vip_days' => '👑',
-      'badge'    => '🏅',
-      _          => '🎁',
+      'gold'     => 'ðŸª™',
+      'diamonds' => 'ðŸ’Ž',
+      'vip_days' => 'ðŸ‘‘',
+      'badge'    => 'ðŸ…',
+      _          => 'ðŸŽ',
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -769,15 +776,15 @@ class _RewardChip extends StatelessWidget {
         border: Border.all(color: _gold.withOpacity(.3)),
       ),
       child: Text('$emoji $value',
-          style: const TextStyle(color: _gold, fontSize: 11,
+          style: TextStyle(color: _gold, fontSize: 11,
               fontFamily: 'Space Grotesk')),
     );
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Shared helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label, required this.icon});
@@ -788,7 +795,7 @@ class _SectionHeader extends StatelessWidget {
     Text(icon, style: const TextStyle(fontSize: 18)),
     const SizedBox(width: 8),
     Text(label,
-        style: const TextStyle(color: _textMain, fontSize: 16,
+        style: TextStyle(color: _textMain, fontSize: 16,
             fontWeight: FontWeight.bold, fontFamily: 'IBM Plex Sans Arabic')),
     const SizedBox(width: 12),
     Expanded(child: Container(height: 1, color: _border)),
@@ -854,9 +861,9 @@ class _NeonSpinnerState extends State<_NeonSpinner>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Agency Quick Actions (HA7)
-// ─────────────────────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _AgencyQuickActions extends StatelessWidget {
   final String agencyId;
   final String agencyName;
@@ -865,39 +872,40 @@ class _AgencyQuickActions extends StatelessWidget {
   const _AgencyQuickActions({
     required this.agencyId,
     required this.pendingCount,
-    this.agencyName = 'الوكالة',
+    this.agencyName = 'Ø§Ù„ÙˆÙƒØ§Ù„Ø©',
   });
 
   @override
   Widget build(BuildContext context) {
+    context.watch<DynamicConfigService>();
     final actions = [
       _QuickAction(
-        icon: '👥',
-        label: 'طلبات الانضمام',
+        icon: 'ðŸ‘¥',
+        label: 'Ø·Ù„Ø¨Ø§Øª Ø§Ù„Ø§Ù†Ø¶Ù…Ø§Ù…',
         badge: pendingCount,
         color: _cyan,
         onTap: () => Navigator.push(context, MaterialPageRoute(
           builder: (_) => AgencyJoinRequestsScreen(agencyId: agencyId, canKick: true))),
       ),
       _QuickAction(
-        icon: '💬',
-        label: 'قروب الوكالة',
+        icon: 'ðŸ’¬',
+        label: 'Ù‚Ø±ÙˆØ¨ Ø§Ù„ÙˆÙƒØ§Ù„Ø©',
         badge: 0,
         color: _purple,
         onTap: () => Navigator.push(context, MaterialPageRoute(
           builder: (_) => AgencyChatScreen(agencyId: agencyId, agencyName: agencyName, myRole: AgencyMemberRole.owner))),
       ),
       _QuickAction(
-        icon: '🔍',
-        label: 'دعوة بـ ID',
+        icon: 'ðŸ”',
+        label: 'Ø¯Ø¹ÙˆØ© Ø¨Ù€ ID',
         badge: 0,
         color: _green,
         onTap: () => Navigator.push(context, MaterialPageRoute(
           builder: (_) => AgencyInviteByIdScreen(agencyId: agencyId, agencyName: agencyName))),
       ),
       _QuickAction(
-        icon: '💎',
-        label: 'محفظة الوكالة',
+        icon: 'ðŸ’Ž',
+        label: 'Ù…Ø­ÙØ¸Ø© Ø§Ù„ÙˆÙƒØ§Ù„Ø©',
         badge: 0,
         color: _gold,
         onTap: () => Navigator.push(context, MaterialPageRoute(
@@ -934,6 +942,7 @@ class _QuickActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<DynamicConfigService>();
     return GestureDetector(
       onTap: action.onTap,
       child: Container(
@@ -973,3 +982,5 @@ class _QuickActionCard extends StatelessWidget {
     );
   }
 }
+
+

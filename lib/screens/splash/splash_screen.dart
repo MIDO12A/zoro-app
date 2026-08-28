@@ -23,6 +23,16 @@ class _SplashScreenState extends State<SplashScreen> {
   bool _isBanned = false;
   String _banReason = 'تم حظر حسابك من قبل الإدارة لمخالفة الشروط والأحكام.';
 
+  bool _showingAd = false;
+  int _adCountdown = 3;
+  Timer? _adTimer;
+
+  @override
+  void dispose() {
+    _adTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -30,8 +40,8 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkStatusAndNavigate() async {
-    // Wait for splash animation and config initialization
-    await Future.delayed(const Duration(seconds: 3));
+    // Wait briefly to show app logo
+    await Future.delayed(const Duration(milliseconds: 500));
 
     // Check if user is logged in and check ban status
     final user = FirebaseAuth.instance.currentUser;
@@ -74,6 +84,30 @@ class _SplashScreenState extends State<SplashScreen> {
       debugPrint('Update flow error: $e');
     }
 
+    final config = DynamicConfigService();
+    if (config.adSplashImage.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _showingAd = true;
+        });
+        _adTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            _adCountdown--;
+          });
+          if (_adCountdown <= 0) {
+            timer.cancel();
+            widget.onNavigate();
+          }
+        });
+      }
+      return;
+    }
+
+    await Future.delayed(const Duration(milliseconds: 1500));
     if (mounted) {
       widget.onNavigate();
     }
@@ -138,6 +172,59 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
             ),
           ),
+        ),
+      );
+    }
+
+    if (_showingAd) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Image(
+                image: R.cachedImage(config.adSplashImage),
+                fit: BoxFit.cover,
+              ),
+            ),
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      _adTimer?.cancel();
+                      widget.onNavigate();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'تخطي $_adCountdown',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }

@@ -180,20 +180,75 @@ class SupabaseClient {
     if (kayanId.isEmpty || agencyId.isEmpty) {
       return {'status': 'error'};
     }
-    final snap = await _db
-        .collection('profiles')
-        .where('kayan_id', isEqualTo: kayanId)
+    
+    // First attempt: Search by customId
+    var snap = await _db
+        .collection('users')
+        .where('customId', isEqualTo: kayanId)
         .limit(1)
         .get();
-    if (snap.docs.isEmpty) return {'status': 'error'};
+        
+    // Second attempt: Search by id if customId not found
+    if (snap.docs.isEmpty) {
+      snap = await _db
+          .collection('users')
+          .where('id', isEqualTo: kayanId)
+          .limit(1)
+          .get();
+    }
+    
+    if (snap.docs.isEmpty) return {'status': 'not_found'};
+    
     final targetUid = snap.docs.first.id;
+    final userData = snap.docs.first.data();
+    
+    // Check if already invited or joined
+    final existingMember = await _db
+        .collection('host_agency_members')
+        .where('user_id', isEqualTo: targetUid)
+        .where('status', isEqualTo: 'active')
+        .limit(1)
+        .get();
+    if (existingMember.docs.isNotEmpty) {
+       return {'status': 'already_member'};
+    }
+
+    final existingRequest = await _db
+        .collection('host_agency_join_requests')
+        .where('user_id', isEqualTo: targetUid)
+        .where('agency_id', isEqualTo: agencyId)
+        .where('status', isEqualTo: 'invited')
+        .limit(1)
+        .get();
+    
+    if (existingRequest.docs.isNotEmpty) {
+      return {
+        'status': 'already_invited',
+        'user_id': targetUid,
+        'display_name': userData['name'] ?? 'مستخدم',
+        'avatar_url': userData['photoUrl'] ?? userData['photo_url'] ?? '',
+        'kayan_id': kayanId,
+        'level': userData['level'] ?? 1,
+        'country': userData['country'] ?? '',
+      };
+    }
+
     await _db.collection('host_agency_join_requests').add({
       'agency_id': agencyId,
       'user_id': targetUid,
       'status': 'invited',
       'created_at': DateTime.now().toUtc().toIso8601String(),
     });
-    return {'status': 'ok'};
+    
+    return {
+      'status': 'invited',
+      'user_id': targetUid,
+      'display_name': userData['name'] ?? 'مستخدم',
+      'avatar_url': userData['photoUrl'] ?? userData['photo_url'] ?? '',
+      'kayan_id': kayanId,
+      'level': userData['level'] ?? 1,
+      'country': userData['country'] ?? '',
+    };
   }
 
   Future<Map<String, dynamic>> _rpcAgencySetSupervisor(

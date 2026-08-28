@@ -57,6 +57,7 @@ class _RoomDiscoverScreenState extends State<RoomDiscoverScreen>
           context,
           roomName: room.name,
           hostName: user.name,
+          hostUid: room.hostUid,
           roomId: user.hostedRoomId!,
         );
       } else {
@@ -531,6 +532,7 @@ class _RoomDiscoverScreenState extends State<RoomDiscoverScreen>
           context,
           roomName: room.name,
           hostName: room.hostName,
+          hostUid: room.hostUid,
           roomId: room.roomId,
           roomPassword: room.password,
         );

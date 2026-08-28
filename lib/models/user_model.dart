@@ -23,6 +23,9 @@ class UserModel {
   final int followers;
   final int following;
   final int visitors;
+  final String signature;
+  final String country;
+  final int age;
   final int charm;
   final List<String> ownedBadges;
   final int wealthLevel;
@@ -63,6 +66,9 @@ class UserModel {
     this.followers = 0,
     this.following = 0,
     this.visitors = 0,
+    this.signature = '',
+    this.country = 'EG',
+    this.age = 18,
     this.charm = 0,
     this.wealthLevel = 1,
     this.wealthExp = 0,
@@ -101,6 +107,9 @@ class UserModel {
     int? followers,
     int? following,
     int? visitors,
+    String? signature,
+    String? country,
+    int? age,
     int? charm,
     List<String>? ownedBadges,
     int? wealthLevel,
@@ -140,6 +149,9 @@ class UserModel {
       followers: followers ?? this.followers,
       following: following ?? this.following,
       visitors: visitors ?? this.visitors,
+      signature: signature ?? this.signature,
+      country: country ?? this.country,
+      age: age ?? this.age,
       charm: charm ?? this.charm,
       ownedBadges: ownedBadges ?? this.ownedBadges,
       wealthLevel: wealthLevel ?? this.wealthLevel,
@@ -183,6 +195,9 @@ class UserModel {
       followers: (map['followers'] ?? 0).toInt(),
       following: (map['following'] ?? 0).toInt(),
       visitors: (map['visitors'] ?? 0).toInt(),
+      signature: map['signature']?.toString() ?? '',
+      country: map['country']?.toString() ?? 'EG',
+      age: (map['age'] ?? 18).toInt(),
       charm: (map['charm'] ?? 0).toInt(),
       wealthLevel: (map['wealth_level'] ?? 1).toInt(),
       wealthExp: (map['wealth_exp'] ?? 0).toInt(),
@@ -224,6 +239,9 @@ class UserModel {
         'followers': followers,
         'following': following,
         'visitors': visitors,
+        'signature': signature,
+        'country': country,
+        'age': age,
         'charm': charm,
         'wealth_level': wealthLevel,
         'wealth_exp': wealthExp,

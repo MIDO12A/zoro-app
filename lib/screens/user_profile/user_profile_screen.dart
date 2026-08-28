@@ -22,6 +22,7 @@ import '../room/widgets/svga_frame.dart';
 import '../room/room_screen.dart';
 import '../../features/cp/cp_service.dart';
 import '../../features/cp/cp_detail_full_screen.dart';
+import '../login/edit_profile_screen.dart';
 
 class UserProfileScreen extends StatefulWidget {
   final String? targetUid;
@@ -40,6 +41,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   List<gm.SentGiftModel> _receivedGifts = [];
   List<Map<String, dynamic>> _badgesCatalog = [];
   List<Map<String, dynamic>> _allOwnedNecklaces = [];
+  List<Map<String, dynamic>> _allOwnedEntrances = [];
+  List<Map<String, dynamic>> _topMonthlyFans = [];
+  List<Map<String, dynamic>> _allOwnedFrames = [];
   String? _currentRoomId;
   gm.SentGiftModel? _selectedGift;
   GiftedItemModel? _selectedItem;
@@ -104,6 +108,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         final necklaces = ownedGifted.where((i) => i.itemCategory == 'necklace').toList();
         final allOwnedNList = <Map<String, dynamic>>[];
         final ownedNIds = targetUser?.ownedNecklaces ?? [];
+        final List<Map<String, dynamic>> allOwnedEList = [];
+        final List<Map<String, dynamic>> allOwnedFList = [];
         for (final n in nCat) {
           final nid = n['id']?.toString();
           if (ownedNIds.contains(nid)) {
@@ -181,12 +187,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           sentGiftsCount = (sentRes as List?)?.length ?? 0;
         } catch (_) {}
 
+        List<Map<String, dynamic>> topFans = [];
+        try {
+          topFans = await supabase.getTopMonthlyFans(uidVal);
+        } catch (_) {}
+
         if (mounted) {
           setState(() {
             _user = targetUser;
             _receivedGifts = gifts;
             _badgesCatalog = badgesCat;
             _allOwnedNecklaces = allOwnedNList;
+            _allOwnedEntrances = allOwnedEList;
+            _allOwnedFrames = allOwnedFList;
             _currentRoomId = roomId;
             _giftsCatalog = giftsCat;
             _profileBgUrl = extraUserData?['profile_bg_url']?.toString();
@@ -199,6 +212,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             _fansCount = fansCount;
             _visitorsCount = visitorsCount;
             _sentGiftsCount = sentGiftsCount;
+            _topMonthlyFans = topFans;
             _loading = false;
           });
         }
@@ -361,7 +375,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
+          backgroundColor: const Color(0xFF171A24),
           body: GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Center(
@@ -392,16 +406,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.photo_library, color: Colors.black54),
-                title: const Text('تغيير صورة الغلاف', style: TextStyle(color: Colors.black87)),
+                leading: const Icon(Icons.photo_library, color: Color(0xFF888888)),
+                title: const Text('تغيير صورة الغلاف', style: TextStyle(color: Color(0xFF333333))),
                 onTap: () {
                   Navigator.pop(sheetCtx);
                   _pickCoverImage();
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete, color: Colors.black54),
-                title: const Text('إزالة صورة الغلاف', style: TextStyle(color: Colors.black87)),
+                leading: const Icon(Icons.delete, color: Color(0xFF888888)),
+                title: const Text('إزالة صورة الغلاف', style: TextStyle(color: Color(0xFF333333))),
                 onTap: () async {
                   Navigator.pop(sheetCtx);
                   if (!mounted) return;
@@ -424,7 +438,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     if (totalGifts >= 500000) return 'cp2';
     if (totalGifts >= 1) return 'cp1';
     if (_cpCouple != null) return 'cp1';
-    return 'cp1'; // Always show cp1 even without CP data
+    return 'cp1';
   }
 
   @override
@@ -437,7 +451,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       builder: (context, _) {
         final config = DynamicConfigService();
         return Scaffold(
-          backgroundColor: Colors.white,
+          backgroundColor: config.miniProfileBgColor,
           body: SafeArea(
             child: Stack(
               children: [
@@ -448,14 +462,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           children: [
                             _buildHeaderSection(config, user),
                             _buildUserInfoPanel(config, user),
+                            _buildMedalWallSection(config, user),
                             _buildStatsPanel(config, user),
-                            if (_currentRoomId != null || user?.hostedRoomId != null)
-                              _buildRoomCard(config, user),
+                            _buildTopFansPodium(config, user),
                             _buildCpPanelSection(config, user),
                             _buildMomentsSection(config, user),
-                            _buildGiftWallSection(config, user),
-                            _buildMedalWallSection(config, user),
+                            _buildEntrancesSection(config, user),
+                            _buildFramesSection(config, user),
                             _buildBadgesSection(config, user),
+                            _buildGiftWallSection(config, user),
                             _buildActionButtons(config, user),
                             const SizedBox(height: 40),
                           ],
@@ -488,19 +503,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 width: 40,
                 height: 40,
                 margin: const EdgeInsetsDirectional.only(start: 10),
-                child: const Icon(Icons.arrow_back, color: Colors.black87, size: 24),
+                child: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
               ),
             ),
             const Spacer(),
-            GestureDetector(
-              onTap: () {},
-              child: Container(
-                width: 40,
-                height: 40,
-                margin: const EdgeInsetsDirectional.only(end: 10),
-                child: const Icon(Icons.more_horiz, color: Colors.black87, size: 24),
-              ),
-            ),
           ],
         ),
       ),
@@ -548,7 +554,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(6),
                               decoration: BoxDecoration(
-                                color: Colors.black54,
+                                color: Colors.white54,
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
@@ -561,7 +567,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               child: Container(
                                 padding: const EdgeInsets.all(6),
                                 decoration: BoxDecoration(
-                                  color: Colors.black54,
+                                  color: Colors.white54,
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
@@ -585,7 +591,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   height: 30,
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.transparent, Colors.white],
+                      colors: [Colors.transparent, config.miniProfileBgColor],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
@@ -593,7 +599,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 ),
                 Container(
                   height: 42,
-                  color: Colors.white,
+                  color: config.miniProfileBgColor,
                 ),
               ],
             ),
@@ -678,7 +684,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 backgroundImage: (_cpPartner?['avatar'] as String?) != null
                                     ? cachedImgProvider(_cpPartner!['avatar'] as String)
                                     : null,
-                                child: const Icon(Icons.person, size: 40, color: Colors.grey),
+                                child: const Icon(Icons.person, size: 40, color: Colors.white70),
                               ),
                             ),
                           ),
@@ -696,7 +702,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         height: 32,
                       ),
                     ),
-                  // Like button - only for other users' profiles
+                                    // Join Room Animated Button
+                  if (_currentRoomId != null)
+                    Positioned(
+                      right: 70,
+                      bottom: 0,
+                      child: GestureDetector(
+                        onTap: _navigateToRoom,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.black26,
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: config.miniProfileJoinRoomIcon.isEmpty
+                                ? const Icon(Icons.meeting_room, color: Colors.white)
+                                : (config.miniProfileJoinRoomIcon.toLowerCase().endsWith('.svga')
+                                    ? SvgaPlayer(svgaUrl: config.miniProfileJoinRoomIcon)
+                                    : CachedNetworkImage(
+                                        imageUrl: config.miniProfileJoinRoomIcon,
+                                        fit: BoxFit.contain,
+                                      )),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+// Like button - only for other users' profiles
                   if (!isOwnProfile)
                     Positioned(
                       right: 20,
@@ -740,7 +777,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget _buildUserInfoPanel(DynamicConfigService config, UserModel? user) {
     return Container(
       width: double.infinity,
-      color: Colors.white,
+      color: Colors.transparent,
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -757,7 +794,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: Colors.white,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -769,7 +806,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   width: 24,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: Colors.white70.shade300,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -816,7 +853,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                       const SizedBox(width: 2),
                       Text(
-                        '${user?.level ?? 0}',
+                        '${user?.age ?? 18}',
                         style: const TextStyle(fontSize: 10, color: Colors.white),
                       ),
                     ],
@@ -847,7 +884,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 const Icon(Icons.location_on, size: 12, color: Color(0xFF666666)),
                 const SizedBox(width: 3),
                 Text(
-                  'مصر',
+                  (user?.country != null && user!.country.isNotEmpty) ? user.country : 'مصر',
                   style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
                 ),
                 const SizedBox(width: 5),
@@ -861,11 +898,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
           ),
           // Bio/Signature
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              'لم يضف توقيعاً بعد',
-              style: TextStyle(fontSize: 12, color: Color(0xFF555555)),
+              (user?.signature != null && user!.signature.isNotEmpty) ? user.signature : 'لم يضف توقيعاً بعد',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF555555)),
             ),
           ),
         ],
@@ -929,7 +966,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             style: const TextStyle(
               fontSize: 15,
             fontWeight: FontWeight.bold,
-               color: Colors.black87,
+               color: Colors.white,
              ),
            ),
            const SizedBox(height: 4),
@@ -937,7 +974,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
              label,
              style: TextStyle(
                fontSize: 11,
-               color: Colors.black87.withValues(alpha: 0.6),
+               color: Colors.white.withValues(alpha: 0.6),
             ),
           ),
         ],
@@ -975,7 +1012,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 borderRadius: BorderRadius.circular(5),
                 color: Colors.white.withValues(alpha: 0.2),
               ),
-              child: const Icon(Icons.meeting_room, color: Colors.black54, size: 28),
+              child: const Icon(Icons.meeting_room, color: Colors.white54, size: 28),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -983,7 +1020,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 _currentRoomId ?? 'الغرفة',
                 style: const TextStyle(
                   fontSize: 16,
-                  color: Colors.black87,
+                  color: Colors.white,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1006,6 +1043,104 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTopFansPodium(DynamicConfigService config, UserModel? user) {
+    if (_topMonthlyFans.isEmpty) return const SizedBox.shrink();
+
+    // Pad with empty entries if less than 3
+    final fans = List<Map<String, dynamic>>.from(_topMonthlyFans);
+    while (fans.length < 3) {
+      fans.add({});
+    }
+
+    final top1 = fans[0];
+    final top2 = fans[1];
+    final top3 = fans[2];
+
+    Widget buildAvatar(Map<String, dynamic> fan, double size, double bottomPad) {
+      final url = fan['user_photo_url']?.toString() ?? '';
+      final name = fan['user_name']?.toString() ?? '';
+      final isEmpty = url.isEmpty && name.isEmpty;
+
+      return Padding(
+        padding: EdgeInsets.only(bottom: bottomPad),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.amber, width: 2),
+                color: Colors.grey[300],
+              ),
+              child: isEmpty
+                  ? const Icon(Icons.person, color: Colors.white)
+                  : ClipOval(child: CachedImg(url, fit: BoxFit.cover)),
+            ),
+            const SizedBox(height: 4),
+            if (!isEmpty)
+              SizedBox(
+                width: size * 1.5,
+                child: Text(
+                  name,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10, color: Colors.black87, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 12, left: 12, right: 12, bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Text('Top Fans (This Month)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: 300,
+            height: 150,
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                // Podium image
+                Positioned(
+                  bottom: 0,
+                  child: Image.asset('assets/images/podium.png', width: 280, fit: BoxFit.contain),
+                ),
+                // Top 2 (Left)
+                Positioned(
+                  left: 30,
+                  bottom: 50,
+                  child: buildAvatar(top2, 45, 10),
+                ),
+                // Top 1 (Center)
+                Positioned(
+                  left: 0, right: 0,
+                  bottom: 75,
+                  child: buildAvatar(top1, 55, 15),
+                ),
+                // Top 3 (Right)
+                Positioned(
+                  right: 30,
+                  bottom: 40,
+                  child: buildAvatar(top3, 45, 5),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1168,7 +1303,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               children: [
                 const Text(
                   'اللحظات',
-                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
                 const Spacer(),
                 const Icon(Icons.chevron_right, color: Color(0xFF555555), size: 20),
@@ -1200,7 +1335,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     color: const Color(0xFFE8E8E8),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: const Icon(Icons.music_note, color: Colors.grey),
+                                  child: const Icon(Icons.music_note, color: Colors.white70),
                                 )),
                         ),
                       );
@@ -1229,7 +1364,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               children: [
                 const Text(
                   'جدار الهدايا',
-                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
                 const Spacer(),
                 const Icon(Icons.chevron_right, color: Color(0xFF555555), size: 20),
@@ -1242,7 +1377,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Center(
                 child: Text(
                   'لا توجد هدايا بعد',
-                  style: TextStyle(fontSize: 12, color: Colors.black.withValues(alpha: 0.4)),
+                  style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4)),
                 ),
               ),
             )
@@ -1286,10 +1421,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                               giftDef!.iconAsset,
                                               fit: BoxFit.contain,
                                               error: (_, __, ___) =>
-                                                  const Icon(Icons.card_giftcard, size: 24, color: Colors.grey),
+                                                  const Icon(Icons.card_giftcard, size: 24, color: Colors.white70),
                                             ),
                                     )
-                                  : const Icon(Icons.card_giftcard, size: 24, color: Colors.grey),
+                                  : const Icon(Icons.card_giftcard, size: 24, color: Colors.white70),
                             ),
                             if (isCpGift && cpDays > 0)
                               Positioned(
@@ -1304,10 +1439,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.music_note, size: 8, color: Colors.black),
+                                      const Icon(Icons.music_note, size: 8, color: Colors.white),
                                       const SizedBox(width: 1),
                                       Text('$cpDays',
-                                          style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: Colors.black)),
+                                          style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: Colors.white)),
                                     ],
                                   ),
                                 ),
@@ -1322,7 +1457,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             textAlign: TextAlign.center,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 9, color: Colors.grey),
+                            style: const TextStyle(fontSize: 9, color: Colors.white70),
                           ),
                         ),
                       ],
@@ -1351,7 +1486,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               children: [
                 const Text(
                   'المدليات',
-                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
                 const Spacer(),
               ],
@@ -1369,13 +1504,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             color: const Color(0xFFE8E8E8),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Icon(Icons.card_giftcard, color: Colors.grey, size: 24),
+                          child: Icon(Icons.card_giftcard, color: Colors.white70, size: 24),
                         ),
                       ),
                       const SizedBox(width: 8),
                       const Text(
                         'لا توجد مدليات',
-                        style: TextStyle(color: Colors.black54, fontSize: 13),
+                        style: TextStyle(color: Colors.white54, fontSize: 13),
                       ),
                     ],
                   ),
@@ -1404,14 +1539,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                         ? ClipRRect(
                                             borderRadius: BorderRadius.circular(6),
                                             child: CachedImg(img, fit: BoxFit.contain,
-                                              error: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.grey)),
+                                              error: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.white70)),
                                           )
                                         : Container(
                                             decoration: BoxDecoration(
                                               color: const Color(0xFFE8E8E8),
                                               borderRadius: BorderRadius.circular(6),
                                             ),
-                                            child: const Icon(Icons.card_giftcard, color: Colors.grey, size: 24),
+                                            child: Icon(Icons.card_giftcard, color: Colors.white70, size: 24),
                                           )),
                               ),
                               if (name.isNotEmpty)
@@ -1424,7 +1559,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                       textAlign: TextAlign.center,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontSize: 8, color: Colors.grey),
+                                      style: TextStyle(fontSize: 8, color: Colors.white70),
                                     ),
                                   ),
                                 ),
@@ -1449,14 +1584,110 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 100, width: 100,
-              child: Icon(Icons.card_giftcard, size: 60, color: Colors.black54)),
+              child: Icon(Icons.card_giftcard, size: 60, color: Colors.white54)),
             const SizedBox(height: 12),
             Text(
               necklace['name']?.toString() ?? '',
-              style: const TextStyle(color: Colors.black87, fontSize: 16),
+              style: TextStyle(color: Colors.white, fontSize: 16),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildEntrancesSection(DynamicConfigService config, UserModel? user) {
+    final entrances = _allOwnedEntrances.take(8).toList();
+    if (entrances.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('الدخوليات', style: TextStyle(fontSize: 16, color: Colors.white)),
+          ),
+          SizedBox(
+            height: 64,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              children: entrances.map((n) {
+                final svga = n['svga_url']?.toString();
+                final img = n['image_url']?.toString();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: svga != null && svga.isNotEmpty
+                        ? SvgaPlayer(assetPath: svga, width: 52, height: 52)
+                        : (img != null && img.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: CachedImg(img, fit: BoxFit.contain),
+                              )
+                            : Container(
+                                decoration: BoxDecoration(color: const Color(0xFFE8E8E8), borderRadius: BorderRadius.circular(6)),
+                                child: Icon(Icons.card_giftcard, color: Colors.white70, size: 24),
+                              )),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFramesSection(DynamicConfigService config, UserModel? user) {
+    final frames = _allOwnedFrames.take(8).toList();
+    if (frames.isEmpty) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.only(top: 12, left: 12, right: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text('الإطارات', style: TextStyle(fontSize: 16, color: Colors.white)),
+          ),
+          SizedBox(
+            height: 64,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              children: frames.map((n) {
+                final svga = n['svga_url']?.toString();
+                final img = n['image_url']?.toString();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: svga != null && svga.isNotEmpty
+                        ? SvgaPlayer(assetPath: svga, width: 52, height: 52)
+                        : (img != null && img.isNotEmpty
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: CachedImg(img, fit: BoxFit.contain),
+                              )
+                            : Container(
+                                decoration: BoxDecoration(color: const Color(0xFFE8E8E8), borderRadius: BorderRadius.circular(6)),
+                                child: Icon(Icons.card_giftcard, color: Colors.white70, size: 24),
+                              )),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1513,7 +1744,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               children: [
                 const Text(
                   'الشارات',
-                   style: TextStyle(fontSize: 16, color: Colors.black87),
+                   style: TextStyle(fontSize: 16, color: Colors.white),
                 ),
                 const Spacer(),
               ],
@@ -1590,19 +1821,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               onTap: _toggleFollow,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(25),
-                  border: Border.all(color: const Color(0xFF6de5ff)),
-                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      _isFollowing ? Icons.check : Icons.person_add,
-                      size: 20,
-                      color: const Color(0xFF6de5ff),
-                    ),
-                    const SizedBox(width: 10),
+                    if (config.miniProfileFollowIcon.isNotEmpty)
+                      Image(image: cachedImgProvider(config.miniProfileFollowIcon), width: 32, height: 32)
+                    else
+                      Icon(
+                        _isFollowing ? Icons.check : Icons.person_add,
+                        size: 24,
+                        color: const Color(0xFF6de5ff),
+                      ),
+                    const SizedBox(width: 8),
                     Text(
                       _isFollowing ? 'متابع' : 'متابعة',
                       style: const TextStyle(fontSize: 16, color: Color(0xFF6de5ff)),
@@ -1619,16 +1849,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               onTap: _navigateToChat,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(25),
-                  border: Border.all(color: const Color(0xFF6de5ff)),
-                ),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.chat, size: 20, color: Color(0xFF6de5ff)),
-                    SizedBox(width: 10),
-                    Text(
+                    if (config.miniProfileMessageIcon.isNotEmpty)
+                      Image(image: cachedImgProvider(config.miniProfileMessageIcon), width: 32, height: 32)
+                    else
+                      const Icon(Icons.chat, size: 24, color: Color(0xFF6de5ff)),
+                    const SizedBox(width: 8),
+                    const Text(
                       'رسالة',
                       style: TextStyle(fontSize: 16, color: Color(0xFF6de5ff)),
                     ),
@@ -1636,8 +1865,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 ),
               ),
             ),
-          ),
-        ],
+          ),        ],
       ),
     );
   }
@@ -1672,7 +1900,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return GestureDetector(
       onTap: () => setState(() => _selectedGift = null),
       child: Container(
-        color: Colors.black.withValues(alpha: 0.7),
+        color: Colors.white.withValues(alpha: 0.7),
         child: Center(
           child: GestureDetector(
             onTap: () {},
@@ -1701,10 +1929,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.music_note, size: 12, color: Colors.black),
+                            Icon(Icons.music_note, size: 12, color: Colors.white),
                             const SizedBox(width: 4),
                             Text('هدية CP - $cpDays يوم',
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black)),
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
                           ],
                         ),
                       ),
@@ -1714,7 +1942,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     width: 80,
                     height: 80,
                     decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.1),
+                      color: Colors.white70.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: ClipRRect(
@@ -1749,7 +1977,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return GestureDetector(
       onTap: () => setState(() => _selectedItem = null),
       child: Container(
-        color: Colors.black.withValues(alpha: 0.7),
+        color: Colors.white.withValues(alpha: 0.7),
         child: Center(
           child: GestureDetector(
             onTap: () {},
@@ -2052,7 +2280,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       error: (_, __, ___) => Container(
                         width: 200,
                         height: 200,
-                        color: Colors.grey[300],
+                        color: Colors.white54,
                         child: const Icon(Icons.broken_image),
                       ),
                     ),
@@ -2177,3 +2405,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return '${diff.inDays}d ago';
   }
 }
+
+
+
+
+
+

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'widgets/nine_patch_image.dart';
@@ -56,6 +58,7 @@ Future<void> navigateToRoom(
   required String roomName,
   required String hostName,
   required String roomId,
+  String? hostUid,
   String roomPassword = '',
   String hotValue = '0',
   String gameDesc = '',
@@ -78,6 +81,49 @@ Future<void> navigateToRoom(
       if (uid != null) svc.exitRoom(uid);
     }
   }
+
+  if (roomPassword.isNotEmpty && hostUid != uid) {
+    String inputPassword = '';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF211211),
+          title: const Text('كلمة المرور مطلوبة', style: TextStyle(color: Colors.white)),
+          content: TextField(
+            obscureText: true,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'أدخل كلمة مرور الغرفة',
+              hintStyle: TextStyle(color: Colors.white54),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white54)),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD3A350))),
+            ),
+            onChanged: (v) => inputPassword = v,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+            ),
+            TextButton(
+              onPressed: () {
+                if (inputPassword == roomPassword) {
+                  Navigator.pop(ctx, true);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('كلمة المرور غير صحيحة')));
+                }
+              },
+              child: const Text('دخول', style: TextStyle(color: Color(0xFFD3A350))),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+  }
+
   if (!context.mounted) return;
   final route = MaterialPageRoute(
     builder: (_) => RoomScreen(
@@ -349,10 +395,12 @@ class _RoomScreenState extends State<RoomScreen> {
     final joinedMs = _joinedAt?.millisecondsSinceEpoch ?? 0;
     _msgSub = _firebaseService.messagesStream(widget.roomId).listen((msgs) {
       if (mounted) {
+        final clearedAt = _currentRoom?.chatClearedAt ?? 0;
+        final filterTime = max(joinedMs, clearedAt);
         setState(() {
           _chatMessages
             ..clear()
-            ..addAll(msgs.where((m) => m.timestamp >= joinedMs));
+            ..addAll(msgs.where((m) => m.timestamp >= filterTime));
           _msgCount = _chatMessages.length;
         });
         if (_chatScroll.hasClients) {
@@ -770,6 +818,57 @@ class _RoomScreenState extends State<RoomScreen> {
         _showProfile = false;
       });
 
+  void _openMessageSettings() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF211211),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (BuildContext ctx) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            final isLocked = _currentRoom?.isChatLocked ?? false;
+            final isAr = Localizations.localeOf(context).languageCode == 'ar';
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isAr ? 'إعدادات الرسائل' : 'Message Settings',
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isAr ? 'قفل الدردشة' : 'Lock Chat',
+                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      Switch(
+                        value: isLocked,
+                        activeColor: const Color(0xFFD3A350),
+                        onChanged: (val) {
+                          setModalState(() {});
+                          _firebaseService.updateRoom(widget.roomId, {
+                            'is_chat_locked': val,
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _openGiftPanel() {
     final hasSeatedUsers = _seats.any((s) => s.isOccupied && s.user != null);
     if (!hasSeatedUsers) {
@@ -845,6 +944,13 @@ class _RoomScreenState extends State<RoomScreen> {
   void _sendMessage() {
     final t = _chatCtrl.text.trim();
     if (t.isEmpty) return;
+    if (_currentRoom?.isChatLocked == true && !_isOwnerOrModerator) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم قفل الدردشة من قبل الإدارة')),
+      );
+      setState(() => _showChatInput = false);
+      return;
+    }
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final user = userProvider.currentUser;
     if (user != null) {
@@ -1242,9 +1348,9 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   void _openEffect() {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Effect panel coming soon')));
+    setState(() {
+      _showCharmValues = !_showCharmValues;
+    });
   }
 
   void _openMusic() {
@@ -1373,8 +1479,13 @@ class _RoomScreenState extends State<RoomScreen> {
               // Bottom bar
               BottomBar(
                 isMicOn: _isMicOn,
+                showMic: _currentUserSeat != null,
                 msgCount: _msgCount,
                 onChat: () {
+                  if (_currentRoom?.isChatLocked == true && !_isOwnerOrModerator) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم قفل الدردشة من قبل الإدارة')));
+                    return;
+                  }
                   _closeAllPanels();
                   setState(() => _showChatInput = !_showChatInput);
                 },
@@ -1383,9 +1494,11 @@ class _RoomScreenState extends State<RoomScreen> {
                   setState(() => _showEmoj = !_showEmoj);
                 },
                 onMic: () async {
+                  if (_currentUserSeat == null) return;
                   final newVal = !_isMicOn;
                   setState(() => _isMicOn = newVal);
                   await _roomAudio.toggleMic(newVal);
+                  _toggleSeatMute(_currentUserSeat!, !newVal);
                 },
                 onGift: () {
                   if (_showGift) {
@@ -1451,6 +1564,7 @@ class _RoomScreenState extends State<RoomScreen> {
                             .map((s) => {
                                   'id': s.user!.id ?? '',
                                   'name': s.user!.name,
+                                  'photoUrl': s.user!.avatar,
                                 })
                             .toList(),
                         receiverId: _selectedSeatIdx != null &&
@@ -1610,7 +1724,7 @@ class _RoomScreenState extends State<RoomScreen> {
                       builder: (_) => ReportUserScreen(
                         nickname: u.name,
                         avatar: u.avatar,
-                        reportedUid: u.id,
+                        reportedUid: u.id ?? '',
                       ),
                     ),
                   );
@@ -1799,6 +1913,12 @@ class _RoomScreenState extends State<RoomScreen> {
         break;
       case 'Effect':
         _openEffect();
+        break;
+      case 'Clear Messages':
+        if (_isOwnerOrModerator) _clearMessages();
+        break;
+      case 'Message Settings':
+        if (_isOwnerOrModerator) _openMessageSettings();
         break;
       case 'Music':
         Navigator.push(

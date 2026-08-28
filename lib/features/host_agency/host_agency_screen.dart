@@ -21,16 +21,8 @@ import 'screens/agency_profile_screen.dart';
 import 'screens/agency_supervisor_dashboard_screen.dart';
 
 import '../../core/cache/encrypted_image_provider.dart';
-
-// ── palette ──────────────────────────────────────────────────────────────────
-const _bgDeep    = Color(0xFF03030A);
-const _bgCard    = Color(0x800A0820);
-const _border    = Color(0x2D9C6BFF);
-const _purple    = Color(0xFF9C6BFF);
-const _gold      = Color(0xFFF6C453);
-const _cyan      = Color(0xFF00D4FF);
-const _textMain  = Color(0xFFE8E6FF);
-const _textMuted = Color(0xFF8A88AA);
+import 'package:provider/provider.dart';
+import '../../services/dynamic_config_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class HostAgencyScreen extends StatefulWidget {
@@ -91,11 +83,12 @@ debugPrint('[host_agency_screen] error: $e');
   // ── build ────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final cfg = context.watch<DynamicConfigService>();
     if (_loading) {
       return Scaffold(
-        backgroundColor: _bgDeep,
-        body: const Center(
-          child: CircularProgressIndicator(color: _purple),
+        backgroundColor: cfg.agencyHeaderBg,
+        body: Center(
+          child: CircularProgressIndicator(color: cfg.agencyAccent),
         ),
       );
     }
@@ -223,25 +216,26 @@ debugPrint('[host_agency_screen] error: $e');
   // ── build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final cfg = context.watch<DynamicConfigService>();
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        backgroundColor: _bgDeep,
+        backgroundColor: cfg.agencyHeaderBg,
         body: FadeTransition(
           opacity: _anim,
           child: CustomScrollView(
             slivers: [
-              _buildHeader(),
-              SliverToBoxAdapter(child: _buildHeroSection()),
+              _buildHeader(cfg),
+              SliverToBoxAdapter(child: _buildHeroSection(cfg)),
               SliverToBoxAdapter(child: const SizedBox(height: 24)),
-              SliverToBoxAdapter(child: _buildActionButtons()),
+              SliverToBoxAdapter(child: _buildActionButtons(cfg)),
               if (_showForm) ...[
                 SliverToBoxAdapter(child: const SizedBox(height: 20)),
-                SliverToBoxAdapter(child: _buildCreateForm()),
+                SliverToBoxAdapter(child: _buildCreateForm(cfg)),
               ],
               SliverToBoxAdapter(child: const SizedBox(height: 24)),
-              SliverToBoxAdapter(child: _buildTopAgenciesHeader()),
-              _buildTopAgenciesList(),
+              SliverToBoxAdapter(child: _buildTopAgenciesHeader(cfg)),
+              _buildTopAgenciesList(cfg),
               SliverToBoxAdapter(child: const SizedBox(height: 120)),
             ],
           ),
@@ -250,22 +244,22 @@ debugPrint('[host_agency_screen] error: $e');
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(DynamicConfigService cfg) {
     return SliverAppBar(
       expandedHeight: 0,
       pinned: true,
-      backgroundColor: _bgDeep,
+      backgroundColor: cfg.agencyHeaderBg,
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded, color: _textMain, size: 20),
+        icon: Icon(Icons.arrow_back_ios_new_rounded, color: cfg.agencyTextColor, size: 20),
         onPressed: () => Navigator.maybePop(context),
       ),
-      title: const Text('وكالات المضيفين',
-        style: TextStyle(color: _textMain, fontWeight: FontWeight.w600, fontSize: 17)),
+      title: Text('وكالات المضيفين',
+        style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w600, fontSize: 17)),
       centerTitle: true,
       actions: [
         IconButton(
-          icon: const Icon(Icons.leaderboard_rounded, color: _gold, size: 22),
+          icon: Icon(Icons.leaderboard_rounded, color: cfg.agencyTabActive, size: 22),
           tooltip: 'التصنيف الكامل',
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgencyLeaderboardScreen())),
         ),
@@ -273,18 +267,18 @@ debugPrint('[host_agency_screen] error: $e');
     );
   }
 
-  Widget _buildHeroSection() {
+  Widget _buildHeroSection(DynamicConfigService cfg) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1A0A3E), Color(0xFF0A1A3E)],
+        gradient: LinearGradient(
+          colors: [cfg.agencyCardBg.withOpacity(0.8), cfg.agencyCardBg.withOpacity(0.5)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _border),
+        border: Border.all(color: cfg.agencyCardBorder),
       ),
       child: Column(
         children: [
@@ -298,31 +292,31 @@ debugPrint('[host_agency_screen] error: $e');
               width: 80, height: 80,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [_purple, _cyan],
+                gradient: LinearGradient(
+                  colors: [cfg.agencyAccent, cfg.agencyTabActive],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                boxShadow: [BoxShadow(color: _purple.withOpacity(0.4), blurRadius: 20)],
+                boxShadow: [BoxShadow(color: cfg.agencyAccent.withOpacity(0.4), blurRadius: 20)],
               ),
               child: const Icon(Icons.business_rounded, color: Colors.white, size: 36),
             ),
           ),
           const SizedBox(height: 16),
-          const Text('لست في وكالة بعد',
-            style: TextStyle(color: _textMain, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text('لست في وكالة بعد',
+            style: TextStyle(color: cfg.agencyTextColor, fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'انضم لوكالة لتعزيز أرباحك وتحقيق أهداف مشتركة،\nأو أنشئ وكالتك الخاصة وقُد فريقك.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: _textMuted, fontSize: 13, height: 1.6),
+            style: TextStyle(color: cfg.agencySubText, fontSize: 13, height: 1.6),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButtons() {
+  Widget _buildActionButtons(DynamicConfigService cfg) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
@@ -332,7 +326,7 @@ debugPrint('[host_agency_screen] error: $e');
             child: _GlassButton(
               label: 'تصفح الوكالات',
               icon: Icons.search_rounded,
-              color: _cyan,
+              color: cfg.agencyTabActive,
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgencyLeaderboardScreen())),
             ),
           ),
@@ -342,7 +336,7 @@ debugPrint('[host_agency_screen] error: $e');
             child: _GlassButton(
               label: _showForm ? 'إخفاء النموذج' : 'إنشاء وكالة',
               icon: _showForm ? Icons.keyboard_arrow_up_rounded : Icons.add_business_rounded,
-              color: _gold,
+              color: cfg.agencyAccent,
               onTap: () => setState(() => _showForm = !_showForm),
             ),
           ),
@@ -351,50 +345,50 @@ debugPrint('[host_agency_screen] error: $e');
     );
   }
 
-  Widget _buildCreateForm() {
+  Widget _buildCreateForm(DynamicConfigService cfg) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _bgCard,
+        color: cfg.agencyCardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _gold.withOpacity(0.3)),
+        border: Border.all(color: cfg.agencyCardBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('إنشاء وكالة جديدة',
-            style: TextStyle(color: _gold, fontWeight: FontWeight.bold, fontSize: 15)),
+          Text('إنشاء وكالة جديدة',
+            style: TextStyle(color: cfg.agencyTabActive, fontWeight: FontWeight.bold, fontSize: 15)),
           const SizedBox(height: 16),
-          _field(_nameCtrl, 'اسم الوكالة *', Icons.badge_rounded),
+          _field(cfg, _nameCtrl, 'اسم الوكالة *', Icons.badge_rounded),
           const SizedBox(height: 12),
-          _field(_descCtrl, 'وصف الوكالة (اختياري)', Icons.description_rounded, maxLines: 3),
+          _field(cfg, _descCtrl, 'وصف الوكالة (اختياري)', Icons.description_rounded, maxLines: 3),
           const SizedBox(height: 12),
           // الدولة
           DropdownButtonFormField<String>(
             value: _selectedCountry,
             decoration: InputDecoration(
               hintText: 'الدولة (اختياري)',
-              hintStyle: TextStyle(color: _textMuted.withOpacity(0.6), fontSize: 13),
-              prefixIcon: const Icon(Icons.flag_rounded, color: _textMuted, size: 18),
+              hintStyle: TextStyle(color: cfg.agencySubText.withOpacity(0.6), fontSize: 13),
+              prefixIcon: Icon(Icons.flag_rounded, color: cfg.agencySubText, size: 18),
               filled: true,
-              fillColor: const Color(0x1A9C6BFF),
+              fillColor: cfg.agencyCardBorder.withOpacity(0.1),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: _border),
+                borderSide: BorderSide(color: cfg.agencyCardBorder),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: _border),
+                borderSide: BorderSide(color: cfg.agencyCardBorder),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _purple),
+                borderSide: BorderSide(color: cfg.agencyAccent),
               ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             ),
-            dropdownColor: const Color(0xFF0A0820),
-            style: const TextStyle(color: _textMain, fontSize: 13),
+            dropdownColor: cfg.agencyCardBg,
+            style: TextStyle(color: cfg.agencyTextColor, fontSize: 13),
             items: _countries.map((c) => DropdownMenuItem(
               value: c,
               child: Text(c),
@@ -402,25 +396,25 @@ debugPrint('[host_agency_screen] error: $e');
             onChanged: (v) => setState(() => _selectedCountry = v),
           ),
           const SizedBox(height: 12),
-          _field(_phoneCtrl, 'رقم الهاتف (اختياري)', Icons.phone_rounded,
+          _field(cfg, _phoneCtrl, 'رقم الهاتف (اختياري)', Icons.phone_rounded,
               keyboardType: TextInputType.phone),
           const SizedBox(height: 4),
           Text('الوكالة تبدأ بدرجة Bronze — ترتفع بأداء الفريق',
-            style: TextStyle(color: _textMuted.withOpacity(0.7), fontSize: 11)),
+            style: TextStyle(color: cfg.agencySubText.withOpacity(0.7), fontSize: 11)),
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
               onPressed: _creating ? null : _createAgency,
               style: FilledButton.styleFrom(
-                backgroundColor: _gold,
-                foregroundColor: Colors.black,
+                backgroundColor: cfg.agencyTabActive,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: _creating
                 ? const SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Text('إنشاء الوكالة', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ),
@@ -429,69 +423,69 @@ debugPrint('[host_agency_screen] error: $e');
     );
   }
 
-  Widget _field(TextEditingController ctrl, String hint, IconData icon,
+  Widget _field(DynamicConfigService cfg, TextEditingController ctrl, String hint, IconData icon,
       {int maxLines = 1, TextInputType? keyboardType}) {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
       keyboardType: keyboardType,
-      style: const TextStyle(color: _textMain),
+      style: TextStyle(color: cfg.agencyTextColor),
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: _textMuted.withOpacity(0.6), fontSize: 13),
-        prefixIcon: Icon(icon, color: _textMuted, size: 18),
+        hintStyle: TextStyle(color: cfg.agencySubText.withOpacity(0.6), fontSize: 13),
+        prefixIcon: Icon(icon, color: cfg.agencySubText, size: 18),
         filled: true,
-        fillColor: const Color(0x1A9C6BFF),
+        fillColor: cfg.agencyCardBorder.withOpacity(0.1),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: _border),
+          borderSide: BorderSide(color: cfg.agencyCardBorder),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: _border),
+          borderSide: BorderSide(color: cfg.agencyCardBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _purple),
+          borderSide: BorderSide(color: cfg.agencyAccent),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
   }
 
-  Widget _buildTopAgenciesHeader() {
+  Widget _buildTopAgenciesHeader(DynamicConfigService cfg) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
       child: Row(
         children: [
           const Text('🏆', style: TextStyle(fontSize: 18)),
           const SizedBox(width: 8),
-          const Text('أفضل الوكالات',
-            style: TextStyle(color: _textMain, fontWeight: FontWeight.bold, fontSize: 16)),
+          Text('أفضل الوكالات',
+            style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.bold, fontSize: 16)),
           const Spacer(),
           TextButton(
           onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgencyLeaderboardScreen())),
-            child: const Text('عرض الكل', style: TextStyle(color: _purple, fontSize: 13)),
+            child: Text('عرض الكل', style: TextStyle(color: cfg.agencyAccent, fontSize: 13)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTopAgenciesList() {
+  Widget _buildTopAgenciesList(DynamicConfigService cfg) {
     if (_loadingList) {
-      return const SliverToBoxAdapter(
+      return SliverToBoxAdapter(
         child: Center(child: Padding(
-          padding: EdgeInsets.all(32),
-          child: CircularProgressIndicator(color: _purple),
+          padding: const EdgeInsets.all(32),
+          child: CircularProgressIndicator(color: cfg.agencyAccent),
         )),
       );
     }
     if (_topAgencies.isEmpty) {
-      return const SliverToBoxAdapter(
+      return SliverToBoxAdapter(
         child: Center(child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text('لا توجد وكالات بعد', style: TextStyle(color: _textMuted)),
+          padding: const EdgeInsets.all(32),
+          child: Text('لا توجد وكالات بعد', style: TextStyle(color: cfg.agencySubText)),
         )),
       );
     }
@@ -572,6 +566,7 @@ class _AgencyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cfg = context.watch<DynamicConfigService>();
     final name         = agency['name']                    as String? ?? '—';
     final tier         = agency['tier']                    as String? ?? 'bronze';
     final photoUrl     = agency['photo_url']               as String?;
@@ -587,7 +582,7 @@ class _AgencyCard extends StatelessWidget {
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: _bgCard,
+          color: cfg.agencyCardBg,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withOpacity(0.25)),
         ),
@@ -598,7 +593,7 @@ class _AgencyCard extends StatelessWidget {
               width: 32,
               child: Text(rankLabel,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18)),
+                style: TextStyle(fontSize: 18, color: cfg.agencyTextColor)),
             ),
             const SizedBox(width: 10),
             // Logo
@@ -630,7 +625,7 @@ class _AgencyCard extends StatelessWidget {
                       Flexible(
                         child: Text(name,
                           maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: _textMain, fontWeight: FontWeight.w600, fontSize: 14)),
+                          style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w600, fontSize: 14)),
                       ),
                       if (isHOF) ...[
                         const SizedBox(width: 4),
@@ -650,9 +645,9 @@ class _AgencyCard extends StatelessWidget {
                         child: Text(tier, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 8),
-                      Icon(Icons.people_rounded, color: _textMuted, size: 13),
+                      Icon(Icons.people_rounded, color: cfg.agencySubText, size: 13),
                       const SizedBox(width: 3),
-                      Text('$members', style: const TextStyle(color: _textMuted, fontSize: 12)),
+                      Text('$members', style: TextStyle(color: cfg.agencySubText, fontSize: 12)),
                     ],
                   ),
                 ],
@@ -662,10 +657,10 @@ class _AgencyCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                const Text('♦', style: TextStyle(color: _cyan, fontSize: 16)),
+                Text('♦', style: TextStyle(color: cfg.agencyTabInactive, fontSize: 16)),
                 const SizedBox(height: 2),
                 Text(_fmt(diamonds),
-                  style: const TextStyle(color: _textMain, fontWeight: FontWeight.bold, fontSize: 13)),
+                  style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.bold, fontSize: 13)),
               ],
             ),
           ],

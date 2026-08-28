@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
@@ -17,10 +17,76 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _signatureController = TextEditingController();
+  final TextEditingController _ageController = TextEditingController();
   String _selectedGender = 'male'; // male or female
+  String _selectedCountry = 'EG';
   File? _selectedImage;
   bool _isLoading = false;
   DateTime? _selectedBirthday;
+
+  final List<Map<String, String>> _arabCountries = [
+    {'code': 'EG', 'name': 'مصر', 'flag': '🇪🇬'},
+    {'code': 'SA', 'name': 'السعودية', 'flag': '🇸🇦'},
+    {'code': 'AE', 'name': 'الإمارات', 'flag': '🇦🇪'},
+    {'code': 'KW', 'name': 'الكويت', 'flag': '🇰🇼'},
+    {'code': 'QA', 'name': 'قطر', 'flag': '🇶🇦'},
+    {'code': 'BH', 'name': 'البحرين', 'flag': '🇧🇭'},
+    {'code': 'OM', 'name': 'عمان', 'flag': '🇴🇲'},
+    {'code': 'IQ', 'name': 'العراق', 'flag': '🇮🇶'},
+    {'code': 'SY', 'name': 'سوريا', 'flag': '🇸🇾'},
+    {'code': 'LB', 'name': 'لبنان', 'flag': '🇱🇧'},
+    {'code': 'JO', 'name': 'الأردن', 'flag': '🇯🇴'},
+    {'code': 'PS', 'name': 'فلسطين', 'flag': '🇵🇸'},
+    {'code': 'YE', 'name': 'اليمن', 'flag': '🇾🇪'},
+    {'code': 'DZ', 'name': 'الجزائر', 'flag': '🇩🇿'},
+    {'code': 'MA', 'name': 'المغرب', 'flag': '🇲🇦'},
+    {'code': 'TN', 'name': 'تونس', 'flag': '🇹🇳'},
+    {'code': 'LY', 'name': 'ليبيا', 'flag': '🇱🇾'},
+    {'code': 'SD', 'name': 'السودان', 'flag': '🇸🇩'},
+    {'code': 'MR', 'name': 'موريتانيا', 'flag': '🇲🇷'},
+    {'code': 'SO', 'name': 'الصومال', 'flag': '🇸🇴'},
+    {'code': 'DJ', 'name': 'جيبوتي', 'flag': '🇩🇯'},
+    {'code': 'KM', 'name': 'جزر القمر', 'flag': '🇰🇲'},
+  ];
+
+  void _showCountryPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('اختر البلد', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _arabCountries.length,
+                  itemBuilder: (context, index) {
+                    final country = _arabCountries[index];
+                    return ListTile(
+                      leading: Text(country['flag']!, style: const TextStyle(fontSize: 24)),
+                      title: Text(country['name']!),
+                      onTap: () {
+                        setState(() {
+                          _selectedCountry = country['code']!;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    );
+  }
 
   @override
   void initState() {
@@ -29,7 +95,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final user = userProvider.currentUser;
     if (user != null) {
       _nameController.text = user.name ?? '';
+      _signatureController.text = user.signature ?? '';
+      _ageController.text = (user.age ?? 18).toString();
       _selectedGender = user.gender ?? 'male';
+      _selectedCountry = user.country ?? 'EG';
     }
   }
 
@@ -103,6 +172,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         name: _nameController.text.trim(),
         photoUrl: photoUrl,
         gender: _selectedGender,
+        signature: _signatureController.text.trim(),
+        country: _selectedCountry,
+        age: int.tryParse(_ageController.text.trim()) ?? 18,
       );
 
       await SupabaseService().saveUser(updatedUser);
@@ -234,14 +306,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       Icons.person,
                     ),
                     const SizedBox(height: 16),
-                    // Birthday
-                    _buildMenuField(
-                      'تاريخ الميلاد',
-                      _selectedBirthday != null
-                          ? '${_selectedBirthday!.day}/${_selectedBirthday!.month}/${_selectedBirthday!.year}'
-                          : 'اختر تاريخ الميلاد',
+                    // Age Field
+                    _buildEditField(
+                      'العمر',
+                      _ageController,
                       Icons.cake,
-                      _selectBirthday,
+                    ),
+                    const SizedBox(height: 16),
+                    // Country
+                    _buildMenuField(
+                      'البلد',
+                      _arabCountries.firstWhere((c) => c['code'] == _selectedCountry, orElse: () => _arabCountries.first)['name']!,
+                      Icons.flag,
+                      _showCountryPicker,
                     ),
                     const SizedBox(height: 16),
                     // Gender
@@ -477,3 +554,4 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 }
+

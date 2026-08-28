@@ -152,7 +152,7 @@ class FunctionPanel extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () {
                     final key = item['key']!;
-                    if (key == 'Settings' || key == 'Mixer' || key == 'Volume' || key == 'Seat Style' || key == 'Effect' || key == 'Room Background') {
+                    if (key == 'Settings' || key == 'Mixer' || key == 'Volume' || key == 'Seat Style' || key == 'Effect' || key == 'Room Background' || key == 'Clear Messages' || key == 'Message Settings') {
                       onItemTap?.call(key);
                     } else {
                       final label = item['label']!;
