@@ -724,7 +724,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               child: ''.isEmpty
                                 ? const Icon(Icons.meeting_room, color: Colors.white)
                                 : (''.toLowerCase().endsWith('.svga')
-                                    ? SvgaPlayer(svgaUrl: '')
+                                    ? SvgaPlayer(assetPath: '')
                                     : CachedNetworkImage(
                                         imageUrl: '',
                                         fit: BoxFit.contain,
@@ -2406,6 +2406,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return '${diff.inDays}d ago';
   }
 }
+
 
 
 

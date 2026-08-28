@@ -25,16 +25,16 @@ import 'screens/agency_owner_wallet_screen.dart';
 import 'data/agency_chat_models.dart';
 
 // â”€â”€ palette (same design system as host_dashboard_screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-_bgDeep    = Color(0xFF03030A);
-_bgCard    = Color(0x800A0820);
-_border    = Color(0x2D9C6BFF);
-_purple    = Color(0xFF9C6BFF);
-_gold      = Color(0xFFF6C453);
-_cyan      = Color(0xFF00D4FF);
-_green     = Color(0xFF00E5A0);
-_red       = Color(0xFFFF4D6D);
-_textMain  = Color(0xFFE8E6FF);
-_textMuted = Color(0xFF8A88AA);
+const Color _bgDeep    = Color(0xFF03030A);
+const Color _bgCard    = Color(0x800A0820);
+const Color _border    = Color(0x2D9C6BFF);
+const Color _purple    = Color(0xFF9C6BFF);
+const Color _gold      = Color(0xFFF6C453);
+const Color _cyan      = Color(0xFF00D4FF);
+const Color _green     = Color(0xFF00E5A0);
+const Color _red       = Color(0xFFFF4D6D);
+const Color _textMain  = Color(0xFFE8E6FF);
+const Color _textMuted = Color(0xFF8A88AA);
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class AgencyDashboardScreen extends StatefulWidget {
@@ -982,5 +982,6 @@ class _QuickActionCard extends StatelessWidget {
     );
   }
 }
+
 
 

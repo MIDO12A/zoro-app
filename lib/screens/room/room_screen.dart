@@ -628,7 +628,7 @@ class _RoomScreenState extends State<RoomScreen> {
 
   void _clearMessages() {
     setState(() {
-      _messages.clear();
+      _chatMessages.clear();
     });
   }
 
@@ -1512,7 +1512,7 @@ class _RoomScreenState extends State<RoomScreen> {
                   final newVal = !_isMicOn;
                   setState(() => _isMicOn = newVal);
                   await _roomAudio.toggleMic(newVal);
-                  _toggleSeatMute(_currentUserSeat!, !newVal);
+                  _toggleSeatMute(_currentUserSeat!.index, !newVal);
                 },
                 onGift: () {
                   if (_showGift) {
@@ -3377,3 +3377,4 @@ class _MusicListSheet extends StatelessWidget {
     );
   }
 }
+

@@ -85,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     final config = DynamicConfigService();
-    if (config.adSplashImage.isNotEmpty) {
+    if (config.splashUrl.isNotEmpty) {
       if (mounted) {
         setState(() {
           _showingAd = true;
@@ -183,7 +183,7 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             Positioned.fill(
               child: Image(
-                image: R.cachedImage(config.adSplashImage),
+                image: R.cachedImage(config.splashUrl),
                 fit: BoxFit.cover,
               ),
             ),
@@ -280,3 +280,4 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 }
+
