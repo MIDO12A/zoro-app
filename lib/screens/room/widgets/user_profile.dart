@@ -335,7 +335,10 @@ class _UserProfileState extends State<UserProfile> {
           padding: const EdgeInsets.only(top: 5),
           child: GestureDetector(
             onTap: () {
-              final id = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? widget.user['id']?.toString() ?? '';
+              final fbUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
+              final generatedId = fbUid.isNotEmpty ? (1000000 + (fbUid.hashCode.abs() % 9000000)).toString() : '';
+              final id = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? (generatedId.isNotEmpty ? generatedId : fbUid);
+              
               if (id.isNotEmpty) {
                 Clipboard.setData(ClipboardData(text: id));
                 ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -352,12 +355,17 @@ class _UserProfileState extends State<UserProfile> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'ID: ${_extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? widget.user['id'] ?? '------'}',
-                    style: const TextStyle(fontSize: 10, color: Color(0xFF9BA1B6)),
-                  ),
+                  Builder(builder: (context) {
+                    final fbUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
+                    final generatedId = fbUid.isNotEmpty ? (1000000 + (fbUid.hashCode.abs() % 9000000)).toString() : '';
+                    final idText = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? (generatedId.isNotEmpty ? generatedId : fbUid);
+                    return Text(
+                      'ID: $idText',
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF9BA1B6)),
+                    );
+                  }),
                   const SizedBox(width: 4),
-                  Icon(Icons.copy, size: 10, color: Color(0xFF9BA1B6)),
+                  const Icon(Icons.copy, size: 10, color: Color(0xFF9BA1B6)),
                 ],
               ),
             ),

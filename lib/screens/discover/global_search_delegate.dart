@@ -232,12 +232,20 @@ class _GlobalSearchResultsState extends State<_GlobalSearchResults> {
             ..._users.map((u) {
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                leading: CircleAvatar(
-                  radius: 25,
-                  backgroundImage: NetworkImage(u['photo_url'] ?? u['photoUrl'] ?? ''),
-                  onBackgroundImageError: (_, __) => const Icon(Icons.person),
+                leading: Container(
+                  width: 50,
+                  height: 50,
+                  decoration: const BoxDecoration(shape: BoxShape.circle),
+                  clipBehavior: Clip.hardEdge,
+                  child: (u['photo_url'] != null && u['photo_url'].toString().isNotEmpty)
+                      ? Image.network(
+                          u['photo_url'],
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Colors.white54, size: 30),
+                        )
+                      : const Icon(Icons.person, color: Colors.white54, size: 30),
                 ),
-                title: Text(u['name'] ?? 'بدون اسم', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                title: Text(u['name'] ?? u['username'] ?? 'مستخدم', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                 subtitle: Text('ID: ${u['custom_id'] ?? ''}', style: const TextStyle(color: Colors.white54)),
                 onTap: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(targetUid: u['docId'])));
