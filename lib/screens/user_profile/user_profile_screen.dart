@@ -546,9 +546,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           image: cachedImgProvider(_profileBgUrl!),
                           fit: BoxFit.cover,
                         )
-                      : ((config.profileBgType == 'image' && config.profileBackgroundImage.isNotEmpty)
+                      : ((config.profileBgType == 'image' && config.customProfileBgImage.isNotEmpty)
                           ? DecorationImage(
-                              image: cachedImgProvider(config.profileBackgroundImage),
+                              image: cachedImgProvider(config.customProfileBgImage),
                               fit: BoxFit.cover,
                             )
                           : null),
