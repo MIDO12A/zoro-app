@@ -90,7 +90,7 @@ class _UserProfileState extends State<UserProfile> {
       final svc = SupabaseService();
       final userData = await Supabase.instance.client
           .from('users')
-          .select('custom_id, active_frame, active_cover, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces, country, country_code')
+          .select('custom_id, active_frame, active_cover, profile_bg_url, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces, country, country_code')
           .eq('uid', uid)
           .maybeSingle();
       if (userData != null) {
@@ -192,6 +192,14 @@ class _UserProfileState extends State<UserProfile> {
     final subTextColor = config.miniprofileSubTextColor;
     final btnColor = config.miniprofileButtonColor;
 
+    final userCover = _extraUserData['profile_bg_url']?.toString() ??
+        _extraUserData['active_cover']?.toString() ??
+        widget.user['profile_bg_url']?.toString() ??
+        widget.user['active_cover']?.toString() ??
+        widget.user['cover']?.toString() ??
+        '';
+    final hasUserCover = userCover.isNotEmpty;
+
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
@@ -203,7 +211,7 @@ class _UserProfileState extends State<UserProfile> {
           padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
           decoration: BoxDecoration(
             color: cardBgColor,
-            image: config.miniprofileBgImage.isNotEmpty
+            image: (!hasUserCover && config.miniprofileBgImage.isNotEmpty)
                 ? DecorationImage(
                     image: R.cachedImage(config.miniprofileBgImage),
                     fit: BoxFit.cover,
@@ -665,6 +673,47 @@ class _UserProfileState extends State<UserProfile> {
             ],
           ),
         ),
+
+        // User Custom Cover Banner (Top Header)
+        if (hasUserCover)
+          Positioned(
+            top: 36,
+            left: 0,
+            right: 0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              child: SizedBox(
+                height: 110,
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (userCover.endsWith('.svga'))
+                      SvgaPlayer(assetPath: userCover, fit: BoxFit.cover)
+                    else
+                      Image(
+                        image: R.cachedImage(userCover),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox(),
+                      ),
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            cardBgColor.withOpacity(0.5),
+                            cardBgColor,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
 
         // Centered Avatar
         Positioned(
