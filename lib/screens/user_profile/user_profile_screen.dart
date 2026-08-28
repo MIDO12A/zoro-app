@@ -1137,7 +1137,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final List<Map<String, dynamic>> necklaces = List.from(_allOwnedNecklaces);
 
     // Auto-inject Agency Leader / Owner SVGA Necklace
-    final isAgencyLeader = _user?.role == 'agent' || _user?.role == 'agency_owner' || (_userAgency != null && _userAgency!['owner_id']?.toString() == _user?.id);
+    final isAgencyLeader = (_userAgency != null && _userAgency!['owner_id']?.toString() == _user?.uid) ||
+        (_user != null && _user!.ownedNecklaces.contains('agency_leader_necklace'));
     if (isAgencyLeader && config.agencyLeaderNecklaceSvga.isNotEmpty) {
       if (!necklaces.any((n) => n['type'] == 'agency_leader' || n['id'] == 'agency_leader_necklace')) {
         necklaces.insert(0, {
@@ -1150,18 +1151,22 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           'description_ar': 'قلادة الوكيل الحصرية لرؤساء الوكالات',
         });
       }
-    } else if (_userAgency != null && config.agencyHostNecklaceSvga.isNotEmpty) {
-      // Auto-inject Agency Host Member SVGA Necklace
-      if (!necklaces.any((n) => n['type'] == 'agency_host' || n['id'] == 'agency_host_necklace')) {
-        necklaces.insert(0, {
-          'id': 'agency_host_necklace',
-          'name': config.agencyHostNecklaceName,
-          'name_ar': config.agencyHostNecklaceName,
-          'type': 'agency_host',
-          'svga_url': config.agencyHostNecklaceSvga,
-          'image_url': config.agencyHostNecklaceImg,
-          'description_ar': 'قلادة وشارة المضيف الحصرية لأعضاء الوكالة',
-        });
+    } else {
+      final isAgencyHost = (_userAgency != null) ||
+          (_user != null && _user!.ownedNecklaces.contains('agency_host_necklace'));
+      if (isAgencyHost && config.agencyHostNecklaceSvga.isNotEmpty) {
+        // Auto-inject Agency Host Member SVGA Necklace
+        if (!necklaces.any((n) => n['type'] == 'agency_host' || n['id'] == 'agency_host_necklace')) {
+          necklaces.insert(0, {
+            'id': 'agency_host_necklace',
+            'name': config.agencyHostNecklaceName,
+            'name_ar': config.agencyHostNecklaceName,
+            'type': 'agency_host',
+            'svga_url': config.agencyHostNecklaceSvga,
+            'image_url': config.agencyHostNecklaceImg,
+            'description_ar': 'قلادة وشارة المضيف الحصرية لأعضاء الوكالة',
+          });
+        }
       }
     }
 
