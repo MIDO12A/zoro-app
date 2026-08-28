@@ -452,40 +452,685 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       builder: (context, _) {
         final config = DynamicConfigService();
         return Scaffold(
-          backgroundColor: Colors.black87,
+          backgroundColor: const Color(0xFF16151A),
           body: SafeArea(
             child: Stack(
               children: [
                 _loading
                     ? const Center(child: CircularProgressIndicator())
-                    : SingleChildScrollView(
-                        child: Column(
-                          children: [
-                            _buildHeaderSection(config, user),
-                            _buildUserInfoPanel(config, user),
-                            _buildMedalWallSection(config, user),
-                            _buildStatsPanel(config, user),
-                            _buildTopFansPodium(config, user),
-                            _buildCpPanelSection(config, user),
-                            _buildMomentsSection(config, user),
-                            _buildEntrancesSection(config, user),
-                            _buildFramesSection(config, user),
-                            _buildBadgesSection(config, user),
-                            _buildGiftWallSection(config, user),
-                            _buildActionButtons(config, user),
-                            const SizedBox(height: 40),
-                          ],
+                    : Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16151A),
+                          image: config.miniprofileBgImage.isNotEmpty
+                              ? DecorationImage(
+                                  image: NetworkImage(config.miniprofileBgImage),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
+                        ),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: Column(
+                            children: [
+                              _buildNewProfileHeader(config, user),
+                              const SizedBox(height: 24),
+                              _buildNewStatsRow(),
+                              const SizedBox(height: 24),
+                              _buildNewCardsRow(config),
+                              const SizedBox(height: 16),
+                              _buildNewSupportersRow(config),
+                              const SizedBox(height: 24),
+                              _buildNewIdentitySection(config, user),
+                              const SizedBox(height: 24),
+                              _buildNewBadgesSection(config),
+                              const SizedBox(height: 24),
+                              _buildNewAchievementsSection(config, user),
+                              const SizedBox(height: 40),
+                            ],
+                          ),
                         ),
                       ),
                 if (_selectedGift != null) _buildGiftOverlay(config),
                 if (_selectedItem != null) _buildItemOverlay(config),
-                // Title overlay matching XML flTitle
-                _buildTitleBar(config, user),
+                _buildNewTitleBar(context, user),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  // ─── NEW DARK DESIGN METHODS ────────────────────────────────────────────────
+
+  Widget _buildNewTitleBar(BuildContext ctx, UserModel? user) {
+    final currentUser = Provider.of<UserProvider>(ctx, listen: false).currentUser;
+    final isOwnProfile = widget.targetUid == null ||
+        (currentUser != null && widget.targetUid == currentUser.uid);
+    return Positioned(
+      top: 0, left: 0, right: 0,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            GestureDetector(
+              onTap: () => Navigator.pop(ctx),
+              child: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 20),
+            ),
+            if (isOwnProfile)
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  ctx,
+                  MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                ),
+                child: const Icon(Icons.edit_square, color: Colors.white, size: 22),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewProfileHeader(DynamicConfigService config, UserModel? user) {
+    final hasCover = _profileBgUrl != null && _profileBgUrl!.isNotEmpty;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Cover background
+        SizedBox(
+          height: 160,
+          width: double.infinity,
+          child: hasCover
+              ? Image(
+                  image: NetworkImage(_profileBgUrl!),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(color: const Color(0xFF22202A)),
+                )
+              : Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF2A1A3A), Color(0xFF16151A)],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                ),
+        ),
+        // Gradient overlay at bottom of cover
+        Positioned(
+          bottom: 0, left: 0, right: 0,
+          child: Container(
+            height: 80,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Colors.transparent, Color(0xFF16151A)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+        ),
+        // Content row: info LEFT, avatar RIGHT
+        Container(
+          margin: const EdgeInsets.only(top: 80),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // User info (left)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 8),
+                    // Name
+                    Text(
+                      user?.name ?? 'اسم المستخدم',
+                      style: const TextStyle(
+                        fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // ID + Gender + Flag
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            'ID: ${(user?.customId.isNotEmpty == true) ? user!.customId : ((1000000 + ((user?.uid ?? '').hashCode.abs() % 9000000)).toString())}',
+                            style: const TextStyle(fontSize: 12, color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: user?.gender == 'female'
+                                ? Colors.pinkAccent.withOpacity(0.5)
+                                : Colors.blueAccent.withOpacity(0.5),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                user?.gender == 'female' ? Icons.female : Icons.male,
+                                size: 12, color: Colors.white,
+                              ),
+                              const SizedBox(width: 2),
+                              Text('${user?.age ?? 18}',
+                                  style: const TextStyle(fontSize: 12, color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: Image.network(
+                            'https://flagcdn.com/w40/${(user?.country ?? 'eg').toLowerCase()}.png',
+                            width: 20, height: 14,
+                            errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.flag, size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Level chips
+                    Row(
+                      children: [
+                        _newLevelChip(user?.wealthLevel ?? 1, 'wealth'),
+                        const SizedBox(width: 4),
+                        _newLevelChip(user?.rechargeLevel ?? 1, 'recharge'),
+                        const SizedBox(width: 4),
+                        _newLevelChip(user?.gemsLevel ?? 1, 'gems'),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Bio
+                    Row(
+                      children: [
+                        const Icon(Icons.edit, size: 14, color: Colors.white54),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            (user?.signature.isNotEmpty == true)
+                                ? user!.signature
+                                : 'أقول شيئاً لجعل الآخرين يعرفون لك.',
+                            style: const TextStyle(fontSize: 12, color: Colors.white54),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Avatar (right)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Container(
+                      width: 90, height: 90,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: ClipOval(
+                        child: (user?.photoUrl != null && user!.photoUrl.isNotEmpty)
+                            ? Image(
+                                image: NetworkImage(user.photoUrl),
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) =>
+                                    Image.asset(R.avaBoy, fit: BoxFit.cover),
+                              )
+                            : Image.asset(R.avaBoy, fit: BoxFit.cover),
+                      ),
+                    ),
+                    if (_activeFrame != null && _activeFrame!.isNotEmpty)
+                      SvgaFrame(svgaPath: _activeFrame!, size: 110),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _newLevelChip(int level, String type) {
+    final config = LevelService().getLevelConfig(type, level);
+    final url = config?.imageUrl;
+    if (url != null) {
+      return SizedBox(
+        width: 32, height: 32,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.asset(url, fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => _newLevelChipFallback(level)),
+        ),
+      );
+    }
+    return _newLevelChipFallback(level);
+  }
+
+  Widget _newLevelChipFallback(int level) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(colors: [Color(0xFFFFD700), Color(0xFFFF8C00)]),
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Text('Lv.$level',
+        style: const TextStyle(fontSize: 10, color: Colors.white)),
+  );
+
+  Widget _buildNewStatsRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _newCountItem('$_visitorsCount', 'الزائرين'),
+        _newCountItem('$_fansCount', 'أتابعه'),
+        _newCountItem('$_followingCount', 'تمت متابعة'),
+      ],
+    );
+  }
+
+  Widget _newCountItem(String count, String label) => Column(
+    children: [
+      Text(count,
+          style: const TextStyle(
+              fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+      const SizedBox(height: 2),
+      Text(label,
+          style: const TextStyle(fontSize: 10, color: Colors.white54)),
+    ],
+  );
+
+  Widget _buildNewCardsRow(DynamicConfigService config) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          // 1. Partner card (golden) — يمين في RTL
+          Expanded(
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1),
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFF4A4A1A), Color(0xFF1A1A0D)]),
+                  image: config.miniprofileFamilyCardBg.isNotEmpty
+                      ? DecorationImage(
+                          image: NetworkImage(config.miniprofileFamilyCardBg),
+                          fit: BoxFit.cover)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(children: [
+                          const Text('العائلة',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13)),
+                          const SizedBox(width: 8),
+                          const CircleAvatar(
+                              radius: 10,
+                              backgroundImage:
+                                  NetworkImage('https://i.pravatar.cc/100')),
+                        ]),
+                        const SizedBox(height: 4),
+                        const Text('ID:15652',
+                            style: TextStyle(color: Colors.amber, fontSize: 11)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 2. Intimate card (pink) — يسار في RTL
+          Expanded(
+            child: GestureDetector(
+              onTap: () {},
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: Colors.pinkAccent.withOpacity(0.5), width: 1),
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFF5A1A4A), Color(0xFF2A0D2A)]),
+                  image: config.miniprofileIntimateCardBg.isNotEmpty
+                      ? DecorationImage(
+                          image: NetworkImage(config.miniprofileIntimateCardBg),
+                          fit: BoxFit.cover)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(children: [
+                          const Text('علاقة حميمة',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13)),
+                          const SizedBox(width: 8),
+                          Icon(Icons.favorite, color: Colors.pink[200], size: 16),
+                        ]),
+                        const SizedBox(height: 4),
+                        const Text('اربط علاقة حميمة الآن!',
+                            style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewSupportersRow(DynamicConfigService config) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        height: 70,
+        decoration: BoxDecoration(
+          color: Colors.black26,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Stack(
+          children: [
+            if (config.miniprofileSupportersBanner.isNotEmpty)
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(config.miniprofileSupportersBanner,
+                      fit: BoxFit.cover),
+                ),
+              ),
+            if (config.miniprofileSupportersBanner.isEmpty)
+              const Positioned(
+                right: 16, top: 0, bottom: 0,
+                child: Center(
+                  child: Text('SUPPORTERS',
+                      style: TextStyle(
+                          color: Colors.amber,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          fontStyle: FontStyle.italic)),
+                ),
+              ),
+            Positioned(
+              left: 16, top: 0, bottom: 0,
+              child: Row(
+                children: [
+                  const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                  const SizedBox(width: 12),
+                  _newSupporterSlot(config, config.miniprofileGoldCrown, Colors.amber),
+                  const SizedBox(width: 8),
+                  _newSupporterSlot(
+                      config, config.miniprofileSilverCrown, Colors.grey[300]!),
+                  const SizedBox(width: 8),
+                  _newSupporterSlot(
+                      config, config.miniprofileBronzeCrown, Colors.orange[300]!),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _newSupporterSlot(
+      DynamicConfigService config, String crownImg, Color defaultColor) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: defaultColor, width: 2),
+          ),
+          child: const Icon(Icons.person, color: Colors.white24, size: 20),
+        ),
+        Positioned(
+          top: -12,
+          child: crownImg.isNotEmpty
+              ? Image.network(crownImg, width: 20, height: 20)
+              : Icon(Icons.workspace_premium, color: defaultColor, size: 20),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNewIdentitySection(DynamicConfigService config, UserModel? user) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _newSectionTitle('وسم الهوية'),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (user?.hostedRoomId != null) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [Colors.pinkAccent, Colors.purpleAccent]),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text('Voice Host',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                      colors: [Colors.amber, Colors.orange]),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('Agency Lead',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewBadgesSection(DynamicConfigService config) {
+    final badgeWidgets = <Widget>[];
+    for (final id in (_user?.ownedBadges ?? [])) {
+      final match = _badgesCatalog
+          .where((b) => b['id']?.toString() == id.toString())
+          .toList();
+      if (match.isNotEmpty) {
+        final b = match.first;
+        final img = b['image_url']?.toString();
+        if (img != null && img.isNotEmpty) {
+          badgeWidgets.add(Container(
+            margin: const EdgeInsets.only(left: 8),
+            width: 40, height: 40,
+            child: Image.network(img, fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox()),
+          ));
+        }
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _newSectionTitle('شارات'),
+          const SizedBox(height: 12),
+          badgeWidgets.isEmpty
+              ? const Center(
+                  child: Text('إذهب لإضاءة أول شارة لك!',
+                      style: TextStyle(color: Colors.white54, fontSize: 12)))
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: badgeWidgets),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNewAchievementsSection(
+      DynamicConfigService config, UserModel? user) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _newSectionTitle('إنجازات'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              // Left column: مركبة + إطار (stacked vertically)
+              Expanded(
+                flex: 1,
+                child: Column(
+                  children: [
+                    _newAchievementCardSmall('مركبة', Icons.directions_car,
+                        assetUrl: _activeFrame),
+                    const SizedBox(height: 12),
+                    _newAchievementCardSmall('اطار', Icons.crop_square),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Right: جدار الهدايا
+              Expanded(
+                flex: 1,
+                child: Container(
+                  height: 140,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF22202A),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Icon(Icons.arrow_back_ios,
+                              size: 12, color: Colors.white54),
+                          Text('جدار الهدايا',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      Spacer(),
+                      Center(
+                          child: Icon(Icons.card_giftcard,
+                              size: 48, color: Colors.pinkAccent)),
+                      Spacer(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _newAchievementCardSmall(String title, IconData defaultIcon,
+      {String? assetUrl}) {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF22202A),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+          if (assetUrl != null && assetUrl.isNotEmpty)
+            SizedBox(
+              width: 36, height: 36,
+              child: Image.network(assetUrl, fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) =>
+                      Icon(defaultIcon, size: 28, color: Colors.white24)),
+            )
+          else
+            Icon(defaultIcon, size: 28, color: Colors.white24),
+          Text(title,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _newSectionTitle(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+          color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
     );
   }
 
