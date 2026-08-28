@@ -356,7 +356,13 @@ export default function AppVisualDesigner() {
         setGlobalColors(colorsCopy);
 
         if (cfg.roomGradients && typeof cfg.roomGradients === 'object') {
-          setRoomGradients({ ...defaultRoomGradients, ...cfg.roomGradients });
+          const merged: Record<string, [string, string]> = { ...defaultRoomGradients };
+          for (const [k, v] of Object.entries(cfg.roomGradients)) {
+            if (Array.isArray(v) && v.length >= 2) {
+              merged[k] = [String(v[0] || '#ffffff'), String(v[1] || '#000000')];
+            }
+          }
+          setRoomGradients(merged);
         }
         if (cfg.roomBgImages && typeof cfg.roomBgImages === 'object') {
           setRoomBgImages(cfg.roomBgImages);
@@ -1735,7 +1741,10 @@ export default function AppVisualDesigner() {
               {lang === 'ar' ? 'ألوان تدرجات شاشات الغرف' : 'Room Category Gradients'}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {Object.entries(roomGradients).map(([key, val]) => {
+              {Object.entries(roomGradients).map(([key, rawVal]) => {
+                const val = Array.isArray(rawVal) && rawVal.length >= 2 ? rawVal : (defaultRoomGradients[key] || ['#ffffff', '#000000']);
+                const color0 = val?.[0] || '#ffffff';
+                const color1 = val?.[1] || '#000000';
                 const label = key === 'themeFriend' ? (lang === 'ar' ? 'تدرج شاشة الصداقة (Friend)' : 'Friend Theme') :
                               key === 'themeChat' ? (lang === 'ar' ? 'تدرج شاشة الشات (Chat)' : 'Chat Theme') :
                               key === 'themeMusic' ? (lang === 'ar' ? 'تدرج شاشة الموسيقى (Music)' : 'Music Theme') :
@@ -1749,20 +1758,20 @@ export default function AppVisualDesigner() {
                       <div className="flex items-center gap-1">
                         <input
                           type="color"
-                          value={to6Hex(val[0])}
+                          value={to6Hex(color0)}
                           onChange={e => {
                             const copy = { ...roomGradients };
-                            copy[key] = [e.target.value, val[1]];
+                            copy[key] = [e.target.value, color1];
                             setRoomGradients(copy);
                           }}
                           className="w-8 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
                         />
                         <input
                           type="color"
-                          value={to6Hex(val[1])}
+                          value={to6Hex(color1)}
                           onChange={e => {
                             const copy = { ...roomGradients };
-                            copy[key] = [val[0], e.target.value];
+                            copy[key] = [color0, e.target.value];
                             setRoomGradients(copy);
                           }}
                           className="w-8 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg"
@@ -1771,10 +1780,10 @@ export default function AppVisualDesigner() {
                       <div className="flex-1 flex gap-1 items-center">
                         <input
                           type="text"
-                          value={val[0]}
+                          value={color0}
                           onChange={e => {
                             const copy = { ...roomGradients };
-                            copy[key] = [e.target.value, val[1]];
+                            copy[key] = [e.target.value, color1];
                             setRoomGradients(copy);
                           }}
                           className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-[10px] text-white font-mono"
@@ -1782,10 +1791,10 @@ export default function AppVisualDesigner() {
                         <span className="text-slate-600">→</span>
                         <input
                           type="text"
-                          value={val[1]}
+                          value={color1}
                           onChange={e => {
                             const copy = { ...roomGradients };
-                            copy[key] = [val[0], e.target.value];
+                            copy[key] = [color0, e.target.value];
                             setRoomGradients(copy);
                           }}
                           className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-[10px] text-white font-mono"
