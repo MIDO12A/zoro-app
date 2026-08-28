@@ -1134,7 +1134,37 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Widget _buildNewIdentitySection(DynamicConfigService config, UserModel? user) {
-    final necklaces = _allOwnedNecklaces;
+    final List<Map<String, dynamic>> necklaces = List.from(_allOwnedNecklaces);
+
+    // Auto-inject Agency Leader / Owner SVGA Necklace
+    final isAgencyLeader = _user?.role == 'agent' || _user?.role == 'agency_owner' || (_userAgency != null && _userAgency!['owner_id']?.toString() == _user?.id);
+    if (isAgencyLeader && config.agencyLeaderNecklaceSvga.isNotEmpty) {
+      if (!necklaces.any((n) => n['type'] == 'agency_leader' || n['id'] == 'agency_leader_necklace')) {
+        necklaces.insert(0, {
+          'id': 'agency_leader_necklace',
+          'name': config.agencyLeaderNecklaceName,
+          'name_ar': config.agencyLeaderNecklaceName,
+          'type': 'agency_leader',
+          'svga_url': config.agencyLeaderNecklaceSvga,
+          'image_url': config.agencyLeaderNecklaceImg,
+          'description_ar': 'قلادة الوكيل الحصرية لرؤساء الوكالات',
+        });
+      }
+    } else if (_userAgency != null && config.agencyHostNecklaceSvga.isNotEmpty) {
+      // Auto-inject Agency Host Member SVGA Necklace
+      if (!necklaces.any((n) => n['type'] == 'agency_host' || n['id'] == 'agency_host_necklace')) {
+        necklaces.insert(0, {
+          'id': 'agency_host_necklace',
+          'name': config.agencyHostNecklaceName,
+          'name_ar': config.agencyHostNecklaceName,
+          'type': 'agency_host',
+          'svga_url': config.agencyHostNecklaceSvga,
+          'image_url': config.agencyHostNecklaceImg,
+          'description_ar': 'قلادة وشارة المضيف الحصرية لأعضاء الوكالة',
+        });
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(

@@ -265,6 +265,13 @@ class DynamicConfigService extends ChangeNotifier {
   Color get fullProfileFrameCardBorder => _screenColor('fullProfile', 'frameCardBorder', const Color(0x1AFFFFFF));
   String get fullProfileFrameIcon => _screenStr('fullProfile', 'frameIcon', _screenStr('userProfile', 'frameIcon', ''));
 
+  // Agency & Host SVGA Necklaces
+  String get agencyLeaderNecklaceSvga => _screenStr('agency', 'leaderNecklaceSvga', _rawConfig['agency']?['leaderNecklaceSvga']?.toString() ?? '');
+  String get agencyLeaderNecklaceImg => _screenStr('agency', 'leaderNecklaceImg', _rawConfig['agency']?['leaderNecklaceImg']?.toString() ?? '');
+  String get agencyLeaderNecklaceName => _screenStr('agency', 'leaderNecklaceName', _rawConfig['agency']?['leaderNecklaceName']?.toString() ?? 'قلادة الوكيل');
+  String get agencyHostNecklaceSvga => _screenStr('agency', 'hostNecklaceSvga', _rawConfig['agency']?['hostNecklaceSvga']?.toString() ?? '');
+  String get agencyHostNecklaceImg => _screenStr('agency', 'hostNecklaceImg', _rawConfig['agency']?['hostNecklaceImg']?.toString() ?? '');
+  String get agencyHostNecklaceName => _screenStr('agency', 'hostNecklaceName', _rawConfig['agency']?['hostNecklaceName']?.toString() ?? 'قلادة المضيف');
 
   // Getters
   String get appName => _appName;

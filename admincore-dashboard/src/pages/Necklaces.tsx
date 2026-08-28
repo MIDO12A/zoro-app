@@ -11,7 +11,7 @@ export default function NecklacesPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<NecklaceConfig | null>(null);
   const [isAdding, setIsAdding] = useState(false);
-  const [form, setForm] = useState({ name: '', name_ar: '', name_en: '', description_ar: '', description_en: '', svgaUrl: '', imageUrl: '', price: 0, sortOrder: 0, isActive: true, type: '' as '' | 'event' | 'admin' | 'recharge', requiredRechargeLevel: 0 });
+  const [form, setForm] = useState({ name: '', name_ar: '', name_en: '', description_ar: '', description_en: '', svgaUrl: '', imageUrl: '', price: 0, sortOrder: 0, isActive: true, type: '' as '' | 'event' | 'admin' | 'recharge' | 'agency_leader' | 'agency_host', requiredRechargeLevel: 0 });
   const [msg, setMsg] = useState('');
 
   const showMsg = (t: string) => { setMsg(t); setTimeout(() => setMsg(''), 3000); };
@@ -81,6 +81,8 @@ export default function NecklacesPage() {
       case 'event': return '🎪 Event';
       case 'admin': return '🛠️ Admin';
       case 'recharge': return '💰 Recharge';
+      case 'agency_leader': return '🏢 قلادة وكيل (Agency Leader)';
+      case 'agency_host': return '🎙️ قلادة مضيف (Agency Host)';
       default: return 'General';
     }
   };
@@ -128,6 +130,8 @@ export default function NecklacesPage() {
                 <option value="event">🎪 Event</option>
                 <option value="admin">🛠️ Admin</option>
                 <option value="recharge">💰 Recharge</option>
+                <option value="agency_leader">🏢 قلادة وكيل (Agency Leader) - للوكالات فقط</option>
+                <option value="agency_host">🎙️ قلادة مضيف (Agency Host) - للوكالات فقط</option>
               </select>
             </div>
             <div>

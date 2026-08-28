@@ -12,14 +12,19 @@ import {
   getHostAgencyJoinRequests, approveJoinRequest, rejectJoinRequest,
   updateAgencyMemberRole, removeAgencyMember,
   getAgencyLedger, getWithdrawalRequests, approveWithdrawal, rejectWithdrawal,
+  getAppConfig, updateAppConfig,
 } from '../lib/db';
+import { uploadStoreItem } from '../lib/storage';
+import { supabase } from '../lib/supabase';
 import { I18nContext } from '../lib/i18n';
 import DataTable from '../components/DataTable';
-import { Handshake, Users, UserPlus, Wallet, Target, Settings } from 'lucide-react';
+import ImageUpload from '../components/ImageUpload';
+import { Handshake, Users, UserPlus, Wallet, Target, Settings, Sparkles, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 
 const tabs = [
   { key: 'agencies', labelKey: 'agency.agencies', icon: Handshake },
   { key: 'members', labelKey: 'agency.members', icon: Users },
+  { key: 'necklaces', labelKey: 'agency.necklaces', icon: Sparkles },
   { key: 'join_requests', labelKey: 'agency.joinRequests', icon: UserPlus },
   { key: 'financial', labelKey: 'agency.financial', icon: Wallet },
   { key: 'milestones', labelKey: 'agency.milestones', icon: Target },
@@ -48,6 +53,7 @@ export default function AgencyPage() {
       </div>
       {tab === 'agencies' && <AgenciesTab />}
       {tab === 'members' && <MembersTab />}
+      {tab === 'necklaces' && <AgencyNecklacesTab />}
       {tab === 'join_requests' && <JoinRequestsTab />}
       {tab === 'financial' && <FinancialTab />}
       {tab === 'milestones' && <MilestonesTab />}
@@ -636,6 +642,239 @@ function InlineEdit({ value, onSave }: { value: number; onSave: (v: number) => v
         className="text-[10px] text-emerald-400 font-semibold">{t('save')}</button>
       <button onClick={() => setEditing(false)}
         className="text-[10px] text-slate-500 font-semibold">X</button>
+    </div>
+  );
+}
+
+/* =============================================================
+   7. AGENCY SVGA NECKLACES TAB (قلادات وشارات الوكالة SVGA)
+   ============================================================= */
+function AgencyNecklacesTab() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [config, setConfig] = useState({
+    leaderNecklaceName: 'قلادة الوكيل (Agency Owner)',
+    leaderNecklaceImg: '',
+    leaderNecklaceSvga: '',
+    hostNecklaceName: 'قلادة المضيف (Agency Host)',
+    hostNecklaceImg: '',
+    hostNecklaceSvga: '',
+  });
+
+  const showMsg = (txt: string) => {
+    setMsg(txt);
+    setTimeout(() => setMsg(''), 4000);
+  };
+
+  useEffect(() => {
+    getAppConfig().then((appCfg: any) => {
+      const data = appCfg?.screenVisuals?.agency || appCfg?.agencyVisuals || {};
+      setConfig({
+        leaderNecklaceName: data.leaderNecklaceName || 'قلادة الوكيل (Agency Owner)',
+        leaderNecklaceImg: data.leaderNecklaceImg || '',
+        leaderNecklaceSvga: data.leaderNecklaceSvga || '',
+        hostNecklaceName: data.hostNecklaceName || 'قلادة المضيف (Agency Host)',
+        hostNecklaceImg: data.hostNecklaceImg || '',
+        hostNecklaceSvga: data.hostNecklaceSvga || '',
+      });
+      setLoading(false);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const appCfg: any = await getAppConfig();
+      const currentVisuals = appCfg?.screenVisuals || {};
+      const updatedVisuals = {
+        ...currentVisuals,
+        agency: {
+          ...(currentVisuals.agency || {}),
+          ...config,
+        },
+      };
+      await updateAppConfig({
+        screenVisuals: updatedVisuals,
+        agencyVisuals: config,
+      } as any);
+      showMsg('تم حفظ وتطبيق إعدادات قلادات الوكالة بنجاح!');
+    } catch (err) {
+      showMsg('فشل الحفظ: ' + (err as Error).message);
+    }
+    setSaving(false);
+  };
+
+  const handleSyncToUsers = async () => {
+    if (!confirm('هل تريد مزامنة ومنح قلادات الوكالة (الوكيل والمضيف) لجميع أصحاب الوكالات والأعضاء الحاليين فوراً؟')) return;
+    setSyncing(true);
+    try {
+      // 1. Get all agencies & their owners
+      const agencies = await getHostAgencies();
+      let syncedOwners = 0;
+      let syncedHosts = 0;
+
+      for (const agency of agencies) {
+        if (agency.owner_id) {
+          // Grant agency leader necklace to owner
+          const { data: user } = await supabase.from('users').select('owned_necklaces').eq('id', agency.owner_id).single();
+          const owned = Array.isArray(user?.owned_necklaces) ? user.owned_necklaces : [];
+          if (!owned.includes('agency_leader_necklace')) {
+            await supabase.from('users').update({
+              owned_necklaces: [...owned, 'agency_leader_necklace']
+            }).eq('id', agency.owner_id);
+            syncedOwners++;
+          }
+        }
+      }
+
+      // 2. Get all agency members
+      const members = await getHostAgencyMembers();
+      for (const m of members) {
+        if (m.user_id) {
+          const { data: user } = await supabase.from('users').select('owned_necklaces').eq('id', m.user_id).single();
+          const owned = Array.isArray(user?.owned_necklaces) ? user.owned_necklaces : [];
+          if (!owned.includes('agency_host_necklace')) {
+            await supabase.from('users').update({
+              owned_necklaces: [...owned, 'agency_host_necklace']
+            }).eq('id', m.user_id);
+            syncedHosts++;
+          }
+        }
+      }
+
+      showMsg(`تمت المزامنة بنجاح! تم تعيين القلادات لـ ${syncedOwners} رئيس وكالة و ${syncedHosts} مضيف وكالة.`);
+    } catch (err) {
+      showMsg('فشل المزامنة: ' + (err as Error).message);
+    }
+    setSyncing(false);
+  };
+
+  if (loading) {
+    return <div className="text-center py-12 text-slate-500">جاري التحميل...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {msg && (
+        <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span>{msg}</span>
+        </div>
+      )}
+
+      {/* Overview Info Card */}
+      <div className="bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-indigo-500/10 border border-amber-500/20 rounded-2xl p-4">
+        <h3 className="text-white font-bold text-sm flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          نظام قلادات وشارات الوكالات الحصرية (SVGA)
+        </h3>
+        <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+          هنا يمكنك تعيين وتصميم قلادة الوكيل الحصرية (لأصحاب الوكالات) وقلادة المضيف الحصرية (للأعضاء المنضمين للوكالات). يتم عرض هذه القلادات كرسوم متحركة SVGA فائقة الجودة في وسم الهوية والبروفايل.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 1. Agency Leader / Owner Necklace */}
+        <div className="bg-[#141417] rounded-2xl border border-amber-500/20 p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+            <h4 className="text-white font-bold text-sm flex items-center gap-2">
+              <span>👑</span> قلادة رئيس الوكالة / الوكيل (Agency Leader)
+            </h4>
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-full">
+              للوكلاء فقط
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-[10px] uppercase text-slate-400 font-bold">اسم القلادة</label>
+            <input
+              type="text"
+              value={config.leaderNecklaceName}
+              onChange={e => setConfig(p => ({ ...p, leaderNecklaceName: e.target.value }))}
+              className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <ImageUpload
+              currentUrl={config.leaderNecklaceSvga}
+              onUpload={file => uploadStoreItem(file, 'agency_leader_svga')}
+              onUrlChange={url => setConfig(p => ({ ...p, leaderNecklaceSvga: url }))}
+              label="ملف قلادة الوكيل (SVGA متحرك)"
+              accept=".svga,.webp,.png,.mp4,.vap"
+            />
+            <ImageUpload
+              currentUrl={config.leaderNecklaceImg}
+              onUpload={file => uploadStoreItem(file, 'agency_leader_img')}
+              onUrlChange={url => setConfig(p => ({ ...p, leaderNecklaceImg: url }))}
+              label="صورة المعاينة الثابتة (PNG / WebP)"
+              accept="image/*"
+            />
+          </div>
+        </div>
+
+        {/* 2. Agency Host Member Necklace */}
+        <div className="bg-[#141417] rounded-2xl border border-indigo-500/20 p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+            <h4 className="text-white font-bold text-sm flex items-center gap-2">
+              <span>🎙️</span> قلادة مضيف الوكالة (Agency Host Member)
+            </h4>
+            <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded-full">
+              للمضيفين فقط
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-[10px] uppercase text-slate-400 font-bold">اسم القلادة</label>
+            <input
+              type="text"
+              value={config.hostNecklaceName}
+              onChange={e => setConfig(p => ({ ...p, hostNecklaceName: e.target.value }))}
+              className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <ImageUpload
+              currentUrl={config.hostNecklaceSvga}
+              onUpload={file => uploadStoreItem(file, 'agency_host_svga')}
+              onUrlChange={url => setConfig(p => ({ ...p, hostNecklaceSvga: url }))}
+              label="ملف قلادة المضيف (SVGA متحرك)"
+              accept=".svga,.webp,.png,.mp4,.vap"
+            />
+            <ImageUpload
+              currentUrl={config.hostNecklaceImg}
+              onUpload={file => uploadStoreItem(file, 'agency_host_img')}
+              onUrlChange={url => setConfig(p => ({ ...p, hostNecklaceImg: url }))}
+              label="صورة المعاينة الثابتة (PNG / WebP)"
+              accept="image/*"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="flex flex-wrap items-center gap-3 pt-2">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-xs text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-emerald-900/30"
+        >
+          <Save className="w-4 h-4" />
+          {saving ? 'جارٍ الحفظ...' : '💾 حفظ وتطبيق قلادات الوكالة'}
+        </button>
+
+        <button
+          onClick={handleSyncToUsers}
+          disabled={syncing}
+          className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-xs text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-indigo-900/30"
+        >
+          <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'جارٍ المزامنة...' : '⚡ مزامنة القلادات لجميع أصحاب الوكالات والمضيفين الآن'}
+        </button>
+      </div>
     </div>
   );
 }
