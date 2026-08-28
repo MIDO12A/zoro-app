@@ -13,7 +13,7 @@ export default function RoomBackgrounds() {
     try {
       setLoading(true);
       const res = await getAppAssets();
-      setAssets(res.filter(a => a.category === 'roomBg'));
+      setAssets((res.data || []).filter(a => a.category === 'roomBg'));
     } catch (err) {
       console.error(err);
     } finally {

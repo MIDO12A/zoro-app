@@ -13,7 +13,7 @@ export default function Emojis() {
     try {
       setLoading(true);
       const res = await getAppAssets();
-      setAssets(res.filter(a => a.category === 'emoji'));
+      setAssets((res.data || []).filter(a => a.category === 'emoji'));
     } catch (err) {
       console.error(err);
     } finally {
