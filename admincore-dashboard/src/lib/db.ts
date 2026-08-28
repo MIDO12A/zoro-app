@@ -156,6 +156,18 @@ export async function syncAllAuthUsersToDB() {
   }
 }
 
+// ---- Reports ----
+export async function getReports() {
+  const { data, error } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return mapList<any>(data || []);
+}
+
+export async function updateReportStatus(id: string, status: string) {
+  const { error } = await supabase.from('reports').update({ status }).eq('id', id);
+  if (error) throw error;
+}
+
 export async function getUsers(): Promise<UserModel[]> {
   const adminClient = getAdminSupabase()
   const results: UserModel[] = []

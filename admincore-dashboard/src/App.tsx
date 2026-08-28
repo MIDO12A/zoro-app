@@ -38,6 +38,7 @@ import AppIcons from './pages/AppIcons';
 import CpFeatures from './pages/CpFeatures';
 import SigninFeatures from './pages/SigninFeatures';
 import AppUpdates from './pages/AppUpdates';
+import Reports from './pages/Reports';
 import t from './lib/i18n';
 
 export default function App() {
@@ -121,6 +122,7 @@ export default function App() {
             <Route path="/cp-features" element={<CpFeatures />} />
             <Route path="/signin-features" element={<SigninFeatures />} />
             <Route path="/app-updates" element={<AppUpdates />} />
+            <Route path="/reports" element={<Reports />} />
           </Route>
         </Routes>
       </BrowserRouter>

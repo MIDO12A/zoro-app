@@ -606,7 +606,7 @@ class FirebaseService {
         final d = e.data();
         return <String, dynamic>{
           'uid': e.id,
-          'id': d['id']?.toString() ?? '',
+          'id': (d['customId'] ?? d['id'] ?? '').toString(),
           'name': (d['name'] ?? '').toString(),
           'photo_url': (d['photo_url'] ?? d['photoUrl'] ?? '').toString(),
           'level': d['level'] ?? 1,
@@ -634,7 +634,7 @@ class FirebaseService {
           'uid': e.id,
           'name': (d['name'] ?? '').toString(),
           'hostName': (d['host_name'] ?? '').toString(),
-          'photo_url': (d['room_photo_url'] ?? '').toString(),
+          'photo_url': (d['cover_image'] ?? d['room_photo_url'] ?? '').toString(),
           'points': _asInt(d['total_gifts']),
         };
       }).toList();
@@ -977,6 +977,16 @@ class FirebaseService {
     String? imageUrl,
     String type = 'text',
   }) async {
+    // التحقق من الحظر
+    final blockDoc = await _db.collection('blocks').doc('${receiverId}_$senderId').get();
+    if (blockDoc.exists) {
+      throw Exception('لا يمكنك إرسال رسالة لأن هذا المستخدم قام بحظرك.');
+    }
+    final myBlockDoc = await _db.collection('blocks').doc('${senderId}_$receiverId').get();
+    if (myBlockDoc.exists) {
+      throw Exception('لقد قمت بحظر هذا المستخدم. يجب إزالة الحظر أولاً.');
+    }
+
     final convId = await _getOrCreateConversationId(senderId, receiverId);
     final msgId = const Uuid().v4();
     final msg = MessageModel(
@@ -994,16 +1004,19 @@ class FirebaseService {
     data['id'] = msgId;
     await _db.collection('private_messages').doc(msgId).set(data);
 
-    final now = DateTime.now().toIso8601String();
+    final nowMillis = DateTime.now().millisecondsSinceEpoch;
     for (final uid in [senderId, receiverId]) {
+      final isSender = uid == senderId;
       await _db.collection('conversations').doc('${uid}_$convId').set({
         'uid': uid,
-        'conv_id': convId,
-        'last_message': text,
-        'last_sender_uid': senderId,
-        'last_timestamp': now,
-        'unread_count': uid == senderId ? 0 : 1,
-      });
+        'conversationId': convId,
+        'otherUid': isSender ? receiverId : senderId,
+        'otherName': isSender ? receiverName : senderName,
+        'otherPhotoUrl': isSender ? receiverPhotoUrl : senderPhotoUrl,
+        'lastMessage': type == 'image' ? '[صورة]' : text,
+        'lastMessageTime': nowMillis,
+        'unreadCount': isSender ? 0 : FieldValue.increment(1),
+      }, SetOptions(merge: true));
     }
   }
 
@@ -1015,8 +1028,8 @@ class FirebaseService {
         .map((snap) {
       final convs = snap.docs.map((e) => Map<String, dynamic>.from(e.data())).toList();
       convs.sort((a, b) {
-        final at = a['last_timestamp'] as String? ?? '';
-        final bt = b['last_timestamp'] as String? ?? '';
+        final at = a['lastMessageTime'] as int? ?? 0;
+        final bt = b['lastMessageTime'] as int? ?? 0;
         return bt.compareTo(at);
       });
       return convs;
@@ -1036,7 +1049,7 @@ class FirebaseService {
   }
 
   Future<void> markConversationRead(String uid, String conversationId) async {
-    await _db.collection('conversations').doc('${uid}_$conversationId').update({'unread_count': 0});
+    await _db.collection('conversations').doc('${uid}_$conversationId').update({'unreadCount': 0});
   }
 
   // ═══════════════════════════════════════════════════════
@@ -1691,16 +1704,21 @@ class FirebaseService {
     required bool isWealth,
     required String timeframe,
   }) async {
-    DateTime now = DateTime.now();
-    DateTime startDate;
+    // احسب منتصف الليل بتوقيت السعودية/مصر (UTC+3)
+    final nowUtc = DateTime.now().toUtc();
+    final ksaTime = nowUtc.add(const Duration(hours: 3));
+    
+    DateTime startDateUtc;
     if (timeframe == 'daily') {
-      startDate = now.subtract(const Duration(hours: 24));
+      startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, ksaTime.day).subtract(const Duration(hours: 3));
     } else if (timeframe == 'weekly') {
-      startDate = now.subtract(const Duration(days: 7));
+      final daysToSubtract = ksaTime.weekday - 1;
+      startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, ksaTime.day).subtract(Duration(days: daysToSubtract, hours: 3));
     } else { // monthly
-      startDate = DateTime(now.year, now.month, 1);
+      startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, 1).subtract(const Duration(hours: 3));
     }
-    String startStr = startDate.toIso8601String();
+    
+    String startStr = startDateUtc.toIso8601String();
 
     try {
       final snap = await _db.collection('sent_gifts')
@@ -1720,6 +1738,78 @@ class FirebaseService {
       }).toList();
       return _processRankings(filteredDocs, isWealth);
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getGlobalRankings({
+    required bool isWealth,
+    required String timeframe,
+  }) async {
+    if (timeframe == 'all') {
+      return getUserRanking(
+        orderByField: isWealth ? 'total_gifts_sent' : 'total_gifts_received',
+      );
+    }
+    final nowUtc = DateTime.now().toUtc();
+    final ksaTime = nowUtc.add(const Duration(hours: 3));
+    
+    DateTime startDateUtc;
+    if (timeframe == 'daily') {
+      startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, ksaTime.day).subtract(const Duration(hours: 3));
+    } else if (timeframe == 'weekly') {
+      final daysToSubtract = ksaTime.weekday - 1;
+      startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, ksaTime.day).subtract(Duration(days: daysToSubtract, hours: 3));
+    } else { // monthly
+      startDateUtc = DateTime.utc(ksaTime.year, ksaTime.month, 1).subtract(const Duration(hours: 3));
+    }
+    
+    String startStr = startDateUtc.toIso8601String();
+
+    try {
+      final snap = await _db.collection('sent_gifts')
+          .where('created_at', isGreaterThanOrEqualTo: startStr)
+          .get();
+      return _processGlobalRankings(snap.docs, isWealth);
+    } catch (e) {
+      final snap = await _db.collection('sent_gifts').get();
+      final filteredDocs = snap.docs.where((doc) {
+        final d = doc.data();
+        final created = d['created_at'] as String? ?? '';
+        return created.compareTo(startStr) >= 0;
+      }).toList();
+      return _processGlobalRankings(filteredDocs, isWealth);
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _processGlobalRankings(List<dynamic> docs, bool isWealth) async {
+    final Map<String, int> totals = {};
+    for (var doc in docs) {
+      final d = doc.data() as Map<String, dynamic>;
+      final userId = isWealth ? d['sender_id'] : d['receiver_id'];
+      final value = _asInt(d['value']) * _asInt(d['count']);
+      if (userId == null) continue;
+      totals[userId] = (totals[userId] ?? 0) + value;
+    }
+
+    final entries = totals.entries.toList();
+    entries.sort((a, b) => b.value.compareTo(a.value));
+    final top50 = entries.take(50).toList();
+
+    final List<Map<String, dynamic>> results = [];
+    for (var entry in top50) {
+      final userSnap = await _db.collection('users').doc(entry.key).get();
+      final ud = userSnap.data() ?? {};
+      results.add({
+        'uid': entry.key,
+        'id': (ud['customId'] ?? ud['id'] ?? '').toString(),
+        'name': (ud['name'] ?? 'Unknown').toString(),
+        'photo_url': (ud['photo_url'] ?? ud['photoUrl'] ?? '').toString(),
+        'level': ud['level'] ?? 1,
+        'total_gifts_sent': isWealth ? entry.value : _asInt(ud['total_gifts_sent']),
+        'total_gifts_received': !isWealth ? entry.value : _asInt(ud['total_gifts_received']),
+        'user_id': entry.key,
+      });
+    }
+    return results;
   }
 
   Future<List<Map<String, dynamic>>> _processRankings(List<dynamic> docs, bool isWealth) async {

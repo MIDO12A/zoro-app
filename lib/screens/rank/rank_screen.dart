@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../services/supabase_service.dart';
+import '../../services/firebase_service.dart';
 import '../../services/dynamic_config_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-enum _RankPeriod { daily, weekly, monthly, all }
+enum _RankPeriod { daily, weekly, monthly }
 
 class RankScreen extends StatefulWidget {
   const RankScreen({super.key});
@@ -20,7 +21,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   late TabController _wealthSubTabController;
   late TabController _charmSubTabController;
   late TabController _roomsSubTabController;
-  final SupabaseService _api = SupabaseService();
+  final FirebaseService _api = FirebaseService();
   final Map<String, List<Map<String, dynamic>>> _cachedRankings = {};
   bool _loading = true;
   String _currentType = 'wealth';
@@ -78,15 +79,27 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     setState(() => _loading = true);
     try {
       final results = await Future.wait([
-        _api.getUserRanking(orderByField: 'total_gifts_sent'),
-        _api.getUserRanking(orderByField: 'total_gifts_received'),
+        _api.getGlobalRankings(isWealth: true, timeframe: 'daily'),
+        _api.getGlobalRankings(isWealth: true, timeframe: 'weekly'),
+        _api.getGlobalRankings(isWealth: true, timeframe: 'monthly'),
+        
+        _api.getGlobalRankings(isWealth: false, timeframe: 'daily'),
+        _api.getGlobalRankings(isWealth: false, timeframe: 'weekly'),
+        _api.getGlobalRankings(isWealth: false, timeframe: 'monthly'),
+        
         _api.getRoomGlobalRanking(),
       ]);
       if (mounted) {
         setState(() {
-          _cachedRankings['wealth'] = results[0];
-          _cachedRankings['charm'] = results[1];
-          _cachedRankings['rooms'] = results[2];
+          _cachedRankings['wealth_daily'] = results[0];
+          _cachedRankings['wealth_weekly'] = results[1];
+          _cachedRankings['wealth_monthly'] = results[2];
+          
+          _cachedRankings['charm_daily'] = results[3];
+          _cachedRankings['charm_weekly'] = results[4];
+          _cachedRankings['charm_monthly'] = results[5];
+          
+          _cachedRankings['rooms'] = results[6];
           _loading = false;
         });
       }
@@ -96,10 +109,14 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   }
 
   List<Map<String, dynamic>> _getRankingData(_RankPeriod period, String type) {
-    final data = _cachedRankings[type] ?? [];
     if (type == 'rooms') {
-       return data;
+      return _cachedRankings['rooms'] ?? [];
     }
+    
+    final periodKey = period == _RankPeriod.daily ? 'daily' : period == _RankPeriod.weekly ? 'weekly' : 'monthly';
+    final key = '${type}_$periodKey';
+    final data = _cachedRankings[key] ?? [];
+    
     return data.map((e) {
       final points = type == 'wealth'
           ? (e['total_gifts_sent'] ?? 0)
@@ -276,7 +293,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             children: [
               _buildRankList(type, _RankPeriod.daily),
               _buildRankList(type, _RankPeriod.weekly),
-              _buildRankList(type, _RankPeriod.all),
+              _buildRankList(type, _RankPeriod.monthly),
             ],
           ),
         ),

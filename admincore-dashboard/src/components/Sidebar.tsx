@@ -37,6 +37,7 @@ const navItems = [
   { to: '/error-analysis', icon: Bug, label: 'nav.errors' },
   { to: '/admins', icon: Shield, label: 'nav.admins' },
   { to: '/notifications', icon: Bell, label: 'nav.notifications' },
+  { to: '/reports', icon: Shield, label: 'البلاغات' },
   { to: '/settings', icon: Settings, label: 'nav.settings' },
 ];
 

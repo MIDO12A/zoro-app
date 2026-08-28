@@ -1,0 +1,3 @@
+- [x] Fix rank_screen.dart to fetch Daily/Weekly/Monthly rankings instead of All-Time rankings for every tab.
+- [x] Add getGlobalRankings function in firebase_service.dart.
+- [x] Update _loadRankings to fetch data with the new timeframe logic.

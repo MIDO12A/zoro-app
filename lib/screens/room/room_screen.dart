@@ -1610,6 +1610,7 @@ class _RoomScreenState extends State<RoomScreen> {
                       builder: (_) => ReportUserScreen(
                         nickname: u.name,
                         avatar: u.avatar,
+                        reportedUid: u.id,
                       ),
                     ),
                   );

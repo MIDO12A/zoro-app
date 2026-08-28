@@ -8,6 +8,7 @@ import '../../services/supabase_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../providers/user_provider.dart';
 import '../../models/message_model.dart';
+import '../report/report_user_screen.dart';
 
 class MessageReplyDetailScreen extends StatefulWidget {
   final String conversationId;
@@ -57,6 +58,40 @@ class _MessageReplyDetailScreenState extends State<MessageReplyDetailScreen> {
     });
   }
 
+  void _confirmBlockUser() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('تأكيد الحظر'),
+        content: const Text('هل أنت متأكد أنك تريد حظر هذا المستخدم؟ لن يتمكن من إرسال رسائل إليك.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final userProvider = Provider.of<UserProvider>(context, listen: false);
+              final user = userProvider.currentUser;
+              if (user != null) {
+                await _firebaseService.setDoc('blocks', '${user.uid}_${widget.otherUid}', {
+                  'blockerId': user.uid,
+                  'blockedId': widget.otherUid,
+                  'created_at': DateTime.now().toIso8601String(),
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حظر المستخدم بنجاح')));
+                }
+              }
+            },
+            child: const Text('حظر', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _scrollToBottom() {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
@@ -75,15 +110,21 @@ class _MessageReplyDetailScreenState extends State<MessageReplyDetailScreen> {
     final user = userProvider.currentUser;
     if (user == null) return;
 
-    await _firebaseService.sendPrivateMessage(
-      senderId: user.uid,
-      senderName: user.name ?? '',
-      senderPhotoUrl: user.photoUrl ?? '',
-      receiverId: widget.otherUid,
-      receiverName: widget.otherName,
-      receiverPhotoUrl: widget.otherPhotoUrl,
-      text: text,
-    );
+    try {
+      await _firebaseService.sendPrivateMessage(
+        senderId: user.uid,
+        senderName: user.name ?? '',
+        senderPhotoUrl: user.photoUrl ?? '',
+        receiverId: widget.otherUid,
+        receiverName: widget.otherName,
+        receiverPhotoUrl: widget.otherPhotoUrl,
+        text: text,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceAll('Exception: ', ''))));
+      }
+    }
   }
 
   Future<void> _pickImage() async {
@@ -171,6 +212,31 @@ class _MessageReplyDetailScreenState extends State<MessageReplyDetailScreen> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Color(0xFF16151A)),
+            onSelected: (value) {
+              if (value == 'report') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ReportUserScreen(nickname: widget.otherName, avatar: widget.otherPhotoUrl, reportedUid: widget.otherUid)),
+                );
+              } else if (value == 'block') {
+                _confirmBlockUser();
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'report',
+                child: Text('إبلاغ عن المستخدم'),
+              ),
+              const PopupMenuItem(
+                value: 'block',
+                child: Text('حظر استلام رسائل (Block)'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [

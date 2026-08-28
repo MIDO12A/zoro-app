@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import '../../config/r.dart';
+import '../../services/supabase_service.dart';
+import '../../services/cloudinary_service.dart';
+import '../../providers/user_provider.dart';
 
 class ReportUserScreen extends StatefulWidget {
   final String nickname;
+  final String reportedUid;
   final String? avatar;
 
   const ReportUserScreen({
     super.key,
     required this.nickname,
+    required this.reportedUid,
     this.avatar,
   });
 
@@ -18,6 +26,8 @@ class ReportUserScreen extends StatefulWidget {
 class _ReportUserScreenState extends State<ReportUserScreen> {
   final _detailsController = TextEditingController();
   int? _selectedReason;
+  File? _screenshot;
+  bool _isUploading = false;
 
   final List<String> _reasons = [
     'محتوى غير لائق',
@@ -33,7 +43,65 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
     super.dispose();
   }
 
-  void _submit() {}
+  Future<void> _submit() async {
+    if (_selectedReason == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('الرجاء اختيار سبب الإبلاغ')));
+      return;
+    }
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.currentUser;
+    if (user == null) return;
+
+    setState(() => _isUploading = true);
+
+    String? imageUrl;
+    try {
+      if (_screenshot != null) {
+        imageUrl = await CloudinaryService().uploadImage(_screenshot!.path);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل رفع الصورة: $e')));
+      }
+      return;
+    }
+
+    final reason = _reasons[_selectedReason!];
+    final details = _detailsController.text.trim();
+
+    final data = {
+      'reporter_uid': user.uid,
+      'reported_uid': widget.reportedUid,
+      'reported_name': widget.nickname,
+      'reason': reason,
+      'details': details,
+      'screenshot': imageUrl ?? '',
+      'created_at': DateTime.now().toIso8601String(),
+      'status': 'pending',
+    };
+
+    try {
+      await SupabaseService().setDoc('reports', '${user.uid}_${widget.reportedUid}_${DateTime.now().millisecondsSinceEpoch}', data);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إرسال البلاغ بنجاح')));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('حدث خطأ: $e')));
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    if (picked != null) {
+      setState(() => _screenshot = File(picked.path));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,30 +152,57 @@ class _ReportUserScreenState extends State<ReportUserScreen> {
                         ),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        height: 100,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8F9FA),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE0E0E0), style: BorderStyle.solid),
+                        ),
+                        child: _screenshot != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.file(_screenshot!, fit: BoxFit.cover, width: double.infinity),
+                              )
+                            : const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_photo_alternate, color: Color(0xFF9BA1B6), size: 32),
+                                  SizedBox(height: 8),
+                                  Text('إضافة سكرين شوت (اختياري)', style: TextStyle(color: Color(0xFF9BA1B6))),
+                                ],
+                              ),
+                      ),
+                    ),
                     const SizedBox(height: 32),
                     GestureDetector(
-                      onTap: _submit,
+                      onTap: _isUploading ? null : _submit,
                       child: Container(
                         height: 48,
                         decoration: BoxDecoration(
                           color: const Color(0xFFE53935),
                           borderRadius: BorderRadius.circular(24),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            R.image(R.mineReportIc, width: 22, height: 22),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'إرسال الإبلاغ',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                        child: _isUploading
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  R.image(R.mineReportIc, width: 22, height: 22),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'إرسال الإبلاغ',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                   ],
