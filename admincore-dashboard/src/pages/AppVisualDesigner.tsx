@@ -984,6 +984,7 @@ export default function AppVisualDesigner() {
                         className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
                       />
                     </div>
+                  </div>
                 )}
               </div>
 
