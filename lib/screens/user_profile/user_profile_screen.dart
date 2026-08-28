@@ -313,7 +313,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Future<void> _pickCoverImage() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (image == null || !mounted) return;
     setState(() => _loading = true);
     try {
@@ -322,19 +322,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       try {
         cropped = await ImageCropper().cropImage(
           sourcePath: image.path,
-          aspectRatio: const CropAspectRatio(ratioX: 1.11, ratioY: 1),
+          aspectRatio: const CropAspectRatio(ratioX: 16, ratioY: 9),
           uiSettings: [
             AndroidUiSettings(
-              toolbarTitle: 'قص الصورة',
+              toolbarTitle: 'قص صورة الغلاف',
               toolbarColor: const Color(0xFF171A24),
               toolbarWidgetColor: Colors.white,
               activeControlsWidgetColor: const Color(0xFF4CC790),
-              lockAspectRatio: true,
+              lockAspectRatio: false,
               statusBarColor: const Color(0xFF171A24),
             ),
             IOSUiSettings(
-              title: 'قص الصورة',
-              aspectRatioPickerButtonHidden: true,
+              title: 'قص صورة الغلاف',
+              aspectRatioPickerButtonHidden: false,
               resetButtonHidden: true,
             ),
           ],
@@ -343,61 +343,70 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         debugPrint('[CoverImage] crop error: $e');
         cropped = null;
       }
-      if (cropped == null || !mounted) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
-      debugPrint('[CoverImage] cropped: ${cropped.path}');
-      String url;
-      try {
-        url = await CloudinaryService().uploadImage(
-          File(cropped.path),
-          publicId: 'cover_${DateTime.now().millisecondsSinceEpoch}',
-        );
-      } catch (e) {
-        debugPrint('[CoverImage] upload error: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('فشل رفع الصورة إلى السحابة')),
-          );
-        }
-        setState(() => _loading = false);
-        return;
-      }
-      if (!mounted || url.isEmpty) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
+      
+      final File fileToUpload = cropped != null ? File(cropped.path) : File(image.path);
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final currentUser = userProvider.currentUser;
-      if (currentUser == null) return;
+      if (currentUser == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+
+      String url = '';
+      try {
+        url = await CloudinaryService().uploadImage(
+          fileToUpload,
+          publicId: 'cover_${currentUser.uid}_${DateTime.now().millisecondsSinceEpoch}',
+        );
+      } catch (e) {
+        debugPrint('[CoverImage] Cloudinary upload error: $e, attempting Supabase fallback...');
+        try {
+          final fileName = 'covers/${currentUser.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final bytes = await fileToUpload.readAsBytes();
+          await Supabase.instance.client.storage.from('avatars').uploadBinary(
+            fileName,
+            bytes,
+            fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: true),
+          );
+          url = Supabase.instance.client.storage.from('avatars').getPublicUrl(fileName);
+        } catch (se) {
+          debugPrint('[CoverImage] Supabase upload error: $se');
+        }
+      }
+
+      if (!mounted || url.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('فشل رفع الصورة، يرجى المحاولة مرة أخرى')),
+          );
+          setState(() => _loading = false);
+        }
+        return;
+      }
+
       try {
         await Supabase.instance.client.from('users').update({'profile_bg_url': url}).eq('uid', currentUser.uid);
       } catch (e) {
         debugPrint('[CoverImage] db update error: $e');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('تم الرفع لكن فشل الحفظ في قاعدة البيانات')),
-          );
-        }
-        setState(() => _loading = false);
-        return;
       }
+
       if (mounted) {
-        setState(() => _profileBgUrl = url);
+        setState(() {
+          _profileBgUrl = url;
+          _loading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('تم حفظ صورة الغلاف')),
+          const SnackBar(content: Text('تم تحديث صورة الغلاف بنجاح')),
         );
       }
     } catch (e) {
       debugPrint('[CoverImage] unexpected error: $e');
       if (mounted) {
+        setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('خطأ غير متوقع: الرجاء المحاولة مرة أخرى')),
+          const SnackBar(content: Text('حدث خطأ أثناء تحديث الغلاف')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -577,29 +586,63 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Widget _buildNewProfileHeader(DynamicConfigService config, UserModel? user) {
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final isOwnProfile = widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid);
     final hasCover = _profileBgUrl != null && _profileBgUrl!.isNotEmpty;
+
     return Stack(
       clipBehavior: Clip.none,
       children: [
         // Cover background
-        SizedBox(
-          height: 160,
-          width: double.infinity,
-          child: hasCover
-              ? Image(
-                  image: NetworkImage(_profileBgUrl!),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(color: const Color(0xFF22202A)),
-                )
-              : Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF2A1A3A), Color(0xFF16151A)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
+        GestureDetector(
+          onTap: isOwnProfile ? _pickCoverImage : null,
+          child: Stack(
+            children: [
+              SizedBox(
+                height: 160,
+                width: double.infinity,
+                child: hasCover
+                    ? Image(
+                        image: NetworkImage(_profileBgUrl!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(color: const Color(0xFF22202A)),
+                      )
+                    : Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF2A1A3A), Color(0xFF16151A)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
+              ),
+              if (isOwnProfile)
+                Positioned(
+                  top: 50,
+                  left: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.6),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white24, width: 0.8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.camera_alt_outlined, color: Colors.white, size: 14),
+                        SizedBox(width: 4),
+                        Text(
+                          'تغيير الغلاف',
+                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
+                      ],
                     ),
                   ),
                 ),
+            ],
+          ),
         ),
         // Gradient overlay at bottom of cover
         Positioned(
@@ -1292,6 +1335,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         svgaUrl: entranceSvga,
                         assetUrl: entranceImg,
                         hasItem: hasEntrance,
+                        cardBg: config.fullProfileVehicleCardBg,
+                        cardBorder: config.fullProfileVehicleCardBorder,
+                        customIcon: config.fullProfileVehicleIcon,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1307,6 +1353,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         svgaUrl: frameSvga,
                         assetUrl: frameImg,
                         hasItem: hasFrame,
+                        cardBg: config.fullProfileFrameCardBg,
+                        cardBorder: config.fullProfileFrameCardBorder,
+                        customIcon: config.fullProfileFrameIcon,
                       ),
                     ),
                   ],
@@ -1323,8 +1372,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: const Color(0xFF22202A),
+                      image: config.fullProfileGiftWallCardBg.isNotEmpty
+                          ? DecorationImage(
+                              image: R.cachedImage(config.fullProfileGiftWallCardBg),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white10),
+                      border: Border.all(color: config.fullProfileGiftWallCardBorder),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -1392,7 +1447,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     ],
                                   ),
                                 )
-                              : const Icon(Icons.card_giftcard, size: 48, color: Colors.pinkAccent),
+                              : (config.fullProfileGiftWallIcon.isNotEmpty
+                                  ? CachedImg(config.fullProfileGiftWallIcon, width: 48, height: 48, fit: BoxFit.contain, error: (_, __, ___) => const Icon(Icons.card_giftcard, size: 48, color: Colors.pinkAccent))
+                                  : const Icon(Icons.card_giftcard, size: 48, color: Colors.pinkAccent)),
                         ),
                         const Spacer(),
                       ],
@@ -1408,14 +1465,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   Widget _newAchievementCardSmall(String title, IconData defaultIcon,
-      {String? svgaUrl, String? assetUrl, bool hasItem = false}) {
+      {String? svgaUrl, String? assetUrl, bool hasItem = false, String cardBg = '', Color? cardBorder, String customIcon = ''}) {
     return Container(
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF22202A),
+        image: cardBg.isNotEmpty
+            ? DecorationImage(
+                image: R.cachedImage(cardBg),
+                fit: BoxFit.cover,
+              )
+            : null,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
+        border: Border.all(color: cardBorder ?? Colors.white10),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1431,6 +1494,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               width: 40, height: 40,
               child: CachedImg(assetUrl, width: 40, height: 40, fit: BoxFit.contain,
                   error: (_, __, ___) => Icon(defaultIcon, size: 28, color: Colors.white24)),
+            )
+          else if (customIcon.isNotEmpty)
+            SizedBox(
+              width: 40, height: 40,
+              child: CachedImg(customIcon, width: 40, height: 40, fit: BoxFit.contain,
+                  error: (_, __, ___) => Icon(defaultIcon, size: 28, color: hasItem ? Colors.amber : Colors.white24)),
             )
           else
             Icon(defaultIcon, size: 28, color: hasItem ? Colors.amber : Colors.white24),

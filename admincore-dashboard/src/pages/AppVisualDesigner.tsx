@@ -112,6 +112,15 @@ const defaultVisuals: ScreenVisuals = {
     profileMoreIcon: '',
     profileReportIcon: '',
     profileEditIcon: '',
+    giftWallCardBg: '',
+    giftWallCardBorder: '#382F24',
+    giftWallIcon: '',
+    vehicleCardBg: '',
+    vehicleCardBorder: '#382F24',
+    vehicleIcon: '',
+    frameCardBg: '',
+    frameCardBorder: '#382F24',
+    frameIcon: '',
   },
   fullProfile: {
     backgroundImage: '',
@@ -130,6 +139,15 @@ const defaultVisuals: ScreenVisuals = {
     badgesTitleImg: '',
     achievementsTitleImg: '',
     profileEditIcon: '',
+    giftWallCardBg: '',
+    giftWallCardBorder: '#382F24',
+    giftWallIcon: '',
+    vehicleCardBg: '',
+    vehicleCardBorder: '#382F24',
+    vehicleIcon: '',
+    frameCardBg: '',
+    frameCardBorder: '#382F24',
+    frameIcon: '',
   },
   eventInfo: {
     backgroundImage: '',
@@ -1130,23 +1148,70 @@ export default function AppVisualDesigner() {
                           )}
                         </div>
                         <div className="grid grid-cols-2 gap-2 flex-row-reverse">
-                          <div className="h-28 rounded-xl bg-white/5 border border-white/5 p-2 flex flex-col justify-between">
+                          {/* Right: Gift Wall Card */}
+                          <div
+                            className="h-28 rounded-xl border p-2 flex flex-col justify-between"
+                            style={{
+                              backgroundColor: currentConfig.giftWallCardBg ? 'transparent' : 'rgba(255,255,255,0.05)',
+                              backgroundImage: currentConfig.giftWallCardBg ? `url(${currentConfig.giftWallCardBg})` : 'none',
+                              backgroundSize: 'cover',
+                              borderColor: currentConfig.giftWallCardBorder || 'rgba(255,255,255,0.1)',
+                            }}
+                          >
                             <div className="flex justify-between items-center">
                               <span className="text-[8px] text-white/40">〈</span>
                               <span className="text-[9px] font-bold text-white">جدار الهدايا</span>
                             </div>
-                            <div className="flex justify-center py-2 text-pink-400 text-xl">🎁</div>
+                            <div className="flex justify-center py-2 text-pink-400 text-xl">
+                              {currentConfig.giftWallIcon ? (
+                                <img src={currentConfig.giftWallIcon} className="w-8 h-8 object-contain" />
+                              ) : (
+                                <span>🎁</span>
+                              )}
+                            </div>
                             <div></div>
                           </div>
+
+                          {/* Left: Stacked cards */}
                           <div className="flex flex-col gap-2">
-                            <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
+                            {/* Vehicle Card */}
+                            <div
+                              className="h-[52px] rounded-xl border p-2 flex items-center justify-between"
+                              style={{
+                                backgroundColor: currentConfig.vehicleCardBg ? 'transparent' : 'rgba(255,255,255,0.05)',
+                                backgroundImage: currentConfig.vehicleCardBg ? `url(${currentConfig.vehicleCardBg})` : 'none',
+                                backgroundSize: 'cover',
+                                borderColor: currentConfig.vehicleCardBorder || 'rgba(255,255,255,0.1)',
+                              }}
+                            >
                               <span className="text-[8px] text-white/40">〈</span>
-                              <span className="text-base text-white/30">🏎️</span>
+                              <div className="w-6 h-6 flex items-center justify-center">
+                                {currentConfig.vehicleIcon ? (
+                                  <img src={currentConfig.vehicleIcon} className="w-5 h-5 object-contain" />
+                                ) : (
+                                  <span className="text-base text-white/30">🏎️</span>
+                                )}
+                              </div>
                               <span className="text-[9px] font-bold text-white">مركبة</span>
                             </div>
-                            <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
+                            {/* Frame Card */}
+                            <div
+                              className="h-[52px] rounded-xl border p-2 flex items-center justify-between"
+                              style={{
+                                backgroundColor: currentConfig.frameCardBg ? 'transparent' : 'rgba(255,255,255,0.05)',
+                                backgroundImage: currentConfig.frameCardBg ? `url(${currentConfig.frameCardBg})` : 'none',
+                                backgroundSize: 'cover',
+                                borderColor: currentConfig.frameCardBorder || 'rgba(255,255,255,0.1)',
+                              }}
+                            >
                               <span className="text-[8px] text-white/40">〈</span>
-                              <span className="text-base text-white/30">👑</span>
+                              <div className="w-6 h-6 flex items-center justify-center">
+                                {currentConfig.frameIcon ? (
+                                  <img src={currentConfig.frameIcon} className="w-5 h-5 object-contain" />
+                                ) : (
+                                  <span className="text-base text-white/30">👑</span>
+                                )}
+                              </div>
                               <span className="text-[9px] font-bold text-white">اطار</span>
                             </div>
                           </div>
@@ -1508,6 +1573,101 @@ export default function AppVisualDesigner() {
                         </label>
                       </div>
                     </div>
+
+                    {/* Achievements Cards Customization */}
+                    <div className="pt-2 border-t border-white/5 space-y-3">
+                      <h4 className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
+                        <span>🏆</span> {lang === 'ar' ? 'تخصيص بطاقات الإنجازات (جدار الهدايا، المركبة، الإطار)' : 'Achievements Cards'}
+                      </h4>
+
+                      {/* Gift Wall Card */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية جدار الهدايا' : 'Gift Wall BG'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="text" value={currentConfig.giftWallCardBg || ''} onChange={e => updateField(activeTab, 'giftWallCardBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallCardBg')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة جدار الهدايا' : 'Gift Wall Icon'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="text" value={currentConfig.giftWallIcon || ''} onChange={e => updateField(activeTab, 'giftWallIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار جدار الهدايا' : 'Gift Wall Border'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="color" value={to6Hex(currentConfig.giftWallCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
+                            <input type="text" value={currentConfig.giftWallCardBorder || ''} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Vehicle Card */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية بطاقة المركبة' : 'Vehicle Card BG'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="text" value={currentConfig.vehicleCardBg || ''} onChange={e => updateField(activeTab, 'vehicleCardBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleCardBg')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المركبة' : 'Vehicle Icon'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="text" value={currentConfig.vehicleIcon || ''} onChange={e => updateField(activeTab, 'vehicleIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار المركبة' : 'Vehicle Border'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="color" value={to6Hex(currentConfig.vehicleCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
+                            <input type="text" value={currentConfig.vehicleCardBorder || ''} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Frame Card */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية بطاقة الإطار' : 'Frame Card BG'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="text" value={currentConfig.frameCardBg || ''} onChange={e => updateField(activeTab, 'frameCardBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameCardBg')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإطار' : 'Frame Icon'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="text" value={currentConfig.frameIcon || ''} onChange={e => updateField(activeTab, 'frameIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار بطاقة الإطار' : 'Frame Border'}</label>
+                          <div className="flex gap-1.5">
+                            <input type="color" value={to6Hex(currentConfig.frameCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
+                            <input type="text" value={currentConfig.frameCardBorder || ''} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     {activeTab === 'userProfile' && (
                       <>
                         <div className="space-y-1.5">

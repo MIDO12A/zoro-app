@@ -249,6 +249,19 @@ class DynamicConfigService extends ChangeNotifier {
   String get fullProfileReportIcon => _screenStr('fullProfile', 'profileReportIcon', miniprofileReportIcon);
   String get fullProfileEditIcon => _screenStr('fullProfile', 'profileEditIcon', miniprofileEditIcon);
 
+  // Achievements Cards (جدار الهدايا، مركبة، إطار)
+  String get fullProfileGiftWallCardBg => _screenStr('fullProfile', 'giftWallCardBg', _screenStr('userProfile', 'giftWallCardBg', ''));
+  Color get fullProfileGiftWallCardBorder => _screenColor('fullProfile', 'giftWallCardBorder', const Color(0x1AFFFFFF));
+  String get fullProfileGiftWallIcon => _screenStr('fullProfile', 'giftWallIcon', _screenStr('userProfile', 'giftWallIcon', ''));
+
+  String get fullProfileVehicleCardBg => _screenStr('fullProfile', 'vehicleCardBg', _screenStr('userProfile', 'vehicleCardBg', ''));
+  Color get fullProfileVehicleCardBorder => _screenColor('fullProfile', 'vehicleCardBorder', const Color(0x1AFFFFFF));
+  String get fullProfileVehicleIcon => _screenStr('fullProfile', 'vehicleIcon', _screenStr('userProfile', 'vehicleIcon', ''));
+
+  String get fullProfileFrameCardBg => _screenStr('fullProfile', 'frameCardBg', _screenStr('userProfile', 'frameCardBg', ''));
+  Color get fullProfileFrameCardBorder => _screenColor('fullProfile', 'frameCardBorder', const Color(0x1AFFFFFF));
+  String get fullProfileFrameIcon => _screenStr('fullProfile', 'frameIcon', _screenStr('userProfile', 'frameIcon', ''));
+
 
   // Getters
   String get appName => _appName;
