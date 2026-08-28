@@ -1585,213 +1585,266 @@ export default function AppVisualDesigner() {
                     </div>
 
                     {/* Achievements Cards Customization */}
-                    <div className="pt-4 border-t border-white/10 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-                          <span className="text-base">🏆</span> {lang === 'ar' ? 'تخصيص بطاقات الإنجازات (جدار الهدايا، المركبة، الإطار)' : 'Achievements Cards Customization'}
-                        </h4>
-                        <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold">
-                          {lang === 'ar' ? 'رفع مباشر من الجهاز 📁' : 'Direct Device Upload 📁'}
+                    <div className="md:col-span-2 pt-6 border-t border-white/10 space-y-6 w-full">
+                      <div className="flex flex-wrap items-center justify-between gap-2 bg-gradient-to-r from-amber-500/10 via-pink-500/10 to-indigo-500/10 border border-amber-500/20 p-3 rounded-2xl">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl">🏆</span>
+                          <div>
+                            <h4 className="text-xs font-bold text-amber-300">
+                              {lang === 'ar' ? 'تخصيص بطاقات الإنجازات (جدار الهدايا، المركبة، الإطار)' : 'Achievements Cards Customization'}
+                            </h4>
+                            <p className="text-[10px] text-slate-400">
+                              {lang === 'ar' ? 'تعديل وتعيين خلفيات وأيقونات وألوان إطارات بطاقات الإنجازات' : 'Configure backgrounds, icons, and borders for achievements'}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full font-bold">
+                          {lang === 'ar' ? '📁 رفع مباشر من الجهاز' : '📁 Direct Device Upload'}
                         </span>
                       </div>
 
                       {/* 1. Gift Wall Card (جدار الهدايا) */}
-                      <div className="bg-[#141417] rounded-2xl border border-pink-500/20 p-4 space-y-3">
-                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                          <span className="text-xs font-bold text-pink-300 flex items-center gap-1.5">
-                            <span className="text-sm">🎁</span> {lang === 'ar' ? 'بطاقة جدار الهدايا (Gift Wall Card)' : 'Gift Wall Card'}
+                      <div className="bg-[#141417] rounded-2xl border border-pink-500/30 p-5 space-y-4 shadow-lg">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <span className="text-sm font-bold text-pink-300 flex items-center gap-2">
+                            <span className="text-lg">🎁</span>
+                            <span>{lang === 'ar' ? 'بطاقة جدار الهدايا (Gift Wall Card)' : 'Gift Wall Card'}</span>
                           </span>
-                          <span className="text-[9px] text-slate-400">بطاقة عمودية 140px</span>
+                          <span className="text-[10px] bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2 py-0.5 rounded-full font-medium">
+                            {lang === 'ar' ? 'بطاقة رأسية (140px)' : 'Vertical Card'}
+                          </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Background Image */}
-                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة خلفية جدار الهدايا' : 'Background Image'}</label>
-                            <div className="flex items-center gap-2">
+                          <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-2">
+                            <label className="block text-[10px] uppercase text-slate-300 font-bold flex items-center justify-between">
+                              <span>{lang === 'ar' ? 'صورة خلفية جدار الهدايا' : 'Background Image'}</span>
+                              {currentConfig.giftWallCardBg && <span className="text-[9px] text-emerald-400 font-normal">تم التعيين ✓</span>}
+                            </label>
+                            <div className="flex items-center gap-3">
                               {currentConfig.giftWallCardBg ? (
-                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group">
+                                <div className="w-14 h-14 rounded-xl border border-white/20 overflow-hidden bg-black/50 shrink-0 relative group shadow-md">
                                   <img src={currentConfig.giftWallCardBg} className="w-full h-full object-cover" />
-                                  <button onClick={() => updateField(activeTab, 'giftWallCardBg', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                  <button onClick={() => updateField(activeTab, 'giftWallCardBg', '')} title="حذف" className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 font-bold text-sm transition-opacity">✕</button>
                                 </div>
                               ) : (
-                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-slate-600 shrink-0 text-[10px]">خلفية</div>
+                                <div className="w-14 h-14 rounded-xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center text-slate-500 shrink-0 text-[10px] gap-0.5 bg-black/20">
+                                  <Upload className="w-4 h-4 opacity-40" />
+                                  <span>خلفية</span>
+                                </div>
                               )}
-                              <div className="flex-1 space-y-1">
-                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
-                                  <Upload className="w-3.5 h-3.5" />
+                              <div className="flex-1 space-y-1.5 min-w-0">
+                                <label className="cursor-pointer w-full py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm">
+                                  <Upload className="w-4 h-4" />
                                   <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallCardBg')} />
                                 </label>
-                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الصورة...' : 'Or enter URL...'} value={currentConfig.giftWallCardBg || ''} onChange={e => updateField(activeTab, 'giftWallCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                                <input type="text" placeholder={lang === 'ar' ? 'أو ألصق رابط الصورة هنا...' : 'Or paste URL here...'} value={currentConfig.giftWallCardBg || ''} onChange={e => updateField(activeTab, 'giftWallCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2.5 text-[11px] text-white focus:border-indigo-500 transition-colors" />
                               </div>
                             </div>
                           </div>
 
                           {/* Icon Image */}
-                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة جدار الهدايا' : 'Gift Wall Icon'}</label>
-                            <div className="flex items-center gap-2">
+                          <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-2">
+                            <label className="block text-[10px] uppercase text-slate-300 font-bold flex items-center justify-between">
+                              <span>{lang === 'ar' ? 'أيقونة جدار الهدايا' : 'Gift Wall Icon'}</span>
+                              {currentConfig.giftWallIcon && <span className="text-[9px] text-emerald-400 font-normal">تم التعيين ✓</span>}
+                            </label>
+                            <div className="flex items-center gap-3">
                               {currentConfig.giftWallIcon ? (
-                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group flex items-center justify-center p-1">
+                                <div className="w-14 h-14 rounded-xl border border-white/20 overflow-hidden bg-black/50 shrink-0 relative group flex items-center justify-center p-1.5 shadow-md">
                                   <img src={currentConfig.giftWallIcon} className="max-w-full max-h-full object-contain" />
-                                  <button onClick={() => updateField(activeTab, 'giftWallIcon', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                  <button onClick={() => updateField(activeTab, 'giftWallIcon', '')} title="حذف" className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 font-bold text-sm transition-opacity">✕</button>
                                 </div>
                               ) : (
-                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-2xl shrink-0">🎁</div>
+                                <div className="w-14 h-14 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center text-2xl shrink-0 bg-black/20">🎁</div>
                               )}
-                              <div className="flex-1 space-y-1">
-                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-pink-600/20 hover:bg-pink-600/30 text-pink-300 border border-pink-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
-                                  <Upload className="w-3.5 h-3.5" />
+                              <div className="flex-1 space-y-1.5 min-w-0">
+                                <label className="cursor-pointer w-full py-2 px-3 bg-pink-600/20 hover:bg-pink-600/30 text-pink-300 border border-pink-500/30 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm">
+                                  <Upload className="w-4 h-4" />
                                   <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallIcon')} />
                                 </label>
-                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الأيقونة...' : 'Or enter URL...'} value={currentConfig.giftWallIcon || ''} onChange={e => updateField(activeTab, 'giftWallIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                                <input type="text" placeholder={lang === 'ar' ? 'أو ألصق رابط الأيقونة هنا...' : 'Or paste URL here...'} value={currentConfig.giftWallIcon || ''} onChange={e => updateField(activeTab, 'giftWallIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2.5 text-[11px] text-white focus:border-pink-500 transition-colors" />
                               </div>
                             </div>
                           </div>
                         </div>
 
                         {/* Border Color */}
-                        <div className="flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                          <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار جدار الهدايا' : 'Card Border Color'}</label>
+                        <div className="flex items-center justify-between bg-white/[0.02] p-3 rounded-xl border border-white/5">
+                          <div>
+                            <label className="text-xs text-slate-300 font-bold block">{lang === 'ar' ? 'لون إطار جدار الهدايا' : 'Card Border Color'}</label>
+                            <span className="text-[10px] text-slate-500">اللون الافتراضي: #382F24</span>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <input type="color" value={to6Hex(currentConfig.giftWallCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
-                            <input type="text" value={currentConfig.giftWallCardBorder || ''} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white font-mono text-center" />
+                            <input type="color" value={to6Hex(currentConfig.giftWallCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-9 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
+                            <input type="text" value={currentConfig.giftWallCardBorder || '#382F24'} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2.5 text-xs text-white font-mono text-center" />
                           </div>
                         </div>
                       </div>
 
                       {/* 2. Vehicle Card (بطاقة المركبة) */}
-                      <div className="bg-[#141417] rounded-2xl border border-amber-500/20 p-4 space-y-3">
-                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                          <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                            <span className="text-sm">🏎️</span> {lang === 'ar' ? 'بطاقة المركبة (Vehicle Card)' : 'Vehicle Card'}
+                      <div className="bg-[#141417] rounded-2xl border border-amber-500/30 p-5 space-y-4 shadow-lg">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <span className="text-sm font-bold text-amber-300 flex items-center gap-2">
+                            <span className="text-lg">🏎️</span>
+                            <span>{lang === 'ar' ? 'بطاقة المركبة (Vehicle Card)' : 'Vehicle Card'}</span>
                           </span>
-                          <span className="text-[9px] text-slate-400">بطاقة أفقية 64px</span>
+                          <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-medium">
+                            {lang === 'ar' ? 'بنر عريض (64px)' : 'Horizontal Banner'}
+                          </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Background Image */}
-                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة خلفية بطاقة المركبة' : 'Background Image'}</label>
-                            <div className="flex items-center gap-2">
+                          <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-2">
+                            <label className="block text-[10px] uppercase text-slate-300 font-bold flex items-center justify-between">
+                              <span>{lang === 'ar' ? 'صورة خلفية بطاقة المركبة' : 'Background Image'}</span>
+                              {currentConfig.vehicleCardBg && <span className="text-[9px] text-emerald-400 font-normal">تم التعيين ✓</span>}
+                            </label>
+                            <div className="flex items-center gap-3">
                               {currentConfig.vehicleCardBg ? (
-                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group">
+                                <div className="w-14 h-14 rounded-xl border border-white/20 overflow-hidden bg-black/50 shrink-0 relative group shadow-md">
                                   <img src={currentConfig.vehicleCardBg} className="w-full h-full object-cover" />
-                                  <button onClick={() => updateField(activeTab, 'vehicleCardBg', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                  <button onClick={() => updateField(activeTab, 'vehicleCardBg', '')} title="حذف" className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 font-bold text-sm transition-opacity">✕</button>
                                 </div>
                               ) : (
-                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-slate-600 shrink-0 text-[10px]">خلفية</div>
+                                <div className="w-14 h-14 rounded-xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center text-slate-500 shrink-0 text-[10px] gap-0.5 bg-black/20">
+                                  <Upload className="w-4 h-4 opacity-40" />
+                                  <span>خلفية</span>
+                                </div>
                               )}
-                              <div className="flex-1 space-y-1">
-                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
-                                  <Upload className="w-3.5 h-3.5" />
+                              <div className="flex-1 space-y-1.5 min-w-0">
+                                <label className="cursor-pointer w-full py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm">
+                                  <Upload className="w-4 h-4" />
                                   <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleCardBg')} />
                                 </label>
-                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الصورة...' : 'Or enter URL...'} value={currentConfig.vehicleCardBg || ''} onChange={e => updateField(activeTab, 'vehicleCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                                <input type="text" placeholder={lang === 'ar' ? 'أو ألصق رابط الصورة هنا...' : 'Or paste URL here...'} value={currentConfig.vehicleCardBg || ''} onChange={e => updateField(activeTab, 'vehicleCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2.5 text-[11px] text-white focus:border-indigo-500 transition-colors" />
                               </div>
                             </div>
                           </div>
 
                           {/* Icon Image */}
-                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المركبة' : 'Vehicle Icon'}</label>
-                            <div className="flex items-center gap-2">
+                          <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-2">
+                            <label className="block text-[10px] uppercase text-slate-300 font-bold flex items-center justify-between">
+                              <span>{lang === 'ar' ? 'أيقونة المركبة' : 'Vehicle Icon'}</span>
+                              {currentConfig.vehicleIcon && <span className="text-[9px] text-emerald-400 font-normal">تم التعيين ✓</span>}
+                            </label>
+                            <div className="flex items-center gap-3">
                               {currentConfig.vehicleIcon ? (
-                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group flex items-center justify-center p-1">
+                                <div className="w-14 h-14 rounded-xl border border-white/20 overflow-hidden bg-black/50 shrink-0 relative group flex items-center justify-center p-1.5 shadow-md">
                                   <img src={currentConfig.vehicleIcon} className="max-w-full max-h-full object-contain" />
-                                  <button onClick={() => updateField(activeTab, 'vehicleIcon', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                  <button onClick={() => updateField(activeTab, 'vehicleIcon', '')} title="حذف" className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 font-bold text-sm transition-opacity">✕</button>
                                 </div>
                               ) : (
-                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-2xl shrink-0">🏎️</div>
+                                <div className="w-14 h-14 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center text-2xl shrink-0 bg-black/20">🏎️</div>
                               )}
-                              <div className="flex-1 space-y-1">
-                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
-                                  <Upload className="w-3.5 h-3.5" />
+                              <div className="flex-1 space-y-1.5 min-w-0">
+                                <label className="cursor-pointer w-full py-2 px-3 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm">
+                                  <Upload className="w-4 h-4" />
                                   <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleIcon')} />
                                 </label>
-                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الأيقونة...' : 'Or enter URL...'} value={currentConfig.vehicleIcon || ''} onChange={e => updateField(activeTab, 'vehicleIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                                <input type="text" placeholder={lang === 'ar' ? 'أو ألصق رابط الأيقونة هنا...' : 'Or paste URL here...'} value={currentConfig.vehicleIcon || ''} onChange={e => updateField(activeTab, 'vehicleIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2.5 text-[11px] text-white focus:border-amber-500 transition-colors" />
                               </div>
                             </div>
                           </div>
                         </div>
 
                         {/* Border Color */}
-                        <div className="flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                          <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار بطاقة المركبة' : 'Card Border Color'}</label>
+                        <div className="flex items-center justify-between bg-white/[0.02] p-3 rounded-xl border border-white/5">
+                          <div>
+                            <label className="text-xs text-slate-300 font-bold block">{lang === 'ar' ? 'لون إطار بطاقة المركبة' : 'Card Border Color'}</label>
+                            <span className="text-[10px] text-slate-500">اللون الافتراضي: #382F24</span>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <input type="color" value={to6Hex(currentConfig.vehicleCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
-                            <input type="text" value={currentConfig.vehicleCardBorder || ''} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white font-mono text-center" />
+                            <input type="color" value={to6Hex(currentConfig.vehicleCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-9 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
+                            <input type="text" value={currentConfig.vehicleCardBorder || '#382F24'} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2.5 text-xs text-white font-mono text-center" />
                           </div>
                         </div>
                       </div>
 
                       {/* 3. Frame Card (بطاقة الإطار) */}
-                      <div className="bg-[#141417] rounded-2xl border border-purple-500/20 p-4 space-y-3">
-                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                          <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
-                            <span className="text-sm">👑</span> {lang === 'ar' ? 'بطاقة الإطار (Avatar Frame Card)' : 'Frame Card'}
+                      <div className="bg-[#141417] rounded-2xl border border-purple-500/30 p-5 space-y-4 shadow-lg">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <span className="text-sm font-bold text-purple-300 flex items-center gap-2">
+                            <span className="text-lg">👑</span>
+                            <span>{lang === 'ar' ? 'بطاقة الإطار (Avatar Frame Card)' : 'Frame Card'}</span>
                           </span>
-                          <span className="text-[9px] text-slate-400">بطاقة أفقية 64px</span>
+                          <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-full font-medium">
+                            {lang === 'ar' ? 'بنر عريض (64px)' : 'Horizontal Banner'}
+                          </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           {/* Background Image */}
-                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة خلفية بطاقة الإطار' : 'Background Image'}</label>
-                            <div className="flex items-center gap-2">
+                          <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-2">
+                            <label className="block text-[10px] uppercase text-slate-300 font-bold flex items-center justify-between">
+                              <span>{lang === 'ar' ? 'صورة خلفية بطاقة الإطار' : 'Background Image'}</span>
+                              {currentConfig.frameCardBg && <span className="text-[9px] text-emerald-400 font-normal">تم التعيين ✓</span>}
+                            </label>
+                            <div className="flex items-center gap-3">
                               {currentConfig.frameCardBg ? (
-                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group">
+                                <div className="w-14 h-14 rounded-xl border border-white/20 overflow-hidden bg-black/50 shrink-0 relative group shadow-md">
                                   <img src={currentConfig.frameCardBg} className="w-full h-full object-cover" />
-                                  <button onClick={() => updateField(activeTab, 'frameCardBg', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                  <button onClick={() => updateField(activeTab, 'frameCardBg', '')} title="حذف" className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 font-bold text-sm transition-opacity">✕</button>
                                 </div>
                               ) : (
-                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-slate-600 shrink-0 text-[10px]">خلفية</div>
+                                <div className="w-14 h-14 rounded-xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center text-slate-500 shrink-0 text-[10px] gap-0.5 bg-black/20">
+                                  <Upload className="w-4 h-4 opacity-40" />
+                                  <span>خلفية</span>
+                                </div>
                               )}
-                              <div className="flex-1 space-y-1">
-                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
-                                  <Upload className="w-3.5 h-3.5" />
+                              <div className="flex-1 space-y-1.5 min-w-0">
+                                <label className="cursor-pointer w-full py-2 px-3 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm">
+                                  <Upload className="w-4 h-4" />
                                   <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameCardBg')} />
                                 </label>
-                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الصورة...' : 'Or enter URL...'} value={currentConfig.frameCardBg || ''} onChange={e => updateField(activeTab, 'frameCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                                <input type="text" placeholder={lang === 'ar' ? 'أو ألصق رابط الصورة هنا...' : 'Or paste URL here...'} value={currentConfig.frameCardBg || ''} onChange={e => updateField(activeTab, 'frameCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2.5 text-[11px] text-white focus:border-indigo-500 transition-colors" />
                               </div>
                             </div>
                           </div>
 
                           {/* Icon Image */}
-                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإطار' : 'Frame Icon'}</label>
-                            <div className="flex items-center gap-2">
+                          <div className="bg-white/[0.02] p-3 rounded-xl border border-white/5 space-y-2">
+                            <label className="block text-[10px] uppercase text-slate-300 font-bold flex items-center justify-between">
+                              <span>{lang === 'ar' ? 'أيقونة الإطار' : 'Frame Icon'}</span>
+                              {currentConfig.frameIcon && <span className="text-[9px] text-emerald-400 font-normal">تم التعيين ✓</span>}
+                            </label>
+                            <div className="flex items-center gap-3">
                               {currentConfig.frameIcon ? (
-                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group flex items-center justify-center p-1">
+                                <div className="w-14 h-14 rounded-xl border border-white/20 overflow-hidden bg-black/50 shrink-0 relative group flex items-center justify-center p-1.5 shadow-md">
                                   <img src={currentConfig.frameIcon} className="max-w-full max-h-full object-contain" />
-                                  <button onClick={() => updateField(activeTab, 'frameIcon', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                  <button onClick={() => updateField(activeTab, 'frameIcon', '')} title="حذف" className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 font-bold text-sm transition-opacity">✕</button>
                                 </div>
                               ) : (
-                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-2xl shrink-0">👑</div>
+                                <div className="w-14 h-14 rounded-xl border-2 border-dashed border-white/10 flex items-center justify-center text-2xl shrink-0 bg-black/20">👑</div>
                               )}
-                              <div className="flex-1 space-y-1">
-                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
-                                  <Upload className="w-3.5 h-3.5" />
+                              <div className="flex-1 space-y-1.5 min-w-0">
+                                <label className="cursor-pointer w-full py-2 px-3 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm">
+                                  <Upload className="w-4 h-4" />
                                   <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
                                   <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameIcon')} />
                                 </label>
-                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الأيقونة...' : 'Or enter URL...'} value={currentConfig.frameIcon || ''} onChange={e => updateField(activeTab, 'frameIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                                <input type="text" placeholder={lang === 'ar' ? 'أو ألصق رابط الأيقونة هنا...' : 'Or paste URL here...'} value={currentConfig.frameIcon || ''} onChange={e => updateField(activeTab, 'frameIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2.5 text-[11px] text-white focus:border-purple-500 transition-colors" />
                               </div>
                             </div>
                           </div>
                         </div>
 
                         {/* Border Color */}
-                        <div className="flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                          <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار بطاقة الإطار' : 'Card Border Color'}</label>
+                        <div className="flex items-center justify-between bg-white/[0.02] p-3 rounded-xl border border-white/5">
+                          <div>
+                            <label className="text-xs text-slate-300 font-bold block">{lang === 'ar' ? 'لون إطار بطاقة الإطار' : 'Card Border Color'}</label>
+                            <span className="text-[10px] text-slate-500">اللون الافتراضي: #382F24</span>
+                          </div>
                           <div className="flex items-center gap-2">
-                            <input type="color" value={to6Hex(currentConfig.frameCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
-                            <input type="text" value={currentConfig.frameCardBorder || ''} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white font-mono text-center" />
+                            <input type="color" value={to6Hex(currentConfig.frameCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-9 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
+                            <input type="text" value={currentConfig.frameCardBorder || '#382F24'} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2.5 text-xs text-white font-mono text-center" />
                           </div>
                         </div>
                       </div>
