@@ -415,8 +415,8 @@ class _UserProfileState extends State<UserProfile> {
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         _countItem(widget.user['visitors']?.toString() ?? '0', 'الزائرين'),
-        _countItem(widget.user['following']?.toString() ?? '0', 'تمت متابعة'),
         _countItem(widget.user['fans']?.toString() ?? '0', 'أتابعه'),
+        _countItem(widget.user['following']?.toString() ?? '0', 'تمت متابعة'),
       ],
     );
   }
@@ -426,6 +426,60 @@ class _UserProfileState extends State<UserProfile> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
+          // 1. Partner / Family card (Renders on the right side in RTL)
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('قريباً...'), duration: Duration(seconds: 1)));
+              },
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1),
+                  gradient: const LinearGradient(colors: [Color(0xFF4A4A1A), Color(0xFF1A1A0D)]),
+                  image: config.miniprofileFamilyCardBg.isNotEmpty
+                      ? DecorationImage(image: R.cachedImage(config.miniprofileFamilyCardBg), fit: BoxFit.cover)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              widget.user['partner_name']?.toString() ?? 'لَـحْـنٌ',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                            const SizedBox(width: 8),
+                            CircleAvatar(
+                              radius: 10,
+                              backgroundImage: widget.user['partner_avatar'] != null
+                                  ? NetworkImage(widget.user['partner_avatar'].toString())
+                                  : const NetworkImage('https://i.pravatar.cc/100'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'ID:${widget.user['partner_custom_id']?.toString() ?? '15652'}',
+                          style: const TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 2. Intimate relation card (Renders on the left side in RTL)
           Expanded(
             child: GestureDetector(
               onTap: () {
@@ -459,47 +513,6 @@ class _UserProfileState extends State<UserProfile> {
                         ),
                         const SizedBox(height: 4),
                         const Text('اربط علاقة حميمة الآن!', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('قريباً...'), duration: Duration(seconds: 1)));
-              },
-              child: Container(
-                height: 80,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1),
-                  gradient: const LinearGradient(colors: [Color(0xFF4A4A1A), Color(0xFF1A1A0D)]),
-                  image: config.miniprofileFamilyCardBg.isNotEmpty
-                      ? DecorationImage(image: R.cachedImage(config.miniprofileFamilyCardBg), fit: BoxFit.cover)
-                      : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('العائلة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(width: 8),
-                            const CircleAvatar(radius: 10, backgroundImage: NetworkImage('https://i.pravatar.cc/100')), // Placeholder
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        const Text('ID:15652', style: TextStyle(color: Colors.amber, fontSize: 11)),
                       ],
                     ),
                   ],
@@ -688,6 +701,9 @@ class _UserProfileState extends State<UserProfile> {
   }
 
   Widget _buildAchievementsSection(DynamicConfigService config) {
+    final activeCar = widget.user['active_car']?.toString();
+    final activeFrame = widget.user['active_frame']?.toString();
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -697,12 +713,27 @@ class _UserProfileState extends State<UserProfile> {
           const SizedBox(height: 12),
           Row(
             children: [
-              _buildAchievementCard('إطار', Icons.crop_square),
-              const SizedBox(width: 12),
-              _buildAchievementCard('مركبة', Icons.directions_car),
+              Expanded(
+                flex: 1,
+                child: Column(
+                  children: [
+                    _buildVerticalAchievementCard(
+                      'مركبة',
+                      Icons.directions_car,
+                      activeAsset: activeCar,
+                    ),
+                    const SizedBox(height: 12),
+                    _buildVerticalAchievementCard(
+                      'اطار',
+                      Icons.crop_square,
+                      activeAsset: activeFrame,
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
-                flex: 2,
+                flex: 1,
                 child: Container(
                   height: 140,
                   padding: const EdgeInsets.all(12),
@@ -718,7 +749,7 @@ class _UserProfileState extends State<UserProfile> {
                         ],
                       ),
                       Spacer(),
-                      Center(child: Icon(Icons.card_giftcard, size: 40, color: Colors.pinkAccent)),
+                      Center(child: Icon(Icons.card_giftcard, size: 48, color: Colors.pinkAccent)),
                       Spacer(),
                     ],
                   ),
@@ -731,29 +762,31 @@ class _UserProfileState extends State<UserProfile> {
     );
   }
 
-  Widget _buildAchievementCard(String title, IconData defaultIcon) {
-    return Expanded(
-      flex: 1,
-      child: Container(
-        height: 140,
-        decoration: BoxDecoration(color: const Color(0xFF22202A), borderRadius: BorderRadius.circular(12)),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-            const Spacer(),
-            Icon(defaultIcon, size: 40, color: Colors.white24),
-            const Spacer(),
-          ],
-        ),
+  Widget _buildVerticalAchievementCard(String title, IconData defaultIcon, {String? activeAsset}) {
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF22202A),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+          if (activeAsset != null && activeAsset.isNotEmpty)
+            SizedBox(
+              width: 36,
+              height: 36,
+              child: R.loadImage(activeAsset, fit: BoxFit.contain),
+            )
+          else
+            Icon(defaultIcon, size: 28, color: Colors.white24),
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          ),
+        ],
       ),
     );
   }
@@ -765,13 +798,13 @@ class _UserProfileState extends State<UserProfile> {
         style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.bold,
-          color: Color(0xFF16151A),
+          color: Colors.white,
         ),
       ),
       const SizedBox(height: 2),
       Text(
         label,
-        style: const TextStyle(fontSize: 10, color: Color(0x8016151A)),
+        style: const TextStyle(fontSize: 10, color: Colors.white54),
       ),
     ],
   );
