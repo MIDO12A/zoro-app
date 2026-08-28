@@ -626,6 +626,27 @@ class _UserProfileState extends State<UserProfile> {
     );
   }
 
+  Widget _badgeItem({String? svga, String? img}) {
+    if (svga != null && svga.isNotEmpty) {
+      final url = _resolveSvga(svga);
+      return Container(
+        margin: const EdgeInsets.only(left: 8),
+        width: 40, height: 40,
+        child: isVideoType(url)
+            ? VapPlayer(url: url)
+            : SvgaPlayer(assetPath: url),
+      );
+    }
+    if (img != null && img.isNotEmpty) {
+      return Container(
+        margin: const EdgeInsets.only(left: 8),
+        width: 40, height: 40,
+        child: R.loadImage(img, fit: BoxFit.contain),
+      );
+    }
+    return const SizedBox();
+  }
+
   Widget _buildBadgesSectionNew(DynamicConfigService config) {
     final badgeWidgets = <Widget>[];
     for (final id in _ownedBadgeIds) {
