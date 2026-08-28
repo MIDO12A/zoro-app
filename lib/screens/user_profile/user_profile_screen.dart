@@ -595,11 +595,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       children: [
         // Cover background
         GestureDetector(
-          onTap: isOwnProfile ? _pickCoverImage : null,
+          onTap: () {
+            if (hasCover) {
+              _showImageFullScreen(_profileBgUrl!);
+            } else if (isOwnProfile) {
+              _pickCoverImage();
+            }
+          },
           child: Stack(
             children: [
               SizedBox(
-                height: 160,
+                height: 200,
                 width: double.infinity,
                 child: hasCover
                     ? Image(
@@ -621,37 +627,44 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 Positioned(
                   top: 50,
                   left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.6),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white24, width: 0.8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: const [
-                        Icon(Icons.camera_alt_outlined, color: Colors.white, size: 14),
-                        SizedBox(width: 4),
-                        Text(
-                          'تغيير الغلاف',
-                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                        ),
-                      ],
+                  child: GestureDetector(
+                    onTap: _pickCoverImage,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.65),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white24, width: 0.8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.camera_alt_outlined, color: Colors.white, size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'تغيير الغلاف',
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
             ],
           ),
         ),
-        // Gradient overlay at bottom of cover
+        // Smooth gradient overlay at bottom of cover blending into page
         Positioned(
           bottom: 0, left: 0, right: 0,
           child: Container(
-            height: 80,
-            decoration: const BoxDecoration(
+            height: 100,
+            decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [Colors.transparent, Color(0xFF16151A)],
+                colors: [
+                  Colors.transparent,
+                  config.fullProfileBgColor.withOpacity(0.6),
+                  config.fullProfileBgColor,
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -874,7 +887,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final hasAgency = _userAgency != null;
     final agencyName = _userAgency?['name']?.toString() ?? 'العائلة';
     final agencyAvatar = _userAgency?['photo_url']?.toString() ?? '';
-    final agencyId = _userAgency?['kayan_id']?.toString() ?? _userAgency?['id']?.toString() ?? '';
+    final rawAgencyId = _userAgency?['custom_id'] ?? _userAgency?['numeric_id'] ?? _userAgency?['kayan_id'] ?? _userAgency?['agency_id'] ?? _userAgency?['id'];
+    final agencyId = (rawAgencyId != null && int.tryParse(rawAgencyId.toString()) != null)
+        ? rawAgencyId.toString()
+        : (rawAgencyId != null ? (100000 + (rawAgencyId.toString().hashCode.abs() % 900000)).toString() : '');
 
     final hasCp = _cpCouple != null;
     final partnerName = _cpPartner?['name']?.toString() ?? '';

@@ -294,8 +294,12 @@ class SupabaseClient {
 
     // Create agency doc
     final agencyRef = _db.collection('host_agencies').doc();
+    final numericAgencyId = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
     final agencyData = <String, dynamic>{
       'id': agencyRef.id,
+      'custom_id': numericAgencyId,
+      'numeric_id': numericAgencyId,
+      'kayan_id': numericAgencyId,
       'name': name,
       'owner_id': uid,
       'owner_user_id': uid,
