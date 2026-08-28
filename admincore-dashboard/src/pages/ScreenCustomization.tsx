@@ -25,6 +25,7 @@ interface ScreenVisuals {
   userProfile: Record<string, string>;
   eventInfo: Record<string, string>;
   notifications: Record<string, string>;
+  miniprofile: Record<string, string>;
 }
 
 const defaultVisuals: ScreenVisuals = {
@@ -298,6 +299,19 @@ const defaultVisuals: ScreenVisuals = {
     profileNameFrame: 'assets/cp/ic_send_invitation_name_frame.png',
     profileTopBgSvga: 'assets/svga/relationship_act_top_bg.svga',
   },
+  miniprofile: {
+    backgroundImage: '',
+    intimateCardBg: '',
+    familyCardBg: '',
+    supportersBanner: '',
+    supporterSlot: '',
+    goldCrown: '',
+    silverCrown: '',
+    bronzeCrown: '',
+    identityTitleImg: '',
+    badgesTitleImg: '',
+    achievementsTitleImg: '',
+  },
   signin: {
     backgroundImage: '',
     headerBgColor: '#2e0d15',
@@ -397,7 +411,7 @@ const defaultVisuals: ScreenVisuals = {
   },
 };
 
-const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'wallet', 'level', 'cp', 'signin', 'room', 'discover', 'message', 'profile', 'chat', 'userProfile', 'eventInfo', 'notifications'] as const;
+const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'wallet', 'level', 'cp', 'miniprofile', 'signin', 'room', 'discover', 'message', 'profile', 'chat', 'userProfile', 'eventInfo', 'notifications'] as const;
 
 const screenLabels: Record<string, Record<string, string>> = {
   agency: { ar: 'شاشة الوكالة', en: 'Agency Screen' },
@@ -410,6 +424,7 @@ const screenLabels: Record<string, Record<string, string>> = {
   wallet: { ar: 'شاشة المحفظة', en: 'Wallet Screen' },
   level: { ar: 'شاشة المستويات', en: 'Levels Screen' },
   cp: { ar: '💑 شاشة CP', en: '💑 CP Screen' },
+  miniprofile: { ar: 'الميني بروفايل', en: 'Mini Profile' },
   signin: { ar: '📅 تسجيل الدخول اليومي', en: '📅 Weekly Sign-In' },
   room: { ar: '🎙 شاشة الغرفة', en: '🎙 Room Screen' },
   discover: { ar: '🔍 شاشة الاستكشاف', en: '🔍 Discover Screen' },
@@ -746,6 +761,7 @@ export default function ScreenCustomizationPage() {
                activeTab === 'wallet' ? (lang === 'ar' ? 'المحفظة' : 'Wallet') :
                activeTab === 'level' ? (lang === 'ar' ? 'المستويات' : 'Levels') :
                activeTab === 'cp' ? (lang === 'ar' ? '💑 CP' : '💑 CP') :
+               activeTab === 'miniprofile' ? (lang === 'ar' ? 'الميني بروفايل' : 'Mini Profile') :
                activeTab === 'signin' ? (lang === 'ar' ? '📅 تسجيل الدخول' : '📅 Weekly Sign-In') :
                 (lang === 'ar' ? 'الوكالة' : 'Agency')}
             </p>

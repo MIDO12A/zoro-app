@@ -183,424 +183,547 @@ class _UserProfileState extends State<UserProfile> {
     final avatar = widget.user['avatar']?.toString() ?? R.avaBoy;
     final name = widget.user['name']?.toString() ?? 'User';
     final vipLevel = widget.user['vipLevel']?.toString();
+    final config = DynamicConfigService();
 
-    return VipCoverAnimator(
-      vipLevel: vipLevel,
-          child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.topCenter,
-        children: [
-          if (_extraUserData['active_cover']?.toString() != null &&
-              _extraUserData['active_cover'].toString().isNotEmpty)
-            Positioned(
-              top: -120, left: 0, right: 0, height: 750,
-              child: isVideoType(_resolveSvga(_extraUserData['active_cover'].toString()))
-                  ? VapPlayer(
-                      url: _resolveSvga(_extraUserData['active_cover'].toString()),
-                      fit: BoxFit.fill,
-                    )
-                  : SvgaPlayer(
-                      assetPath: _resolveSvga(_extraUserData['active_cover'].toString()),
-                      fit: BoxFit.fill,
-                    ),
-            ),
-          Container(
-            margin: const EdgeInsets.only(top: 49),
-            decoration: BoxDecoration(
-              color: DynamicConfigService().userProfileBackgroundColor,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              image: DynamicConfigService().userProfileBackgroundImage.isNotEmpty
-                  ? DecorationImage(
-                      image: R.cachedImage(DynamicConfigService().userProfileBackgroundImage),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
-            ),
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: Column(
-              mainAxisSize: MainAxisSize.min,
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: BoxDecoration(
+        color: const Color(0xFF16151A),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        image: config.miniprofileBgImage.isNotEmpty
+            ? DecorationImage(image: R.cachedImage(config.miniprofileBgImage), fit: BoxFit.cover)
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        child: Stack(
+          children: [
+            // Scrollable Content
+            ListView(
+              padding: const EdgeInsets.only(bottom: 100),
               children: [
-                const SizedBox(height: 48),
-                _buildUserInfo(name),
-                _buildNecklacesRow(),
+                _buildNewHeader(config, avatar, name, vipLevel),
                 const SizedBox(height: 24),
-                if (_rechargeNecklaces.isNotEmpty) _buildRechargeNecklacesRow(),
-                _buildBadgesSection(),
-                if (_showcaseCategories.isNotEmpty) _buildShowcaseSection(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: SizedBox(height: 36, child: _buildOperateRow()),
-                ),
-                if (widget.showMicControls)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(79, 4, 79, 0),
-                    child: _buildMicOperate(),
-                  ),
-                const SizedBox(height: 12),
+                _buildStatsRow(),
+                const SizedBox(height: 24),
+                _buildCardsRow(config),
+                const SizedBox(height: 16),
+                _buildSupportersRow(config),
+                const SizedBox(height: 24),
+                _buildIdentitySection(config),
+                const SizedBox(height: 24),
+                _buildBadgesSectionNew(config),
+                const SizedBox(height: 24),
+                _buildAchievementsSection(config),
               ],
             ),
-          ),
-        ),
-    Positioned(
-      top: 5,
-      child: GestureDetector(
-        onTap: widget.onViewProfile,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 88,
-              height: 88,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 3),
+            // Top Nav Icons (Back / Report)
+            Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  GestureDetector(
+                    onTap: () {
+                      if (!widget.isCurrentUser) {
+                        _showReportDialog();
+                      }
+                    },
+                    child: Icon(widget.isCurrentUser ? Icons.edit_square : Icons.report_problem_outlined, color: Colors.white, size: 24),
+                  ),
+                  GestureDetector(
+                    onTap: widget.onViewProfile,
+                    child: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+                  ),
+                ],
               ),
-              child: ClipOval(
-                child: R.loadImage(
-                  avatar,
-                  width: 88,
-                  height: 88,
-                  fit: BoxFit.cover,
+            ),
+            // Bottom Action Bar
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black, Colors.black87, Colors.transparent],
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (widget.showMicControls) _buildMicOperate(),
+                    if (widget.showMicControls) const SizedBox(height: 12),
+                    _buildOperateRow(),
+                  ],
                 ),
               ),
             ),
-            if (_extraUserData['active_frame'] != null || (_extraUserData['owned_level_frames'] as List?)?.isNotEmpty == true)
-              SvgaFrame(
-                svgaPath: _resolveSvga(_extraUserData['active_frame']?.toString() ?? (_extraUserData['owned_level_frames'] as List).last.toString()),
-                size: 104,
-              ),
           ],
         ),
       ),
-    ),
-          if (!widget.isCurrentUser)
-            Positioned(
-              top: 8,
-              left: 0,
-              child: PopupMenuButton<String>(
-                padding: const EdgeInsets.all(16),
-                icon: R.image(R.roomUserinfoMoreIc, width: 20, height: 20),
-                onSelected: (value) {
-                  switch (value) {
-                    case 'report':
-                      _showReportDialog();
-                    case 'block':
-                      widget.onBlock?.call();
-                    case 'unblock':
-                      widget.onUnblock?.call();
-                    case 'kick':
-                      widget.onKick?.call();
-                    case 'mute':
-                      widget.onMute?.call();
-                  }
-                },
-                itemBuilder: (_) {
-                  final items = <PopupMenuEntry<String>>[];
-                  items.add(const PopupMenuItem(value: 'report', child: ListTile(leading: Icon(Icons.flag, size: 18), title: Text('Report', style: TextStyle(fontSize: 13)), dense: true, visualDensity: VisualDensity.compact)));
-                  if (widget.isBlocked) {
-                    items.add(const PopupMenuItem(value: 'unblock', child: ListTile(leading: Icon(Icons.person_off, size: 18), title: Text('Unblock', style: TextStyle(fontSize: 13)), dense: true, visualDensity: VisualDensity.compact)));
-                  } else {
-                    items.add(const PopupMenuItem(value: 'block', child: ListTile(leading: Icon(Icons.block, size: 18), title: Text('Block', style: TextStyle(fontSize: 13)), dense: true, visualDensity: VisualDensity.compact)));
-                  }
-                  if (widget.isModerator) {
-                    items.add(const PopupMenuDivider());
-                    items.add(const PopupMenuItem(value: 'kick', child: ListTile(leading: Icon(Icons.remove_circle_outline, size: 18), title: Text('Kick from room', style: TextStyle(fontSize: 13)), dense: true, visualDensity: VisualDensity.compact)));
-                    items.add(const PopupMenuItem(value: 'mute', child: ListTile(leading: Icon(Icons.mic_off, size: 18), title: Text('Mute in room', style: TextStyle(fontSize: 13)), dense: true, visualDensity: VisualDensity.compact)));
-                  }
-                  return items;
-                },
+    );
+  }
+
+  Widget _buildNewHeader(DynamicConfigService config, String avatar, String name, String? vipLevel) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // Cover Image Area
+        SizedBox(
+          height: 160,
+          width: double.infinity,
+          child: (_extraUserData['active_cover']?.toString() != null && _extraUserData['active_cover'].toString().isNotEmpty)
+              ? (isVideoType(_resolveSvga(_extraUserData['active_cover'].toString()))
+                  ? VapPlayer(url: _resolveSvga(_extraUserData['active_cover'].toString()), fit: BoxFit.cover)
+                  : SvgaPlayer(assetPath: _resolveSvga(_extraUserData['active_cover'].toString()), fit: BoxFit.cover))
+              : const SizedBox(),
+        ),
+        // Content
+        Container(
+          margin: const EdgeInsets.only(top: 80),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // User Info (Left side in RTL, Right side in UI but we use spaceBetween so avatar is right, info is left)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 40),
+                    Text(
+                      name,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    const SizedBox(height: 4),
+                    // ID & Gender row
+                    Row(
+                      children: [
+                        Builder(builder: (context) {
+                          final fbUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
+                          final generatedId = fbUid.isNotEmpty ? (1000000 + (fbUid.hashCode.abs() % 9000000)).toString() : '';
+                          final idText = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? (generatedId.isNotEmpty ? generatedId : fbUid);
+                          return GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(ClipboardData(text: idText));
+                              ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('تم نسخ الـ ID'), duration: Duration(seconds: 1)));
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
+                              child: Text('ID: $idText', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                            ),
+                          );
+                        }),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.5), borderRadius: BorderRadius.circular(10)),
+                          child: Row(
+                            children: [
+                              Icon(widget.user['gender'] == 'female' ? Icons.female : Icons.male, size: 12, color: Colors.white),
+                              const SizedBox(width: 2),
+                              Text('${widget.user['age'] ?? 18}', style: const TextStyle(fontSize: 12, color: Colors.white)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: Image.network('https://flagcdn.com/w40/${(widget.user['country_code'] ?? 'EG').toString().toLowerCase()}.png', width: 20, height: 14, errorBuilder: (_,__,___) => const Icon(Icons.flag, size: 14, color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Levels
+                    Row(
+                      children: [
+                        _levelChip(widget.user['wealth_level'] ?? 1, 'wealth'),
+                        const SizedBox(width: 4),
+                        _levelChip(widget.user['recharge_level'] ?? 1, 'recharge'),
+                        const SizedBox(width: 4),
+                        _levelChip(widget.user['gems_level'] ?? 1, 'gems'),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Signature / Quote
+                    Row(
+                      children: [
+                        const Icon(Icons.edit, size: 14, color: Colors.white54),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            widget.user['bio']?.toString() ?? 'أقول شيئاً لجعل الآخرين يعرفون لك.',
+                            style: const TextStyle(fontSize: 12, color: Colors.white54),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Avatar
+              Container(
+                margin: const EdgeInsets.only(bottom: 20),
+                child: VipCoverAnimator(
+                  vipLevel: vipLevel,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        width: 90, height: 90,
+                        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                        child: ClipOval(child: R.loadImage(avatar, width: 90, height: 90, fit: BoxFit.cover)),
+                      ),
+                      if (_extraUserData['active_frame'] != null || (_extraUserData['owned_level_frames'] as List?)?.isNotEmpty == true)
+                        SvgaFrame(
+                          svgaPath: _resolveSvga(_extraUserData['active_frame']?.toString() ?? (_extraUserData['owned_level_frames'] as List).last.toString()),
+                          size: 110,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        _countItem(widget.user['visitors']?.toString() ?? '0', 'الزائرين'),
+        _countItem(widget.user['following']?.toString() ?? '0', 'تمت متابعة'),
+        _countItem(widget.user['fans']?.toString() ?? '0', 'أتابعه'),
+      ],
+    );
+  }
+
+  Widget _buildCardsRow(DynamicConfigService config) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('قريباً...'), duration: Duration(seconds: 1)));
+              },
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.pinkAccent.withOpacity(0.5), width: 1),
+                  gradient: const LinearGradient(colors: [Color(0xFF5A1A4A), Color(0xFF2A0D2A)]),
+                  image: config.miniprofileIntimateCardBg.isNotEmpty
+                      ? DecorationImage(image: R.cachedImage(config.miniprofileIntimateCardBg), fit: BoxFit.cover)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('علاقة حميمة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(width: 8),
+                            Icon(Icons.favorite, color: Colors.pink[200], size: 16),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        const Text('اربط علاقة حميمة الآن!', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('قريباً...'), duration: Duration(seconds: 1)));
+              },
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1),
+                  gradient: const LinearGradient(colors: [Color(0xFF4A4A1A), Color(0xFF1A1A0D)]),
+                  image: config.miniprofileFamilyCardBg.isNotEmpty
+                      ? DecorationImage(image: R.cachedImage(config.miniprofileFamilyCardBg), fit: BoxFit.cover)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('العائلة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(width: 8),
+                            const CircleAvatar(radius: 10, backgroundImage: NetworkImage('https://i.pravatar.cc/100')), // Placeholder
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        const Text('ID:15652', style: TextStyle(color: Colors.amber, fontSize: 11)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildUserInfo(String name) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 25),
-          child: Text(
-            name,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF16151A),
-            ),
-          ),
+  Widget _buildSupportersRow(DynamicConfigService config) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        height: 70,
+        decoration: BoxDecoration(
+          color: Colors.black26,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white10),
         ),
-        Padding(
-          padding: const EdgeInsets.only(top: 5),
-          child: GestureDetector(
-            onTap: () {
-              final fbUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
-              final generatedId = fbUid.isNotEmpty ? (1000000 + (fbUid.hashCode.abs() % 9000000)).toString() : '';
-              final id = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? (generatedId.isNotEmpty ? generatedId : fbUid);
-              
-              if (id.isNotEmpty) {
-                Clipboard.setData(ClipboardData(text: id));
-                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                  const SnackBar(content: Text('ID copied'), duration: Duration(seconds: 1)),
-                );
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(4),
+        child: Stack(
+          children: [
+            // Custom Banner if exists
+            if (config.miniprofileSupportersBanner.isNotEmpty)
+              Positioned.fill(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: R.loadImage(config.miniprofileSupportersBanner, fit: BoxFit.cover),
+                ),
               ),
+            // Default SUPPORTERS text if no banner
+            if (config.miniprofileSupportersBanner.isEmpty)
+              const Positioned(
+                right: 16,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Text('SUPPORTERS', style: TextStyle(color: Colors.amber, fontSize: 18, fontWeight: FontWeight.bold, fontStyle: FontStyle.italic)),
+                ),
+              ),
+            Positioned(
+              left: 16, top: 0, bottom: 0,
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Builder(builder: (context) {
-                    final fbUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
-                    final generatedId = fbUid.isNotEmpty ? (1000000 + (fbUid.hashCode.abs() % 9000000)).toString() : '';
-                    final idText = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? (generatedId.isNotEmpty ? generatedId : fbUid);
-                    return Text(
-                      'ID: $idText',
-                      style: const TextStyle(fontSize: 10, color: Color(0xFF9BA1B6)),
-                    );
-                  }),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.copy, size: 10, color: Color(0xFF9BA1B6)),
+                  const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                  const SizedBox(width: 12),
+                  _buildSupporterSlot(config, config.miniprofileGoldCrown, Colors.amber),
+                  const SizedBox(width: 8),
+                  _buildSupporterSlot(config, config.miniprofileSilverCrown, Colors.grey[300]!),
+                  const SizedBox(width: 8),
+                  _buildSupporterSlot(config, config.miniprofileBronzeCrown, Colors.orange[300]!),
                 ],
               ),
             ),
-          ),
+          ],
         ),
-        _buildLevelBadge({...widget.user, ..._extraUserData}),
+      ),
+    );
+  }
+
+  Widget _buildSupporterSlot(DynamicConfigService config, String crownImg, Color defaultColor) {
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 36, height: 36,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: defaultColor, width: 2),
+            image: config.miniprofileSupporterSlot.isNotEmpty
+                ? DecorationImage(image: R.cachedImage(config.miniprofileSupporterSlot), fit: BoxFit.cover)
+                : null,
+          ),
+          child: config.miniprofileSupporterSlot.isEmpty
+              ? const Icon(Icons.person, color: Colors.white24, size: 20)
+              : null,
+        ),
+        Positioned(
+          top: -12,
+          child: crownImg.isNotEmpty
+              ? R.loadImage(crownImg, width: 20, height: 20)
+              : Icon(Icons.workspace_premium, color: defaultColor, size: 20),
+        ),
       ],
     );
   }
 
-  Widget _buildNecklacesRow() {
-    // Merge gifted necklaces with catalog-owned necklaces
-    final merged = <Map<String, String?>>[];
-    final seenIds = <String>{};
-    for (final n in _allOwnedNecklaces.take(5)) {
-      final nid = n['id']?.toString() ?? '';
-      seenIds.add(nid);
-      merged.add({
-        'svga': n['svga_url']?.toString(),
-        'icon': n['image_url']?.toString(),
-        'name': n['name']?.toString(),
-      });
-    }
-    for (final n in _necklaces) {
-      final key = n['icon'] ?? n['svga'] ?? '';
-      if (!seenIds.contains(key)) {
-        merged.add(n);
-        if (merged.length >= 5) break;
-      }
-    }
-    if (!_dataLoaded || merged.isEmpty) return const SizedBox();
+  Widget _buildIdentitySection(DynamicConfigService config) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: merged.take(5).map((n) {
-          final svga = n['svga'];
-          final icon = n['icon'] ?? '';
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: SizedBox(
-              width: 70,
-              height: 70,
-              child: svga != null && svga.isNotEmpty
-                  ? SvgaPlayer(assetPath: svga, width: 70, height: 70)
-                  : (icon.isNotEmpty ? R.loadAsset(icon) : const SizedBox()),
-            ),
-          );
-        }).toList(),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _buildSectionTitle(config.miniprofileIdentityTitleImg, 'وسم الهوية'),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Dummy Identity Badges
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Colors.pinkAccent, Colors.purpleAccent]),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('Voice Host', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Colors.amber, Colors.orange]),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text('Agency Lead', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildRechargeNecklacesRow() {
-    final items = _rechargeNecklaces.take(5).toList();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: items.map((n) {
-          final svga = n['svga_url']?.toString();
-          final img = n['image_url']?.toString();
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: svga != null && svga.isNotEmpty
-                  ? SvgaPlayer(assetPath: svga, width: 56, height: 56)
-                  : (img != null && img.isNotEmpty
-                      ? R.loadAsset(img)
-                      : const SizedBox()),
-            ),
-          );
-        }).toList(),
-      ),
+  Widget _buildSectionTitle(String imgUrl, String fallbackText) {
+    if (imgUrl.isNotEmpty) {
+      return R.loadImage(imgUrl, height: 24, fit: BoxFit.contain);
+    }
+    return Text(
+      fallbackText,
+      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
     );
   }
 
-  Widget _buildBadgesSection() {
-    if (!_dataLoaded) return const SizedBox();
+  Widget _buildBadgesSectionNew(DynamicConfigService config) {
     final badgeWidgets = <Widget>[];
     for (final id in _ownedBadgeIds) {
       final match = _badgesCatalog.where((b) => b['id']?.toString() == id).toList();
       if (match.isNotEmpty) {
         final b = match.first;
-        final svga = b['svga_url']?.toString();
-        final img = b['image_url']?.toString();
-        badgeWidgets.add(_badgeItem(svga: svga, img: img));
-      } else {
-        badgeWidgets.add(_badgeTextItem(id));
+        badgeWidgets.add(_badgeItem(svga: b['svga_url']?.toString(), img: b['image_url']?.toString()));
       }
     }
-    for (final url in _ownedLevelBadgeUrls) {
-      badgeWidgets.add(_badgeItem(svga: url, img: null));
-    }
-    for (final n in _necklaces) {
-      final svga = n['svga'];
-      final icon = n['icon'] ?? '';
-      badgeWidgets.add(_badgeItem(svga: svga, img: icon.isNotEmpty ? icon : null));
-    }
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F8),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          const Text(
-            'Badges',
-            style: TextStyle(
-              fontSize: 12,
-              color: Color(0xFF16151A),
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: badgeWidgets.isEmpty
-                ? const Text('لا توجد شارات بعد',
-                    style: TextStyle(fontSize: 10, color: Color(0xFF9BA1B6)))
-                : Wrap(
-                    spacing: 4,
-                    runSpacing: 4,
-                    alignment: WrapAlignment.end,
-                    children: badgeWidgets.take(8).toList(),
+          _buildSectionTitle(config.miniprofileBadgesTitleImg, 'شارات'),
+          const SizedBox(height: 12),
+          badgeWidgets.isEmpty
+              ? const Center(child: Text('إذهب لإضاءة أول شارة لك!', style: TextStyle(color: Colors.white54, fontSize: 12)))
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: badgeWidgets,
                   ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAchievementsSection(DynamicConfigService config) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          _buildSectionTitle(config.miniprofileAchievementsTitleImg, 'إنجازات'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildAchievementCard('إطار', Icons.crop_square),
+              const SizedBox(width: 12),
+              _buildAchievementCard('مركبة', Icons.directions_car),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Container(
+                  height: 140,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFF22202A), borderRadius: BorderRadius.circular(12)),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                          Text('جدار الهدايا', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      Spacer(),
+                      Center(child: Icon(Icons.card_giftcard, size: 40, color: Colors.pinkAccent)),
+                      Spacer(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-          if (badgeWidgets.length > 8)
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAchievementCard(String title, IconData defaultIcon) {
+    return Expanded(
+      flex: 1,
+      child: Container(
+        height: 140,
+        decoration: BoxDecoration(color: const Color(0xFF22202A), borderRadius: BorderRadius.circular(12)),
+        child: Column(
+          children: [
             Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Text(
-                '+${badgeWidgets.length - 8}',
-                style: const TextStyle(fontSize: 10, color: Color(0xFF9BA1B6)),
+              padding: const EdgeInsets.all(12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                ],
               ),
             ),
-        ],
+            const Spacer(),
+            Icon(defaultIcon, size: 40, color: Colors.white24),
+            const Spacer(),
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _badgeItem({String? svga, String? img}) {
-    return SizedBox(
-      width: 38,
-      height: 38,
-      child: svga != null && svga.isNotEmpty
-          ? SvgaPlayer(assetPath: svga, width: 38, height: 38)
-          : (img != null && img.isNotEmpty
-              ? R.loadAsset(img)
-              : const SizedBox()),
-    );
-  }
-
-  Widget _badgeTextItem(String text) {
-    return Container(
-      width: 38,
-      height: 26,
-      decoration: BoxDecoration(
-        color: Colors.amber.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: Colors.amber.withOpacity(0.3)),
-      ),
-      alignment: Alignment.center,
-      child: Text(text.length > 3 ? text.substring(0, 3) : text,
-          style: const TextStyle(fontSize: 6, color: Color(0xFF9BA1B6))),
-    );
-  }
-
-  Widget _buildShowcaseSection() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8F8F8),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Showcase', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 52,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: _showcaseCategories.expand((cat) {
-                final items = _showcaseItems.where((i) => i['category'] == cat).toList();
-                return [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Center(
-                      child: Text(cat, style: const TextStyle(fontSize: 10, color: Color(0xFF9BA1B6))),
-                    ),
-                  ),
-                  ...items.take(4).map((item) {
-                    final svga = item['svga'];
-                    final icon = item['icon'] ?? '';
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Container(
-                        width: 44, height: 44,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(7),
-                          child: svga != null && svga.isNotEmpty
-                              ? SvgaPlayer(assetPath: svga, width: 44, height: 44)
-                              : (icon.isNotEmpty ? R.loadAsset(icon) : const SizedBox()),
-                        ),
-                      ),
-                    );
-                  }),
-                ];
-              }).toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFollowRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _countItem(widget.user['following']?.toString() ?? '0', 'Following'),
-        const SizedBox(width: 24),
-        _countItem(widget.user['fans']?.toString() ?? '0', 'Fans'),
-        const SizedBox(width: 24),
-        _countItem(widget.user['visitors']?.toString() ?? '0', 'Visitors'),
-      ],
     );
   }
 
