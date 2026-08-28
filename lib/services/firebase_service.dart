@@ -1883,6 +1883,8 @@ class FirebaseService {
       debugPrint('getRoomGlobalRanking error: $e');
       return [];
     }
+  }
+
   Future<List<Map<String, dynamic>>> getTopMonthlyFans(String uid) async {
     try {
       final nowUtc = DateTime.now().toUtc();
@@ -1922,3 +1924,5 @@ class FirebaseService {
   }
 }
 
+
+}
