@@ -2838,27 +2838,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  void _showNecklaceDetail(Map<String, dynamic> necklace) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: Colors.white,
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 100, width: 100,
-              child: Icon(Icons.card_giftcard, size: 60, color: Colors.white54)),
-            const SizedBox(height: 12),
-            Text(
-              necklace['name']?.toString() ?? '',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildEntrancesSection(DynamicConfigService config, UserModel? user) {
     final entrances = _allOwnedEntrances.take(8).toList();
     if (entrances.isEmpty) return const SizedBox.shrink();
