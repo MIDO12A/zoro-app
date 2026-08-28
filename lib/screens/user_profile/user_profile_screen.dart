@@ -452,7 +452,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       builder: (context, _) {
         final config = DynamicConfigService();
         return Scaffold(
-          backgroundColor: const Color(0xFF16151A),
+          backgroundColor: config.fullProfileBgColor,
           body: SafeArea(
             child: Stack(
               children: [
@@ -460,10 +460,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF16151A),
-                          image: config.miniprofileBgImage.isNotEmpty
+                          color: config.fullProfileBgColor,
+                          image: config.fullProfileBgImage.isNotEmpty
                               ? DecorationImage(
-                                  image: NetworkImage(config.miniprofileBgImage),
+                                  image: NetworkImage(config.fullProfileBgImage),
                                   fit: BoxFit.cover,
                                 )
                               : null,
@@ -474,7 +474,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             children: [
                               _buildNewProfileHeader(config, user),
                               const SizedBox(height: 24),
-                              _buildNewStatsRow(),
+                              _buildNewStatsRow(config),
                               const SizedBox(height: 24),
                               _buildNewCardsRow(config),
                               const SizedBox(height: 16),
@@ -492,7 +492,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                 if (_selectedGift != null) _buildGiftOverlay(config),
                 if (_selectedItem != null) _buildItemOverlay(config),
-                _buildNewTitleBar(context, user),
+                _buildNewTitleBar(context, user, config),
               ],
             ),
           ),
@@ -503,7 +503,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   // ─── NEW DARK DESIGN METHODS ────────────────────────────────────────────────
 
-  Widget _buildNewTitleBar(BuildContext ctx, UserModel? user) {
+  Widget _buildNewTitleBar(BuildContext ctx, UserModel? user, DynamicConfigService config) {
     final currentUser = Provider.of<UserProvider>(ctx, listen: false).currentUser;
     final isOwnProfile = widget.targetUid == null ||
         (currentUser != null && widget.targetUid == currentUser.uid);
@@ -524,7 +524,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ctx,
                   MaterialPageRoute(builder: (_) => const EditProfileScreen()),
                 ),
-                child: const Icon(Icons.edit_square, color: Colors.white, size: 22),
+                child: config.fullProfileEditIcon.isNotEmpty
+                    ? Image.network(config.fullProfileEditIcon, width: 22, height: 22, color: Colors.white, errorBuilder: (_, __, ___) => const Icon(Icons.edit_square, color: Colors.white, size: 22))
+                    : const Icon(Icons.edit_square, color: Colors.white, size: 22),
               ),
           ],
         ),
@@ -734,25 +736,25 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         style: const TextStyle(fontSize: 10, color: Colors.white)),
   );
 
-  Widget _buildNewStatsRow() {
+  Widget _buildNewStatsRow(DynamicConfigService config) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        _newCountItem('$_visitorsCount', 'الزائرين'),
-        _newCountItem('$_fansCount', 'أتابعه'),
-        _newCountItem('$_followingCount', 'تمت متابعة'),
+        _newCountItem('$_visitorsCount', 'الزائرين', config),
+        _newCountItem('$_fansCount', 'أتابعه', config),
+        _newCountItem('$_followingCount', 'تمت متابعة', config),
       ],
     );
   }
 
-  Widget _newCountItem(String count, String label) => Column(
+  Widget _newCountItem(String count, String label, DynamicConfigService config) => Column(
     children: [
       Text(count,
-          style: const TextStyle(
-              fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+          style: TextStyle(
+              fontSize: 15, fontWeight: FontWeight.bold, color: config.fullProfileTextColor)),
       const SizedBox(height: 2),
       Text(label,
-          style: const TextStyle(fontSize: 10, color: Colors.white54)),
+          style: TextStyle(fontSize: 10, color: config.fullProfileSubTextColor)),
     ],
   );
 
@@ -773,9 +775,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1),
                   gradient: const LinearGradient(
                       colors: [Color(0xFF4A4A1A), Color(0xFF1A1A0D)]),
-                  image: config.miniprofileFamilyCardBg.isNotEmpty
+                  image: config.fullProfileFamilyCardBg.isNotEmpty
                       ? DecorationImage(
-                          image: NetworkImage(config.miniprofileFamilyCardBg),
+                          image: NetworkImage(config.fullProfileFamilyCardBg),
                           fit: BoxFit.cover)
                       : null,
                 ),
@@ -823,9 +825,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       Border.all(color: Colors.pinkAccent.withOpacity(0.5), width: 1),
                   gradient: const LinearGradient(
                       colors: [Color(0xFF5A1A4A), Color(0xFF2A0D2A)]),
-                  image: config.miniprofileIntimateCardBg.isNotEmpty
+                  image: config.fullProfileIntimateCardBg.isNotEmpty
                       ? DecorationImage(
-                          image: NetworkImage(config.miniprofileIntimateCardBg),
+                          image: NetworkImage(config.fullProfileIntimateCardBg),
                           fit: BoxFit.cover)
                       : null,
                 ),
@@ -873,15 +875,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
         child: Stack(
           children: [
-            if (config.miniprofileSupportersBanner.isNotEmpty)
+            if (config.fullProfileSupportersBanner.isNotEmpty)
               Positioned.fill(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(config.miniprofileSupportersBanner,
+                  child: Image.network(config.fullProfileSupportersBanner,
                       fit: BoxFit.cover),
                 ),
               ),
-            if (config.miniprofileSupportersBanner.isEmpty)
+            if (config.fullProfileSupportersBanner.isEmpty)
               const Positioned(
                 right: 16, top: 0, bottom: 0,
                 child: Center(
@@ -899,13 +901,13 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 children: [
                   const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
                   const SizedBox(width: 12),
-                  _newSupporterSlot(config, config.miniprofileGoldCrown, Colors.amber),
+                  _newSupporterSlot(config, config.fullProfileGoldCrown, Colors.amber),
                   const SizedBox(width: 8),
                   _newSupporterSlot(
-                      config, config.miniprofileSilverCrown, Colors.grey[300]!),
+                      config, config.fullProfileSilverCrown, Colors.grey[300]!),
                   const SizedBox(width: 8),
                   _newSupporterSlot(
-                      config, config.miniprofileBronzeCrown, Colors.orange[300]!),
+                      config, config.fullProfileBronzeCrown, Colors.orange[300]!),
                 ],
               ),
             ),
@@ -926,8 +928,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: defaultColor, width: 2),
+            image: config.fullProfileSupporterSlot.isNotEmpty
+                ? DecorationImage(
+                    image: NetworkImage(config.fullProfileSupporterSlot),
+                    fit: BoxFit.cover)
+                : null,
           ),
-          child: const Icon(Icons.person, color: Colors.white24, size: 20),
+          child: config.fullProfileSupporterSlot.isEmpty
+              ? const Icon(Icons.person, color: Colors.white24, size: 20)
+              : null,
         ),
         Positioned(
           top: -12,
@@ -945,7 +954,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _newSectionTitle('وسم الهوية'),
+          _newSectionTitle(config.fullProfileIdentityTitleImg, 'وسم الهوية'),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -1012,7 +1021,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _newSectionTitle('شارات'),
+          _newSectionTitle(config.fullProfileBadgesTitleImg, 'شارات'),
           const SizedBox(height: 12),
           badgeWidgets.isEmpty
               ? const Center(
@@ -1036,7 +1045,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _newSectionTitle('إنجازات'),
+          _newSectionTitle(config.fullProfileAchievementsTitleImg, 'إنجازات'),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -1126,7 +1135,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  Widget _newSectionTitle(String text) {
+  Widget _newSectionTitle(String? imgUrl, String fallbackText) {
+    if (imgUrl != null && imgUrl.isNotEmpty) {
+      return Image.network(imgUrl, height: 24, fit: BoxFit.contain, errorBuilder: (_, __, ___) => _newSectionTitleFallback(fallbackText));
+    }
+    return _newSectionTitleFallback(fallbackText);
+  }
+
+  Widget _newSectionTitleFallback(String text) {
     return Text(
       text,
       style: const TextStyle(

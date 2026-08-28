@@ -199,24 +199,45 @@ class DynamicConfigService extends ChangeNotifier {
   Color get rankSubTextColor => _parseColor(_rankSubTextColor, Colors.white60);
 
   // Mini Profile Visuals
-  String get miniprofileBgImage => _rawConfig['userProfile']?['backgroundImage']?.toString() ?? '';
-  String get miniprofileIntimateCardBg => _rawConfig['userProfile']?['intimateCardBg']?.toString() ?? '';
-  String get miniprofileFamilyCardBg => _rawConfig['userProfile']?['familyCardBg']?.toString() ?? '';
-  String get miniprofileSupportersBanner => _rawConfig['userProfile']?['supportersBanner']?.toString() ?? '';
-  String get miniprofileSupporterSlot => _rawConfig['userProfile']?['supporterSlot']?.toString() ?? '';
-  String get miniprofileGoldCrown => _rawConfig['userProfile']?['goldCrown']?.toString() ?? '';
-  String get miniprofileSilverCrown => _rawConfig['userProfile']?['silverCrown']?.toString() ?? '';
-  String get miniprofileBronzeCrown => _rawConfig['userProfile']?['bronzeCrown']?.toString() ?? '';
-  String get miniprofileIdentityTitleImg => _rawConfig['userProfile']?['identityTitleImg']?.toString() ?? '';
-  String get miniprofileBadgesTitleImg => _rawConfig['userProfile']?['badgesTitleImg']?.toString() ?? '';
-  String get miniprofileAchievementsTitleImg => _rawConfig['userProfile']?['achievementsTitleImg']?.toString() ?? '';
+  String get miniprofileBgImage => _screenStr('userProfile', 'backgroundImage', _rawConfig['userProfile']?['backgroundImage']?.toString() ?? '');
+  String get miniprofileIntimateCardBg => _screenStr('userProfile', 'intimateCardBg', _rawConfig['userProfile']?['intimateCardBg']?.toString() ?? '');
+  String get miniprofileFamilyCardBg => _screenStr('userProfile', 'familyCardBg', _rawConfig['userProfile']?['familyCardBg']?.toString() ?? '');
+  String get miniprofileSupportersBanner => _screenStr('userProfile', 'supportersBanner', _rawConfig['userProfile']?['supportersBanner']?.toString() ?? '');
+  String get miniprofileSupporterSlot => _screenStr('userProfile', 'supporterSlot', _rawConfig['userProfile']?['supporterSlot']?.toString() ?? '');
+  String get miniprofileGoldCrown => _screenStr('userProfile', 'goldCrown', _rawConfig['userProfile']?['goldCrown']?.toString() ?? '');
+  String get miniprofileSilverCrown => _screenStr('userProfile', 'silverCrown', _rawConfig['userProfile']?['silverCrown']?.toString() ?? '');
+  String get miniprofileBronzeCrown => _screenStr('userProfile', 'bronzeCrown', _rawConfig['userProfile']?['bronzeCrown']?.toString() ?? '');
+  String get miniprofileIdentityTitleImg => _screenStr('userProfile', 'identityTitleImg', _rawConfig['userProfile']?['identityTitleImg']?.toString() ?? '');
+  String get miniprofileBadgesTitleImg => _screenStr('userProfile', 'badgesTitleImg', _rawConfig['userProfile']?['badgesTitleImg']?.toString() ?? '');
+  String get miniprofileAchievementsTitleImg => _screenStr('userProfile', 'achievementsTitleImg', _rawConfig['userProfile']?['achievementsTitleImg']?.toString() ?? '');
   
   // Profile Icons
-  String get miniprofileFollowIcon => _rawConfig['userProfile']?['profileFollowIcon']?.toString() ?? '';
-  String get miniprofileChatIcon => _rawConfig['userProfile']?['profileChatIcon']?.toString() ?? '';
-  String get miniprofileGiftIcon => _rawConfig['userProfile']?['profileGiftIcon']?.toString() ?? '';
-  String get miniprofileReportIcon => _rawConfig['userProfile']?['profileReportIcon']?.toString() ?? '';
-  String get miniprofileEditIcon => _rawConfig['userProfile']?['profileEditIcon']?.toString() ?? '';
+  String get miniprofileFollowIcon => _screenStr('userProfile', 'profileFollowIcon', _rawConfig['userProfile']?['profileFollowIcon']?.toString() ?? '');
+  String get miniprofileChatIcon => _screenStr('userProfile', 'profileChatIcon', _rawConfig['userProfile']?['profileChatIcon']?.toString() ?? '');
+  String get miniprofileGiftIcon => _screenStr('userProfile', 'profileGiftIcon', _rawConfig['userProfile']?['profileGiftIcon']?.toString() ?? '');
+  String get miniprofileReportIcon => _screenStr('userProfile', 'profileReportIcon', _rawConfig['userProfile']?['profileReportIcon']?.toString() ?? '');
+  String get miniprofileEditIcon => _screenStr('userProfile', 'profileEditIcon', _rawConfig['userProfile']?['profileEditIcon']?.toString() ?? '');
+
+  // Full User Profile Screen Visuals (from Admin Dashboard)
+  String get fullProfileBgImage => _screenStr('fullProfile', 'backgroundImage', miniprofileBgImage);
+  Color get fullProfileBgColor => _screenColor('fullProfile', 'backgroundColor', const Color(0xFF16151A));
+  Color get fullProfileTextColor => _screenColor('fullProfile', 'textColor', Colors.white);
+  Color get fullProfileSubTextColor => _screenColor('fullProfile', 'subTextColor', const Color(0xFF9BA1B6));
+  String get fullProfileIntimateCardBg => _screenStr('fullProfile', 'intimateCardBg', miniprofileIntimateCardBg);
+  String get fullProfileFamilyCardBg => _screenStr('fullProfile', 'familyCardBg', miniprofileFamilyCardBg);
+  String get fullProfileSupportersBanner => _screenStr('fullProfile', 'supportersBanner', miniprofileSupportersBanner);
+  String get fullProfileSupporterSlot => _screenStr('fullProfile', 'supporterSlot', miniprofileSupporterSlot);
+  String get fullProfileGoldCrown => _screenStr('fullProfile', 'goldCrown', miniprofileGoldCrown);
+  String get fullProfileSilverCrown => _screenStr('fullProfile', 'silverCrown', miniprofileSilverCrown);
+  String get fullProfileBronzeCrown => _screenStr('fullProfile', 'bronzeCrown', miniprofileBronzeCrown);
+  String get fullProfileIdentityTitleImg => _screenStr('fullProfile', 'identityTitleImg', miniprofileIdentityTitleImg);
+  String get fullProfileBadgesTitleImg => _screenStr('fullProfile', 'badgesTitleImg', miniprofileBadgesTitleImg);
+  String get fullProfileAchievementsTitleImg => _screenStr('fullProfile', 'achievementsTitleImg', miniprofileAchievementsTitleImg);
+  String get fullProfileFollowIcon => _screenStr('fullProfile', 'profileFollowIcon', miniprofileFollowIcon);
+  String get fullProfileChatIcon => _screenStr('fullProfile', 'profileChatIcon', miniprofileChatIcon);
+  String get fullProfileGiftIcon => _screenStr('fullProfile', 'profileGiftIcon', miniprofileGiftIcon);
+  String get fullProfileReportIcon => _screenStr('fullProfile', 'profileReportIcon', miniprofileReportIcon);
+  String get fullProfileEditIcon => _screenStr('fullProfile', 'profileEditIcon', miniprofileEditIcon);
 
 
   // Getters

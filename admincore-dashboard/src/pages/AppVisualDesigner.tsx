@@ -50,6 +50,7 @@ interface ScreenVisuals {
   profile: Record<string, string>;
   chat: Record<string, string>;
   userProfile: Record<string, string>;
+  fullProfile: Record<string, string>;
   eventInfo: Record<string, string>;
   notifications: Record<string, string>;
 }
@@ -106,6 +107,24 @@ const defaultVisuals: ScreenVisuals = {
     profileReportIcon: '',
     profileEditIcon: '',
   },
+  fullProfile: {
+    backgroundImage: '',
+    backgroundColor: '#16151A',
+    textColor: '#ffffff',
+    subTextColor: '#9BA1B6',
+    coverImage: '',
+    intimateCardBg: '',
+    familyCardBg: '',
+    supportersBanner: '',
+    supporterSlot: '',
+    goldCrown: '',
+    silverCrown: '',
+    bronzeCrown: '',
+    identityTitleImg: '',
+    badgesTitleImg: '',
+    achievementsTitleImg: '',
+    profileEditIcon: '',
+  },
   eventInfo: {
     backgroundImage: '',
     backgroundColor: '#ffffff',
@@ -127,6 +146,7 @@ const screens = [
   { id: 'profile', labelAr: '👤 شاشة حسابي (أنا)', labelEn: '👤 Profile Screen' },
   { id: 'chat', labelAr: '✉️ شاشة المحادثة الخاصة', labelEn: '✉️ Private Chat' },
   { id: 'userProfile', labelAr: '🏷️ بطاقة المستخدم المصغرة', labelEn: '🏷️ User Card' },
+  { id: 'fullProfile', labelAr: '👤 شاشة بروفايل المستخدم الكاملة', labelEn: '👤 Full User Profile' },
   { id: 'eventInfo', labelAr: '📅 تفاصيل الحدث من الداخل', labelEn: '📅 Event Info' },
   { id: 'notifications', labelAr: '🔔 إشعارات النظام', labelEn: '🔔 System Notifications' },
 ] as const;
@@ -993,6 +1013,229 @@ export default function AppVisualDesigner() {
                   </div>
                 )}
 
+                {/* Full User Profile Screen Preview */}
+                {activeTab === 'fullProfile' && (
+                  <div
+                    className="flex-1 flex flex-col overflow-y-auto max-h-[500px] rounded-2xl relative border border-white/10 text-right text-xs"
+                    style={{
+                      backgroundColor: currentConfig.backgroundColor || '#16151A',
+                      backgroundImage: currentConfig.backgroundImage ? `url(${currentConfig.backgroundImage})` : 'none',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                      color: currentConfig.textColor || '#fff',
+                    }}
+                  >
+                    {/* Top Title Bar */}
+                    <div className="flex justify-between items-center px-3 py-2.5 z-10">
+                      <div className="text-white/80 font-bold text-xs cursor-pointer">〈</div>
+                      <div className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10">
+                        {currentConfig.profileEditIcon ? (
+                          <img src={currentConfig.profileEditIcon} className="w-4 h-4 object-contain" />
+                        ) : (
+                          <span className="text-[10px]">✏️</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Top Cover Banner */}
+                    <div className="h-28 w-full relative -mt-9 overflow-hidden">
+                      {currentConfig.coverImage ? (
+                        <img src={currentConfig.coverImage} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-b from-purple-900/60 to-[#16151A]" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#16151A] via-transparent to-transparent" />
+                    </div>
+
+                    {/* Content Container */}
+                    <div className="p-3 space-y-4 -mt-6 relative z-10">
+                      {/* Header with Avatar on Right and Info on Left */}
+                      <div className="flex items-end justify-between gap-3 flex-row-reverse">
+                        {/* Avatar on Right */}
+                        <div className="relative flex-shrink-0">
+                          <div className="w-16 h-16 rounded-full border-2 border-white bg-slate-700 overflow-hidden flex items-center justify-center">
+                            <span className="text-2xl">👤</span>
+                          </div>
+                        </div>
+
+                        {/* Name & Details on Left */}
+                        <div className="flex-1 flex flex-col items-start text-left">
+                          <h4 className="font-bold text-sm text-white flex items-center gap-1">
+                            .مُحَمَّد
+                          </h4>
+                          
+                          {/* ID & Gender & Country Code */}
+                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                             <span className="bg-white/15 px-1.5 py-0.5 rounded text-[8px] text-white/90">ID: 8883517</span>
+                             <span className="bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded text-[8px] flex items-center gap-0.5">
+                               ♂ 28
+                             </span>
+                             <span className="text-xs">🇪🇬</span>
+                          </div>
+
+                          {/* Levels */}
+                          <div className="flex items-center gap-1 mt-1.5">
+                            <span className="bg-blue-500 text-white font-bold text-[7px] px-1 py-0.5 rounded-full">财富 13</span>
+                            <span className="bg-pink-500 text-white font-bold text-[7px] px-1 py-0.5 rounded-full">魅力 1</span>
+                            <span className="bg-green-500 text-white font-bold text-[7px] px-1 py-0.5 rounded-full">活跃 15</span>
+                          </div>
+
+                          {/* Signature */}
+                          <p className="text-[8px] text-white/50 mt-1.5 truncate max-w-[120px] text-left">
+                            أقول شيئاً لجعل الآخرين يعرفون لك .
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Stats Row */}
+                      <div className="flex justify-between items-center text-center px-4 py-1 text-white/80">
+                        <div>
+                          <div className="font-bold text-[11px]" style={{ color: currentConfig.textColor || '#fff' }}>178</div>
+                          <div className="text-[8px] text-white/40" style={{ color: currentConfig.subTextColor || 'rgba(255,255,255,0.4)' }}>الزائرين</div>
+                        </div>
+                        <div>
+                          <div className="font-bold text-[11px]" style={{ color: currentConfig.textColor || '#fff' }}>35</div>
+                          <div className="text-[8px] text-white/40" style={{ color: currentConfig.subTextColor || 'rgba(255,255,255,0.4)' }}>أتابعه</div>
+                        </div>
+                        <div>
+                          <div className="font-bold text-[11px]" style={{ color: currentConfig.textColor || '#fff' }}>5</div>
+                          <div className="text-[8px] text-white/40" style={{ color: currentConfig.subTextColor || 'rgba(255,255,255,0.4)' }}>تمت متابعة</div>
+                        </div>
+                      </div>
+
+                      {/* Two Cards Row (RTL) */}
+                      <div className="grid grid-cols-2 gap-2 flex-row-reverse text-right">
+                        {/* Partner Card (Right in RTL) */}
+                        <div
+                          className="h-16 rounded-xl border p-2 flex items-center justify-between gap-1"
+                          style={{
+                            borderColor: 'rgba(245, 158, 11, 0.4)',
+                            background: currentConfig.familyCardBg ? `url(${currentConfig.familyCardBg})` : 'linear-gradient(135deg, #4A4A1A 0%, #1A1A0D 100%)',
+                            backgroundSize: 'cover',
+                          }}
+                        >
+                          <span className="text-[8px] text-white/40">〈</span>
+                          <div className="flex flex-col items-end">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-bold text-white">العائلة</span>
+                              <div className="w-5 h-5 rounded-full bg-slate-600 overflow-hidden flex items-center justify-center text-[8px]">👤</div>
+                            </div>
+                            <span className="text-[8px] text-amber-400 font-bold mt-0.5">ID:15652</span>
+                          </div>
+                        </div>
+
+                        {/* Intimate Card (Left in RTL) */}
+                        <div
+                          className="h-16 rounded-xl border p-2 flex items-center justify-between gap-1"
+                          style={{
+                            borderColor: 'rgba(236, 72, 153, 0.4)',
+                            background: currentConfig.intimateCardBg ? `url(${currentConfig.intimateCardBg})` : 'linear-gradient(135deg, #5A1A4A 0%, #2A0D2A 100%)',
+                            backgroundSize: 'cover',
+                          }}
+                        >
+                          <span className="text-[8px] text-white/40">〈</span>
+                          <div className="flex flex-col items-end">
+                            <div className="flex items-center gap-1">
+                              <span className="text-[9px] font-bold text-white">علاقة حميمة</span>
+                              <span className="text-[10px]">💖</span>
+                            </div>
+                            <span className="text-[7px] text-white/60 mt-0.5">اربط علاقة حميمة الآن!</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Supporters Row */}
+                      <div
+                        className="h-14 rounded-xl border border-white/10 relative overflow-hidden flex items-center px-3 justify-between"
+                        style={{
+                          background: currentConfig.supportersBanner ? `url(${currentConfig.supportersBanner})` : 'rgba(0,0,0,0.3)',
+                          backgroundSize: 'cover',
+                        }}
+                      >
+                        {!currentConfig.supportersBanner && (
+                          <span className="text-[11px] font-bold italic text-amber-500 tracking-wider">SUPPORTERS</span>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8px] text-white/40">〈</span>
+                          <div className="flex gap-1">
+                            <div className="w-7 h-7 rounded-full border-2 border-amber-500 bg-slate-800 flex items-center justify-center relative">
+                              <span className="text-[6px]">🥇</span>
+                            </div>
+                            <div className="w-7 h-7 rounded-full border-2 border-slate-300 bg-slate-800 flex items-center justify-center relative">
+                              <span className="text-[6px]">🥈</span>
+                            </div>
+                            <div className="w-7 h-7 rounded-full border-2 border-amber-700 bg-slate-800 flex items-center justify-center relative">
+                              <span className="text-[6px]">🥉</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Identity Section */}
+                      <div className="space-y-1.5 text-right">
+                        <div className="flex justify-end">
+                          {currentConfig.identityTitleImg ? (
+                            <img src={currentConfig.identityTitleImg} className="h-5 object-contain" />
+                          ) : (
+                            <span className="text-[10px] font-bold text-white">وسم الهوية</span>
+                          )}
+                        </div>
+                        <div className="flex justify-end gap-1.5">
+                          <span className="bg-gradient-to-r from-pink-500 to-purple-500 text-[8px] font-bold px-2 py-0.5 rounded text-white shadow-sm border border-white/5">Voice Host</span>
+                          <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-[8px] font-bold px-2 py-0.5 rounded text-white shadow-sm border border-white/5">Agency Lead</span>
+                        </div>
+                      </div>
+
+                      {/* Badges Section */}
+                      <div className="space-y-1.5 text-right">
+                        <div className="flex justify-end">
+                          {currentConfig.badgesTitleImg ? (
+                            <img src={currentConfig.badgesTitleImg} className="h-5 object-contain" />
+                          ) : (
+                            <span className="text-[10px] font-bold text-white">شارات</span>
+                          )}
+                        </div>
+                        <p className="text-[8px] text-center text-white/40 py-1">
+                          إذهب لإضاءة أول شارة لك!
+                        </p>
+                      </div>
+
+                      {/* Achievements Section */}
+                      <div className="space-y-2 text-right">
+                        <div className="flex justify-end">
+                          {currentConfig.achievementsTitleImg ? (
+                            <img src={currentConfig.achievementsTitleImg} className="h-5 object-contain" />
+                          ) : (
+                            <span className="text-[10px] font-bold text-white">إنجازات</span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 flex-row-reverse">
+                          <div className="h-28 rounded-xl bg-white/5 border border-white/5 p-2 flex flex-col justify-between">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[8px] text-white/40">〈</span>
+                              <span className="text-[9px] font-bold text-white">جدار الهدايا</span>
+                            </div>
+                            <div className="flex justify-center py-2 text-pink-400 text-xl">🎁</div>
+                            <div></div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
+                              <span className="text-[8px] text-white/40">〈</span>
+                              <span className="text-base text-white/30">🏎️</span>
+                              <span className="text-[9px] font-bold text-white">مركبة</span>
+                            </div>
+                            <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
+                              <span className="text-[8px] text-white/40">〈</span>
+                              <span className="text-base text-white/30">👑</span>
+                              <span className="text-[9px] font-bold text-white">اطار</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Event Details Screen */}
                 {activeTab === 'eventInfo' && (
                   <div className="flex-1 flex flex-col px-3 py-2 space-y-4">
@@ -1223,12 +1466,29 @@ export default function AppVisualDesigner() {
                 )}
               </div>
 
-              {/* Specific fields for User Profile Mini Profile */}
-              {activeTab === 'userProfile' && (
+              {/* Specific fields for User Profile Mini Profile & Full Profile Screen */}
+              {(activeTab === 'userProfile' || activeTab === 'fullProfile') && (
                 <div className="space-y-4 pt-4 border-t border-white/5 mt-4">
-                  <h4 className="text-[11px] uppercase text-indigo-400 font-bold mb-2">{lang === 'ar' ? 'إعدادات بطاقة الميني بروفايل المتقدمة' : 'Advanced Mini Profile Settings'}</h4>
+                  <h4 className="text-[11px] uppercase text-indigo-400 font-bold mb-2">
+                    {activeTab === 'fullProfile'
+                      ? (lang === 'ar' ? 'إعدادات شاشة البروفايل الكاملة المتقدمة' : 'Advanced Full Profile Settings')
+                      : (lang === 'ar' ? 'إعدادات بطاقة الميني بروفايل المتقدمة' : 'Advanced Mini Profile Settings')}
+                  </h4>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Top coverImage for fullProfile only */}
+                    {activeTab === 'fullProfile' && (
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة الغلاف العلوية (Cover Image)' : 'Top Cover Image'}</label>
+                        <div className="flex gap-2">
+                          <input type="text" value={currentConfig.coverImage || ''} onChange={e => updateField(activeTab, 'coverImage', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                          <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                            <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'coverImage')} />
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
                     {/* intimateCardBg */}
                     <div className="space-y-1.5">
                       <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية بطاقة حميمية' : 'Intimate Card BG'}</label>
@@ -1328,42 +1588,46 @@ export default function AppVisualDesigner() {
                         </label>
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المتابعة' : 'Follow Icon'}</label>
-                      <div className="flex gap-2">
-                        <input type="text" value={currentConfig.profileFollowIcon || ''} onChange={e => updateField(activeTab, 'profileFollowIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
-                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileFollowIcon')} />
-                        </label>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المحادثة' : 'Chat Icon'}</label>
-                      <div className="flex gap-2">
-                        <input type="text" value={currentConfig.profileChatIcon || ''} onChange={e => updateField(activeTab, 'profileChatIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
-                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileChatIcon')} />
-                        </label>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإهداء' : 'Gift Icon'}</label>
-                      <div className="flex gap-2">
-                        <input type="text" value={currentConfig.profileGiftIcon || ''} onChange={e => updateField(activeTab, 'profileGiftIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
-                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileGiftIcon')} />
-                        </label>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإبلاغ' : 'Report Icon'}</label>
-                      <div className="flex gap-2">
-                        <input type="text" value={currentConfig.profileReportIcon || ''} onChange={e => updateField(activeTab, 'profileReportIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
-                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileReportIcon')} />
-                        </label>
-                      </div>
-                    </div>
+                    {activeTab === 'userProfile' && (
+                      <>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المتابعة' : 'Follow Icon'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.profileFollowIcon || ''} onChange={e => updateField(activeTab, 'profileFollowIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileFollowIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المحادثة' : 'Chat Icon'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.profileChatIcon || ''} onChange={e => updateField(activeTab, 'profileChatIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileChatIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإهداء' : 'Gift Icon'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.profileGiftIcon || ''} onChange={e => updateField(activeTab, 'profileGiftIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileGiftIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإبلاغ' : 'Report Icon'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.profileReportIcon || ''} onChange={e => updateField(activeTab, 'profileReportIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileReportIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                      </>
+                    )}
                     <div className="space-y-1.5">
                       <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة التعديل' : 'Edit Icon'}</label>
                       <div className="flex gap-2">
