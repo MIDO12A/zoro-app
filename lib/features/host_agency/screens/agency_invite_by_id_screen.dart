@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/agency_chat_repository.dart';
 import '../../../core/cache/encrypted_image_provider.dart';
 
@@ -59,9 +60,30 @@ class _AgencyInviteByIdScreenState extends State<AgencyInviteByIdScreen> {
     });
 
     try {
+      // 1. Resolve custom numeric ID to Firebase UID if possible
+      String uidToSearch = id;
+      try {
+        final q1 = await FirebaseFirestore.instance.collection('users').where('custom_id', isEqualTo: id).limit(1).get();
+        if (q1.docs.isNotEmpty) {
+          uidToSearch = q1.docs.first.id;
+        } else {
+          final q2 = await FirebaseFirestore.instance.collection('users').where('customId', isEqualTo: id).limit(1).get();
+          if (q2.docs.isNotEmpty) {
+            uidToSearch = q2.docs.first.id;
+          } else {
+            // Also try direct document ID
+            final doc = await FirebaseFirestore.instance.collection('users').doc(id).get();
+            if (doc.exists) {
+              uidToSearch = id;
+            }
+          }
+        }
+      } catch (_) {}
+
+      // 2. Call Supabase RPC with the resolved UID
       final resp = await AgencyChatRepository.inviteByKayanId(
         agencyId: widget.agencyId,
-        kayanId:  id,
+        kayanId:  uidToSearch,
       );
 
       if (!mounted) return;
@@ -73,7 +95,7 @@ class _AgencyInviteByIdScreenState extends State<AgencyInviteByIdScreen> {
           _foundUserId  = resp['user_id']?.toString();
           _foundName    = resp['display_name']?.toString() ?? 'مستخدم';
           _foundAvatar  = resp['avatar_url']?.toString();
-          _foundKayanId = resp['kayan_id']?.toString() ?? id;
+          _foundKayanId = id; // Show the numeric ID entered by user
           _foundLevel   = (resp['level'] as int?) ?? 1;
           _foundCountry = resp['country']?.toString();
 
@@ -86,7 +108,7 @@ class _AgencyInviteByIdScreenState extends State<AgencyInviteByIdScreen> {
       } else if (status == 'in_other_agency') {
         setState(() => _errorMsg = '⚠️ المستخدم ينتمي لوكالة أخرى');
       } else if (status == 'not_found') {
-        setState(() => _errorMsg = '❌ لم يُعثر على مستخدم بهذا الـ Kayan ID');
+        setState(() => _errorMsg = '❌ لم يُعثر على مستخدم بهذا الـ ID');
       } else if (status == 'not_authenticated') {
         setState(() => _errorMsg = '❌ يجب تسجيل الدخول أولاً');
       } else if (status == 'not_authorized') {

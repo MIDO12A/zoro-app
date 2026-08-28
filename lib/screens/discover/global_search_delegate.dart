@@ -230,6 +230,9 @@ class _GlobalSearchResultsState extends State<_GlobalSearchResults> {
               child: Text('المستخدمين', style: TextStyle(color: Color(0xFFD3A350), fontSize: 16, fontWeight: FontWeight.bold)),
             ),
             ..._users.map((u) {
+              final photoUrl = u['photo_url']?.toString() ?? u['photoUrl']?.toString() ?? u['avatar']?.toString() ?? '';
+              final uid = u['uid']?.toString() ?? u['id']?.toString() ?? u['docId']?.toString() ?? '';
+              
               return ListTile(
                 contentPadding: const EdgeInsets.symmetric(vertical: 4),
                 leading: Container(
@@ -237,18 +240,20 @@ class _GlobalSearchResultsState extends State<_GlobalSearchResults> {
                   height: 50,
                   decoration: const BoxDecoration(shape: BoxShape.circle),
                   clipBehavior: Clip.hardEdge,
-                  child: (u['photo_url'] != null && u['photo_url'].toString().isNotEmpty)
+                  child: photoUrl.isNotEmpty
                       ? Image.network(
-                          u['photo_url'],
+                          photoUrl,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Colors.white54, size: 30),
                         )
                       : const Icon(Icons.person, color: Colors.white54, size: 30),
                 ),
                 title: Text(u['name'] ?? u['username'] ?? 'مستخدم', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                subtitle: Text('ID: ${u['custom_id'] ?? ''}', style: const TextStyle(color: Colors.white54)),
+                subtitle: Text('ID: ${u['custom_id'] ?? u['customId'] ?? ''}', style: const TextStyle(color: Colors.white54)),
                 onTap: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(targetUid: u['docId'])));
+                  if (uid.isNotEmpty) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(targetUid: uid)));
+                  }
                 },
               );
             }),
