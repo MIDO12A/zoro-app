@@ -87,10 +87,14 @@ const defaultVisuals: ScreenVisuals = {
   },
   userProfile: {
     backgroundImage: '',
-    backgroundColor: '#16151A',
+    backgroundColor: '#16141D',
+    borderColor: '#382F24',
     textColor: '#ffffff',
     subTextColor: '#9BA1B6',
-    buttonColor: '#FFE082',
+    buttonColor: '#E8BD56',
+    hostBadgeBg: '#1E5BB5',
+    giftBarBg: '',
+    giftBarBorder: '#5E4321',
     intimateCardBg: '',
     familyCardBg: '',
     supportersBanner: '',
@@ -104,6 +108,8 @@ const defaultVisuals: ScreenVisuals = {
     profileFollowIcon: '',
     profileChatIcon: '',
     profileGiftIcon: '',
+    profileMentionIcon: '',
+    profileMoreIcon: '',
     profileReportIcon: '',
     profileEditIcon: '',
   },
@@ -759,260 +765,168 @@ export default function AppVisualDesigner() {
 
                 {/* User Mini Profile Card */}
                 {activeTab === 'userProfile' && (
-                  <div className="flex-1 flex flex-col justify-end overflow-y-auto max-h-[500px]">
+                  <div className="flex-1 flex flex-col justify-end overflow-y-auto max-h-[500px] p-2">
                     <div
-                      className="rounded-t-3xl p-4 space-y-4 relative border-t border-white/10 text-right text-xs"
+                      className="rounded-3xl p-4 pt-10 space-y-3 relative border text-center text-xs"
                       style={{
-                        backgroundColor: currentConfig.backgroundColor || '#16151A',
+                        backgroundColor: currentConfig.backgroundColor || '#16141D',
+                        borderColor: currentConfig.borderColor || '#382F24',
                         backgroundImage: currentConfig.backgroundImage ? `url(${currentConfig.backgroundImage})` : 'none',
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
                         color: currentConfig.textColor || '#fff',
                       }}
                     >
-                      {/* Top Action Icons in Preview */}
-                      <div className="flex justify-between items-center px-1">
-                        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10">
-                          {currentConfig.profileReportIcon ? (
-                            <img src={currentConfig.profileReportIcon} className="w-4 h-4 object-contain" />
-                          ) : (
-                            <span className="text-[10px]">⚠️</span>
-                          )}
+                      {/* Top Protruding Avatar */}
+                      <div className="absolute -top-7 left-1/2 -translate-x-1/2">
+                        <div
+                          className="w-14 h-14 rounded-full border-2 bg-slate-800 flex items-center justify-center shadow-lg overflow-hidden"
+                          style={{ borderColor: currentConfig.borderColor || '#382F24' }}
+                        >
+                          <span className="text-2xl">👤</span>
                         </div>
-                        <div className="text-white/80 font-bold text-[10px]">〈</div>
                       </div>
 
-                      {/* Header with Avatar on the Right */}
-                      <div className="flex items-end justify-between gap-3 mt-2 flex-row-reverse">
-                        {/* Avatar on Right */}
-                        <div className="relative flex-shrink-0">
-                          <div className="w-16 h-16 rounded-full border-2 border-white bg-slate-700 overflow-hidden flex items-center justify-center">
-                            <span className="text-2xl">👤</span>
-                          </div>
+                      {/* Top Right More Button */}
+                      <div className="absolute top-3 right-3">
+                        <div className="w-6 h-6 rounded-full bg-white/10 flex items-center justify-center cursor-pointer">
+                          {currentConfig.profileMoreIcon ? (
+                            <img src={currentConfig.profileMoreIcon} className="w-3.5 h-3.5 object-contain" />
+                          ) : (
+                            <span className="text-white/70 text-xs">•••</span>
+                          )}
                         </div>
+                      </div>
 
-                        {/* Name & Details on Left */}
-                        <div className="flex-1 flex flex-col items-start text-left">
-                          <h4 className="font-bold text-sm text-white flex items-center gap-1">
-                            .مُحَمَّد
-                          </h4>
-                          
-                          {/* ID & Gender & Country Code */}
-                          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                             <span className="bg-white/15 px-1.5 py-0.5 rounded text-[8px] text-white/90">ID: 8883517</span>
-                             <span className="bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded text-[8px] flex items-center gap-0.5">
-                               ♂ 28
-                             </span>
-                             <span className="text-xs">🇪🇬</span>
+                      {/* User Name & Gender & VIP */}
+                      <div className="flex items-center justify-center gap-1.5 pt-1">
+                        <span className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[9px]">♂</span>
+                        <h4 className="font-bold text-sm" style={{ color: currentConfig.textColor || '#fff' }}>
+                          .مُحَمَّد
+                        </h4>
+                        <span className="w-4 h-4 rounded-full bg-amber-900/60 border border-amber-400 text-amber-300 flex items-center justify-center text-[8px]">👑</span>
+                      </div>
+
+                      {/* ID & Copy & Flag */}
+                      <div className="flex items-center justify-center gap-1 text-[11px]" style={{ color: currentConfig.subTextColor || '#9BA1B6' }}>
+                        <span>📋</span>
+                        <span className="font-mono">ID: 9002990</span>
+                        <span>🇪🇬</span>
+                      </div>
+
+                      {/* Host Badge */}
+                      <div className="flex justify-center">
+                        <span
+                          className="text-[10px] font-bold px-3 py-0.5 rounded-full text-white border border-blue-400/50 shadow-sm"
+                          style={{ backgroundColor: currentConfig.hostBadgeBg || '#1E5BB5' }}
+                        >
+                          مضيف
+                        </span>
+                      </div>
+
+                      {/* Received Gifts Bar */}
+                      <div
+                        className="h-12 rounded-xl border p-2 flex items-center justify-between"
+                        style={{
+                          backgroundColor: currentConfig.giftBarBg ? 'transparent' : '#221A11',
+                          backgroundImage: currentConfig.giftBarBg ? `url(${currentConfig.giftBarBg})` : 'none',
+                          backgroundSize: 'cover',
+                          borderColor: currentConfig.giftBarBorder || '#5E4321',
+                        }}
+                      >
+                        <span className="text-[10px] text-white/50">〈</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs">🌙<sub className="text-[7px]">x22</sub></span>
+                          <span className="text-xs">💎<sub className="text-[7px]">x38</sub></span>
+                          <span className="text-xs">🍀<sub className="text-[7px]">x57</sub></span>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[9px] font-bold text-white">استلام</span>
+                            <span className="text-[10px]">🎁</span>
                           </div>
-
-                          {/* Levels */}
-                          <div className="flex items-center gap-1 mt-1.5">
-                            <span className="bg-blue-500 text-white font-bold text-[7px] px-1 py-0.5 rounded-full">财富 13</span>
-                            <span className="bg-pink-500 text-white font-bold text-[7px] px-1 py-0.5 rounded-full">魅力 1</span>
-                            <span className="bg-green-500 text-white font-bold text-[7px] px-1 py-0.5 rounded-full">活跃 15</span>
-                          </div>
-
-                          {/* Signature */}
-                          <p className="text-[8px] text-white/50 mt-1.5 truncate max-w-[120px] text-left">
-                            أقول شيئاً لجعل الآخرين يعرفون لك .
-                          </p>
+                          <span className="text-[9px] font-bold text-amber-400">2.1k</span>
                         </div>
                       </div>
 
                       {/* Stats Row */}
-                      <div className="flex justify-between items-center text-center px-4 py-1 text-white/80">
+                      <div className="flex justify-around items-center text-center py-1">
                         <div>
-                          <div className="font-bold text-[11px]" style={{ color: currentConfig.textColor || '#fff' }}>178</div>
-                          <div className="text-[8px] text-white/40" style={{ color: currentConfig.subTextColor || 'rgba(255,255,255,0.4)' }}>الزائرين</div>
+                          <div className="font-bold text-xs" style={{ color: currentConfig.textColor || '#fff' }}>13</div>
+                          <div className="text-[9px]" style={{ color: currentConfig.subTextColor || '#9BA1B6' }}>الزائر</div>
                         </div>
+                        <div className="w-[1px] h-4 bg-white/10" />
                         <div>
-                          <div className="font-bold text-[11px]" style={{ color: currentConfig.textColor || '#fff' }}>35</div>
-                           <div className="text-[8px] text-white/40" style={{ color: currentConfig.subTextColor || 'rgba(255,255,255,0.4)' }}>أتابعه</div>
+                          <div className="font-bold text-xs" style={{ color: currentConfig.textColor || '#fff' }}>1</div>
+                          <div className="text-[9px]" style={{ color: currentConfig.subTextColor || '#9BA1B6' }}>المحبون</div>
                         </div>
+                        <div className="w-[1px] h-4 bg-white/10" />
                         <div>
-                          <div className="font-bold text-[11px]" style={{ color: currentConfig.textColor || '#fff' }}>5</div>
-                          <div className="text-[8px] text-white/40" style={{ color: currentConfig.subTextColor || 'rgba(255,255,255,0.4)' }}>تمت متابعة</div>
+                          <div className="font-bold text-xs" style={{ color: currentConfig.textColor || '#fff' }}>1</div>
+                          <div className="text-[9px]" style={{ color: currentConfig.subTextColor || '#9BA1B6' }}>متابعون</div>
                         </div>
                       </div>
 
-                      {/* Two Cards Row (RTL) */}
-                      <div className="grid grid-cols-2 gap-2 mt-2 flex-row-reverse text-right">
-                        {/* Partner Card (Right in RTL) */}
-                        <div
-                          className="h-16 rounded-xl border p-2 flex items-center justify-between gap-1"
-                          style={{
-                            borderColor: 'rgba(245, 158, 11, 0.4)',
-                            background: currentConfig.familyCardBg ? `url(${currentConfig.familyCardBg})` : 'linear-gradient(135deg, #4A4A1A 0%, #1A1A0D 100%)',
-                            backgroundSize: 'cover',
-                          }}
-                        >
+                      {/* Equipment Row */}
+                      <div className="grid grid-cols-2 gap-2 text-right">
+                        {/* Vehicle Card */}
+                        <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
                           <span className="text-[8px] text-white/40">〈</span>
-                          <div className="flex flex-col items-end">
-                            <div className="flex items-center gap-1">
-                              <span className="text-[9px] font-bold text-white">لَـحْـنٌ</span>
-                              <div className="w-5 h-5 rounded-full bg-slate-600 overflow-hidden flex items-center justify-center text-[8px]">👤</div>
-                            </div>
-                            <span className="text-[8px] text-amber-400 font-bold mt-0.5">ID:15652</span>
-                          </div>
+                          <span className="text-base text-white/30">🏎️</span>
+                          <span className="text-[9px] font-bold text-white">مركبة</span>
                         </div>
-
-                        {/* Intimate Card (Left in RTL) */}
-                        <div
-                          className="h-16 rounded-xl border p-2 flex items-center justify-between gap-1"
-                          style={{
-                            borderColor: 'rgba(236, 72, 153, 0.4)',
-                            background: currentConfig.intimateCardBg ? `url(${currentConfig.intimateCardBg})` : 'linear-gradient(135deg, #5A1A4A 0%, #2A0D2A 100%)',
-                            backgroundSize: 'cover',
-                          }}
-                        >
+                        {/* Frame Card */}
+                        <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
                           <span className="text-[8px] text-white/40">〈</span>
-                          <div className="flex flex-col items-end">
-                            <div className="flex items-center gap-1">
-                              <span className="text-[9px] font-bold text-white">علاقة حميمة</span>
-                              <span className="text-[10px]">💖</span>
-                            </div>
-                            <span className="text-[7px] text-white/60 mt-0.5">اربط علاقة حميمة الآن!</span>
-                          </div>
+                          <span className="text-base text-white/30">👑</span>
+                          <span className="text-[9px] font-bold text-white">اطار</span>
                         </div>
                       </div>
 
-                      {/* Supporters Row */}
-                      <div
-                        className="h-14 rounded-xl border border-white/10 relative overflow-hidden flex items-center px-3 justify-between"
-                        style={{
-                          background: currentConfig.supportersBanner ? `url(${currentConfig.supportersBanner})` : 'rgba(0,0,0,0.3)',
-                          backgroundSize: 'cover',
-                        }}
-                      >
-                        {/* Supporters Text on Right */}
-                        {!currentConfig.supportersBanner && (
-                          <span className="text-[11px] font-bold italic text-amber-500 tracking-wider">SUPPORTERS</span>
-                        )}
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[8px] text-white/40">〈</span>
-                          
-                          {/* Crown slots */}
-                          <div className="flex gap-1">
-                            {/* Gold */}
-                            <div className="w-8 h-8 rounded-full border border-amber-500/70 relative flex items-center justify-center bg-black/30">
-                              {currentConfig.goldCrown ? (
-                                <img src={currentConfig.goldCrown} className="w-5 h-5 -mt-4 absolute object-contain" />
-                              ) : (
-                                <span className="text-[10px] -mt-3.5 absolute">👑</span>
-                              )}
-                              <span className="text-[8px] text-white/20">👤</span>
-                            </div>
-
-                            {/* Silver */}
-                            <div className="w-8 h-8 rounded-full border border-slate-300/70 relative flex items-center justify-center bg-black/30">
-                              {currentConfig.silverCrown ? (
-                                <img src={currentConfig.silverCrown} className="w-5 h-5 -mt-4 absolute object-contain" />
-                              ) : (
-                                <span className="text-[10px] -mt-3.5 absolute text-slate-300">👑</span>
-                              )}
-                              <span className="text-[8px] text-white/20">👤</span>
-                            </div>
-
-                            {/* Bronze */}
-                            <div className="w-8 h-8 rounded-full border border-amber-700/70 relative flex items-center justify-center bg-black/30">
-                              {currentConfig.bronzeCrown ? (
-                                <img src={currentConfig.bronzeCrown} className="w-5 h-5 -mt-4 absolute object-contain" />
-                              ) : (
-                                <span className="text-[10px] -mt-3.5 absolute text-amber-700">👑</span>
-                              )}
-                              <span className="text-[8px] text-white/20">👤</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Identity Section */}
-                      <div className="space-y-1.5 text-right">
-                        <div className="flex justify-end">
-                          {currentConfig.identityTitleImg ? (
-                            <img src={currentConfig.identityTitleImg} className="h-5 object-contain" />
-                          ) : (
-                            <span className="text-[10px] font-bold text-white">وسم الهوية</span>
-                          )}
-                        </div>
-                        <div className="flex justify-end gap-1.5">
-                          <span className="bg-gradient-to-r from-pink-500 to-purple-500 text-[8px] font-bold px-2 py-0.5 rounded text-white shadow-sm border border-white/5">Voice Host</span>
-                          <span className="bg-gradient-to-r from-amber-500 to-orange-500 text-[8px] font-bold px-2 py-0.5 rounded text-white shadow-sm border border-white/5">Agency Lead</span>
-                        </div>
-                      </div>
-
-                      {/* Badges Section */}
-                      <div className="space-y-1.5 text-right">
-                        <div className="flex justify-end">
-                          {currentConfig.badgesTitleImg ? (
-                            <img src={currentConfig.badgesTitleImg} className="h-5 object-contain" />
-                          ) : (
-                            <span className="text-[10px] font-bold text-white">شارات</span>
-                          )}
-                        </div>
-                        <p className="text-[8px] text-center text-white/40 py-1">
-                          إذهب لإضاءة أول شارة لك!
-                        </p>
-                      </div>
-
-                      {/* Achievements Section */}
-                      <div className="space-y-2 text-right">
-                        <div className="flex justify-end">
-                          {currentConfig.achievementsTitleImg ? (
-                            <img src={currentConfig.achievementsTitleImg} className="h-5 object-contain" />
-                          ) : (
-                            <span className="text-[10px] font-bold text-white">إنجازات</span>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 flex-row-reverse">
-                          {/* Right: Gift Wall Card */}
-                          <div className="h-28 rounded-xl bg-white/5 border border-white/5 p-2 flex flex-col justify-between">
-                            <div className="flex justify-between items-center">
-                              <span className="text-[8px] text-white/40">〈</span>
-                              <span className="text-[9px] font-bold text-white">جدار الهدايا</span>
-                            </div>
-                            <div className="flex justify-center py-2 text-pink-400 text-xl">🎁</div>
-                            <div></div>
-                          </div>
-
-                          {/* Left: Stacked cards */}
-                          <div className="flex flex-col gap-2">
-                            {/* Vehicle Card */}
-                            <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
-                              <span className="text-[8px] text-white/40">〈</span>
-                              <span className="text-base text-white/30">🏎️</span>
-                              <span className="text-[9px] font-bold text-white">مركبة</span>
-                            </div>
-                            {/* Frame Card */}
-                            <div className="h-[52px] rounded-xl bg-white/5 border border-white/5 p-2 flex items-center justify-between">
-                              <span className="text-[8px] text-white/40">〈</span>
-                              <span className="text-base text-white/30">👑</span>
-                              <span className="text-[9px] font-bold text-white">اطار</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Operate buttons */}
-                      <div className="flex gap-2 pt-2 border-t border-white/5">
+                      {/* Bottom Action Bar */}
+                      <div className="flex items-center gap-2 pt-1">
+                        {/* Golden Gift Button */}
                         <button
-                          className="flex-1 py-2 rounded-lg text-[9px] font-bold text-slate-900 flex items-center justify-center gap-1"
-                          style={{ backgroundColor: currentConfig.buttonColor || '#FFE082' }}
+                          className="flex-[3] h-9 rounded-xl font-bold text-xs text-slate-950 flex items-center justify-center gap-1 shadow-md"
+                          style={{
+                            background: currentConfig.buttonColor
+                              ? `linear-gradient(135deg, ${currentConfig.buttonColor}, #C99427)`
+                              : 'linear-gradient(135deg, #E8BD56, #C99427)',
+                          }}
                         >
-                          {currentConfig.profileFollowIcon && (
-                            <img src={currentConfig.profileFollowIcon} className="w-3.5 h-3.5 object-contain" />
+                          {currentConfig.profileGiftIcon ? (
+                            <img src={currentConfig.profileGiftIcon} className="w-4 h-4 object-contain" />
+                          ) : (
+                            <span>🎁</span>
                           )}
-                          <span>Follow</span>
+                          <span>هدية</span>
                         </button>
-                        <button
-                          className="flex-1 py-2 rounded-lg text-[9px] font-bold text-slate-900 flex items-center justify-center gap-1"
-                          style={{ backgroundColor: currentConfig.buttonColor || '#FFE082' }}
-                        >
-                          {currentConfig.profileGiftIcon && (
-                            <img src={currentConfig.profileGiftIcon} className="w-3.5 h-3.5 object-contain" />
+
+                        {/* @ Mention Button */}
+                        <button className="w-9 h-9 rounded-full bg-[#24202B] border border-white/10 flex items-center justify-center text-white text-xs font-bold">
+                          {currentConfig.profileMentionIcon ? (
+                            <img src={currentConfig.profileMentionIcon} className="w-4 h-4 object-contain" />
+                          ) : (
+                            <span>@</span>
                           )}
-                          <span>Send Gift</span>
+                        </button>
+
+                        {/* Chat Button */}
+                        <button className="w-9 h-9 rounded-full bg-[#24202B] border border-white/10 flex items-center justify-center text-white text-xs">
+                          {currentConfig.profileChatIcon ? (
+                            <img src={currentConfig.profileChatIcon} className="w-4 h-4 object-contain" />
+                          ) : (
+                            <span>💬</span>
+                          )}
+                        </button>
+
+                        {/* Follow Button */}
+                        <button className="w-9 h-9 rounded-full bg-[#24202B] border border-white/10 flex items-center justify-center text-pink-400 text-xs">
+                          {currentConfig.profileFollowIcon ? (
+                            <img src={currentConfig.profileFollowIcon} className="w-4 h-4 object-contain" />
+                          ) : (
+                            <span>🤍+</span>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -1597,6 +1511,63 @@ export default function AppVisualDesigner() {
                     {activeTab === 'userProfile' && (
                       <>
                         <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار البطاقة المصغرة' : 'Card Border Color'}</label>
+                          <div className="flex gap-2">
+                            <input type="color" value={to6Hex(currentConfig.borderColor || '#382F24')} onChange={e => updateField(activeTab, 'borderColor', e.target.value)} className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
+                            <input type="text" value={currentConfig.borderColor || ''} onChange={e => updateField(activeTab, 'borderColor', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون شارة المضيف' : 'Host Badge Color'}</label>
+                          <div className="flex gap-2">
+                            <input type="color" value={to6Hex(currentConfig.hostBadgeBg || '#1E5BB5')} onChange={e => updateField(activeTab, 'hostBadgeBg', e.target.value)} className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
+                            <input type="text" value={currentConfig.hostBadgeBg || ''} onChange={e => updateField(activeTab, 'hostBadgeBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية شريط استلام الهدايا' : 'Gift Bar Background'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.giftBarBg || ''} onChange={e => updateField(activeTab, 'giftBarBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftBarBg')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار شريط الهدايا' : 'Gift Bar Border Color'}</label>
+                          <div className="flex gap-2">
+                            <input type="color" value={to6Hex(currentConfig.giftBarBorder || '#5E4321')} onChange={e => updateField(activeTab, 'giftBarBorder', e.target.value)} className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
+                            <input type="text" value={currentConfig.giftBarBorder || ''} onChange={e => updateField(activeTab, 'giftBarBorder', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة زر الهدية (الذهبي)' : 'Gift Button Icon'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.profileGiftIcon || ''} onChange={e => updateField(activeTab, 'profileGiftIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileGiftIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المحادثة والرسائل' : 'Chat & Messages Icon'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.profileChatIcon || ''} onChange={e => updateField(activeTab, 'profileChatIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileChatIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإشارة / المنشن (@)' : 'Mention Icon'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.profileMentionIcon || ''} onChange={e => updateField(activeTab, 'profileMentionIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileMentionIcon')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
                           <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المتابعة' : 'Follow Icon'}</label>
                           <div className="flex gap-2">
                             <input type="text" value={currentConfig.profileFollowIcon || ''} onChange={e => updateField(activeTab, 'profileFollowIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
@@ -1606,20 +1577,11 @@ export default function AppVisualDesigner() {
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المحادثة' : 'Chat Icon'}</label>
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الخيارات (•••)' : 'More Options Icon'}</label>
                           <div className="flex gap-2">
-                            <input type="text" value={currentConfig.profileChatIcon || ''} onChange={e => updateField(activeTab, 'profileChatIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <input type="text" value={currentConfig.profileMoreIcon || ''} onChange={e => updateField(activeTab, 'profileMoreIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
                             <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileChatIcon')} />
-                            </label>
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإهداء' : 'Gift Icon'}</label>
-                          <div className="flex gap-2">
-                            <input type="text" value={currentConfig.profileGiftIcon || ''} onChange={e => updateField(activeTab, 'profileGiftIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
-                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileGiftIcon')} />
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileMoreIcon')} />
                             </label>
                           </div>
                         </div>

@@ -1696,10 +1696,9 @@ class _RoomScreenState extends State<RoomScreen> {
                   }
                   setState(() {
                     _showProfile = false;
-                    _showChatInput = true;
-                    // Navigate to private message screen
-                    _openPrivateChat(_selectedUser);
                   });
+                  // Navigate to private message screen
+                  _openPrivateChat(_selectedUser);
                 },
                 onMention: () {
                   final userId = _selectedUser?.id;

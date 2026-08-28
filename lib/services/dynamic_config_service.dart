@@ -200,6 +200,14 @@ class DynamicConfigService extends ChangeNotifier {
 
   // Mini Profile Visuals
   String get miniprofileBgImage => _screenStr('userProfile', 'backgroundImage', _rawConfig['userProfile']?['backgroundImage']?.toString() ?? '');
+  Color get miniprofileBgColor => _screenColor('userProfile', 'backgroundColor', const Color(0xFF16141D));
+  Color get miniprofileBorderColor => _screenColor('userProfile', 'borderColor', const Color(0xFF382F24));
+  Color get miniprofileTextColor => _screenColor('userProfile', 'textColor', Colors.white);
+  Color get miniprofileSubTextColor => _screenColor('userProfile', 'subTextColor', const Color(0xFF9BA1B6));
+  Color get miniprofileButtonColor => _screenColor('userProfile', 'buttonColor', const Color(0xFFE8BD56));
+  String get miniprofileGiftBarBg => _screenStr('userProfile', 'giftBarBg', _rawConfig['userProfile']?['giftBarBg']?.toString() ?? '');
+  Color get miniprofileGiftBarBorder => _screenColor('userProfile', 'giftBarBorder', const Color(0xFF5E4321));
+  Color get miniprofileHostBadgeBg => _screenColor('userProfile', 'hostBadgeBg', const Color(0xFF1E5BB5));
   String get miniprofileIntimateCardBg => _screenStr('userProfile', 'intimateCardBg', _rawConfig['userProfile']?['intimateCardBg']?.toString() ?? '');
   String get miniprofileFamilyCardBg => _screenStr('userProfile', 'familyCardBg', _rawConfig['userProfile']?['familyCardBg']?.toString() ?? '');
   String get miniprofileSupportersBanner => _screenStr('userProfile', 'supportersBanner', _rawConfig['userProfile']?['supportersBanner']?.toString() ?? '');
@@ -217,6 +225,8 @@ class DynamicConfigService extends ChangeNotifier {
   String get miniprofileGiftIcon => _screenStr('userProfile', 'profileGiftIcon', _rawConfig['userProfile']?['profileGiftIcon']?.toString() ?? '');
   String get miniprofileReportIcon => _screenStr('userProfile', 'profileReportIcon', _rawConfig['userProfile']?['profileReportIcon']?.toString() ?? '');
   String get miniprofileEditIcon => _screenStr('userProfile', 'profileEditIcon', _rawConfig['userProfile']?['profileEditIcon']?.toString() ?? '');
+  String get miniprofileMentionIcon => _screenStr('userProfile', 'profileMentionIcon', _rawConfig['userProfile']?['profileMentionIcon']?.toString() ?? '');
+  String get miniprofileMoreIcon => _screenStr('userProfile', 'profileMoreIcon', _rawConfig['userProfile']?['profileMoreIcon']?.toString() ?? '');
 
   // Full User Profile Screen Visuals (from Admin Dashboard)
   String get fullProfileBgImage => _screenStr('fullProfile', 'backgroundImage', miniprofileBgImage);

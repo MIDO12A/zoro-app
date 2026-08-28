@@ -174,6 +174,7 @@ class _UserProfileState extends State<UserProfile> {
   }
 
   Widget _buildCompactSheet() {
+    final config = DynamicConfigService();
     final avatar = widget.user['avatar']?.toString() ?? widget.user['photo_url']?.toString() ?? widget.user['photoUrl']?.toString() ?? R.avaBoy;
     final name = widget.user['name']?.toString() ?? 'User';
     final gender = widget.user['gender']?.toString() ?? 'male';
@@ -185,6 +186,12 @@ class _UserProfileState extends State<UserProfile> {
     final generatedId = fbUid.isNotEmpty ? (1000000 + (fbUid.hashCode.abs() % 9000000)).toString() : '9000000';
     final idText = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? generatedId;
 
+    final cardBgColor = config.miniprofileBgColor;
+    final cardBorderColor = config.miniprofileBorderColor;
+    final textColor = config.miniprofileTextColor;
+    final subTextColor = config.miniprofileSubTextColor;
+    final btnColor = config.miniprofileButtonColor;
+
     return Stack(
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
@@ -195,9 +202,15 @@ class _UserProfileState extends State<UserProfile> {
           margin: const EdgeInsets.only(top: 36),
           padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
           decoration: BoxDecoration(
-            color: const Color(0xFF16141D),
+            color: cardBgColor,
+            image: config.miniprofileBgImage.isNotEmpty
+                ? DecorationImage(
+                    image: R.cachedImage(config.miniprofileBgImage),
+                    fit: BoxFit.cover,
+                  )
+                : null,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: const Color(0xFF382F24), width: 1),
+            border: Border.all(color: cardBorderColor, width: 1),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.6),
@@ -230,10 +243,10 @@ class _UserProfileState extends State<UserProfile> {
                   Flexible(
                     child: Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: textColor,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -271,7 +284,7 @@ class _UserProfileState extends State<UserProfile> {
                         const SizedBox(width: 4),
                         Text(
                           idText,
-                          style: const TextStyle(fontSize: 12, color: Colors.white70, fontWeight: FontWeight.w500),
+                          style: TextStyle(fontSize: 12, color: subTextColor, fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -296,9 +309,10 @@ class _UserProfileState extends State<UserProfile> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF1E5BB5), Color(0xFF0F3675)],
-                    ),
+                    color: config.miniprofileHostBadgeBg,
+                    gradient: config.miniprofileHostBadgeBg == const Color(0xFF1E5BB5)
+                        ? const LinearGradient(colors: [Color(0xFF1E5BB5), Color(0xFF0F3675)])
+                        : null,
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: const Color(0xFF5C9DFF), width: 0.8),
                   ),
@@ -334,8 +348,11 @@ class _UserProfileState extends State<UserProfile> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: const Color(0xFF221A11),
+                    image: config.miniprofileGiftBarBg.isNotEmpty
+                        ? DecorationImage(image: R.cachedImage(config.miniprofileGiftBarBg), fit: BoxFit.cover)
+                        : null,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFF5E4321), width: 1),
+                    border: Border.all(color: config.miniprofileGiftBarBorder, width: 1),
                   ),
                   child: Row(
                     children: [
@@ -431,11 +448,11 @@ class _UserProfileState extends State<UserProfile> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  _buildStatColumn('$_visitorsCount', 'الزائر'),
+                  _buildStatColumn('$_visitorsCount', 'الزائر', textColor, subTextColor),
                   _buildStatDivider(),
-                  _buildStatColumn('$_fansCount', 'المحبون'),
+                  _buildStatColumn('$_fansCount', 'المحبون', textColor, subTextColor),
                   _buildStatDivider(),
-                  _buildStatColumn('$_followersCount', 'متابعون'),
+                  _buildStatColumn('$_followersCount', 'متابعون', textColor, subTextColor),
                 ],
               ),
               const SizedBox(height: 16),
@@ -494,6 +511,7 @@ class _UserProfileState extends State<UserProfile> {
                     width: double.infinity,
                     height: 44,
                     decoration: BoxDecoration(
+                      color: btnColor,
                       gradient: const LinearGradient(
                         colors: [Color(0xFFE8BD56), Color(0xFFC99427)],
                       ),
@@ -524,13 +542,14 @@ class _UserProfileState extends State<UserProfile> {
                         child: Container(
                           height: 44,
                           decoration: BoxDecoration(
+                            color: btnColor,
                             gradient: const LinearGradient(
                               colors: [Color(0xFFE8BD56), Color(0xFFC99427)],
                             ),
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFFE8BD56).withOpacity(0.3),
+                                color: btnColor.withOpacity(0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -538,10 +557,13 @@ class _UserProfileState extends State<UserProfile> {
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Text('🎁', style: TextStyle(fontSize: 14)),
-                              SizedBox(width: 6),
-                              Text(
+                            children: [
+                              if (config.miniprofileGiftIcon.isNotEmpty)
+                                Image(image: R.cachedImage(config.miniprofileGiftIcon), width: 18, height: 18, errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 14)))
+                              else
+                                const Text('🎁', style: TextStyle(fontSize: 14)),
+                              const SizedBox(width: 6),
+                              const Text(
                                 'هدية',
                                 style: TextStyle(
                                   color: Color(0xFF1A1408),
@@ -558,7 +580,9 @@ class _UserProfileState extends State<UserProfile> {
 
                     // @ Mention Button
                     _buildRoundActionBtn(
-                      icon: const Text('@', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                      icon: config.miniprofileMentionIcon.isNotEmpty
+                          ? Image(image: R.cachedImage(config.miniprofileMentionIcon), width: 20, height: 20, errorBuilder: (_, __, ___) => const Text('@', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)))
+                          : const Text('@', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                       onTap: () {
                         widget.onClose?.call();
                         widget.onMention?.call();
@@ -566,23 +590,45 @@ class _UserProfileState extends State<UserProfile> {
                     ),
                     const SizedBox(width: 10),
 
-                    // Chat/Message Button
+                    // Chat/Message Button - Opens direct 1-on-1 private chat
                     _buildRoundActionBtn(
-                      icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 18),
+                      icon: config.miniprofileChatIcon.isNotEmpty
+                          ? Image(image: R.cachedImage(config.miniprofileChatIcon), width: 20, height: 20, errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 18))
+                          : const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 18),
                       onTap: () {
                         widget.onClose?.call();
-                        widget.onChat?.call();
+                        if (widget.onChat != null) {
+                          widget.onChat!();
+                        } else {
+                          final targetUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString();
+                          final targetName = widget.user['name']?.toString() ?? 'User';
+                          final targetPhoto = widget.user['avatar']?.toString() ?? widget.user['photo_url']?.toString() ?? widget.user['photoUrl']?.toString();
+                          if (targetUid != null && targetUid.isNotEmpty) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  targetUid: targetUid,
+                                  targetName: targetName,
+                                  targetPhotoUrl: targetPhoto,
+                                ),
+                              ),
+                            );
+                          }
+                        }
                       },
                     ),
                     const SizedBox(width: 10),
 
                     // Follow Button
                     _buildRoundActionBtn(
-                      icon: Icon(
-                        widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded,
-                        color: widget.isFollowed ? Colors.pinkAccent : Colors.white,
-                        size: 18,
-                      ),
+                      icon: config.miniprofileFollowIcon.isNotEmpty && !widget.isFollowed
+                          ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 20, height: 20, errorBuilder: (_, __, ___) => Icon(widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded, color: widget.isFollowed ? Colors.pinkAccent : Colors.white, size: 18))
+                          : Icon(
+                              widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded,
+                              color: widget.isFollowed ? Colors.pinkAccent : Colors.white,
+                              size: 18,
+                            ),
                       onTap: widget.onFollow,
                     ),
                   ],
@@ -617,7 +663,7 @@ class _UserProfileState extends State<UserProfile> {
                   height: 72,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFF382F24), width: 3),
+                    border: Border.all(color: cardBorderColor, width: 3),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.5),
@@ -651,7 +697,9 @@ class _UserProfileState extends State<UserProfile> {
                 color: Colors.white.withOpacity(0.06),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.more_horiz, color: Colors.white70, size: 20),
+              child: config.miniprofileMoreIcon.isNotEmpty
+                  ? Image(image: R.cachedImage(config.miniprofileMoreIcon), width: 18, height: 18, errorBuilder: (_, __, ___) => const Icon(Icons.more_horiz, color: Colors.white70, size: 20))
+                  : const Icon(Icons.more_horiz, color: Colors.white70, size: 20),
             ),
           ),
         ),
@@ -659,14 +707,14 @@ class _UserProfileState extends State<UserProfile> {
     );
   }
 
-  Widget _buildStatColumn(String count, String label) {
+  Widget _buildStatColumn(String count, String label, Color textColor, Color subTextColor) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           count,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: textColor,
             fontSize: 16,
             fontWeight: FontWeight.bold,
           ),
@@ -674,8 +722,8 @@ class _UserProfileState extends State<UserProfile> {
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.white54,
+          style: TextStyle(
+            color: subTextColor,
             fontSize: 11,
           ),
         ),
