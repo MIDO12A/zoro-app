@@ -531,20 +531,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      config.buttonColor,
-                      config.buttonColor.withValues(alpha: 0.7),
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
+                  color: (_profileBgUrl == null || _profileBgUrl!.isEmpty) && config.profileBgType == 'solid'
+                      ? config.profileSolidColor
+                      : null,
+                  gradient: (_profileBgUrl == null || _profileBgUrl!.isEmpty) && config.profileBgType == 'gradient'
+                      ? LinearGradient(
+                          colors: config.profileGradientColors,
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                        )
+                      : null,
                   image: (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
                       ? DecorationImage(
                           image: cachedImgProvider(_profileBgUrl!),
                           fit: BoxFit.cover,
                         )
-                      : null,
+                      : ((config.profileBgType == 'image' && config.profileBackgroundImage.isNotEmpty)
+                          ? DecorationImage(
+                              image: cachedImgProvider(config.profileBackgroundImage),
+                              fit: BoxFit.cover,
+                            )
+                          : null),
                 ),
                 child: isOwnProfile
                     ? Stack(
@@ -861,51 +868,55 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   ),
                 ),
                 const SizedBox(width: 3),
-                // Level badges
-                _buildLevelBadgeSmall(user?.wealthLevel ?? 1, 'wealth'),
-                const SizedBox(width: 3),
-                _buildLevelBadgeSmall(user?.rechargeLevel ?? 1, 'recharge'),
-                const SizedBox(width: 3),
-                _buildLevelBadgeSmall(user?.gemsLevel ?? 1, 'gems'),
+                if (config.profileShowLevel) ...[
+                  // Level badges
+                  _buildLevelBadgeSmall(user?.wealthLevel ?? 1, 'wealth'),
+                  const SizedBox(width: 3),
+                  _buildLevelBadgeSmall(user?.rechargeLevel ?? 1, 'recharge'),
+                  const SizedBox(width: 3),
+                  _buildLevelBadgeSmall(user?.gemsLevel ?? 1, 'gems'),
+                ],
               ],
             ),
           ),
-          // ID row - matching XML llID
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(
-              children: [
-                Text(
-                  'ID: ${(user?.customId ?? '').isNotEmpty ? user!.customId : ((1000000 + (user?.uid.hashCode.abs() ?? 0) % 9000000).toString())}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
-                ),
-                const SizedBox(width: 5),
-                const Text('|', style: TextStyle(color: Color(0xFFbbbbbb), fontSize: 12)),
-                const SizedBox(width: 5),
-                const Icon(Icons.location_on, size: 12, color: Color(0xFF666666)),
-                const SizedBox(width: 3),
-                Text(
-                  (user?.country != null && user!.country.isNotEmpty) ? user.country : 'مصر',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
-                ),
-                const SizedBox(width: 5),
-                const Text('|', style: TextStyle(color: Color(0xFFbbbbbb), fontSize: 12)),
-                const SizedBox(width: 5),
-                Text(
-                  'منذ 5 ساعات',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
-                ),
-              ],
+          if (config.profileShowId)
+            // ID row - matching XML llID
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Row(
+                children: [
+                  Text(
+                    'ID: ${(user?.customId ?? '').isNotEmpty ? user!.customId : ((1000000 + (user?.uid.hashCode.abs() ?? 0) % 9000000).toString())}',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                  ),
+                  const SizedBox(width: 5),
+                  const Text('|', style: TextStyle(color: Color(0xFFbbbbbb), fontSize: 12)),
+                  const SizedBox(width: 5),
+                  const Icon(Icons.location_on, size: 12, color: Color(0xFF666666)),
+                  const SizedBox(width: 3),
+                  Text(
+                    (user?.country != null && user!.country.isNotEmpty) ? user.country : 'مصر',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                  ),
+                  const SizedBox(width: 5),
+                  const Text('|', style: TextStyle(color: Color(0xFFbbbbbb), fontSize: 12)),
+                  const SizedBox(width: 5),
+                  Text(
+                    'منذ 5 ساعات',
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF666666)),
+                  ),
+                ],
+              ),
             ),
-          ),
           // Bio/Signature
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              (user?.signature != null && user!.signature.isNotEmpty) ? user.signature : 'لم يضف توقيعاً بعد',
-              style: const TextStyle(fontSize: 12, color: Color(0xFF555555)),
+          if (config.profileShowSignature)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                (user?.signature != null && user!.signature.isNotEmpty) ? user.signature : 'لم يضف توقيعاً بعد',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF555555)),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -1406,7 +1417,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               width: 54,
                               height: 54,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF0F0F0),
+                                color: Colors.transparent, // Removed background square
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: giftDef?.iconAsset != null
@@ -1426,6 +1437,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                             ),
                                     )
                                   : const Icon(Icons.card_giftcard, size: 24, color: Colors.white70),
+                            ),
+                            // Gift count badge
+                            Positioned(
+                              bottom: -2,
+                              right: -2,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text('x${g.count}',
+                                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
+                              ),
                             ),
                             if (isCpGift && cpDays > 0)
                               Positioned(

@@ -2413,23 +2413,25 @@ class _RoomScreenState extends State<RoomScreen> {
               const SizedBox(width: 12),
               GestureDetector(
                 onTap: _sendMessage,
-                child: Container(
-                  height: 36,
-                  constraints: const BoxConstraints(minWidth: 70),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFFFC525), Color(0xFFDE880F)],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    'Send',
-                    style: TextStyle(fontSize: 14, color: Colors.white),
-                  ),
+                child: Builder(
+                  builder: (context) {
+                    final sendImage = DynamicConfigService().roomSendMessageImage;
+                    if (sendImage != null && sendImage.isNotEmpty) {
+                      return Image.network(
+                        sendImage,
+                        height: 36,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Text('Send', style: TextStyle(fontSize: 16, color: Colors.amber, fontWeight: FontWeight.bold)),
+                      );
+                    }
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'إرسال',
+                        style: TextStyle(fontSize: 16, color: Colors.amber, fontWeight: FontWeight.bold),
+                      ),
+                    );
+                  }
                 ),
               ),
               const SizedBox(width: 16),

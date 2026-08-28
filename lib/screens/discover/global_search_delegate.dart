@@ -196,7 +196,7 @@ class _GlobalSearchResultsState extends State<_GlobalSearchResults> {
           roomName: r['title'] ?? 'Room',
           hostName: r['host_name'] ?? 'Host',
           roomPassword: r['password'] ?? '',
-          hotValue: (r['hot'] as num?)?.toInt() ?? 0,
+          hotValue: r['hot']?.toString() ?? '0',
           gameDesc: r['game_desc'] ?? '',
         ),
       ),

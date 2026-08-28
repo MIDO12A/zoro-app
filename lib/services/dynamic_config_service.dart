@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -920,6 +920,21 @@ class DynamicConfigService extends ChangeNotifier {
   }
 
   // Dynamic config accessors (for profile etc.)
+  String get profileBgType => _configs['profileBgType'] as String? ?? 'solid';
+  Color get profileSolidColor => _hexToColor(_configs['profileSolidColor'] as String? ?? '#03030A');
+  List<Color> get profileGradientColors {
+    final hexList = _configs['profileGradientColors'] as List?;
+    if (hexList != null && hexList.length >= 2) {
+      return hexList.map((e) => _hexToColor(e.toString())).toList();
+    }
+    return [const Color(0xFF1E1E2C), const Color(0xFF03030A)];
+  }
+  String get profileBackgroundImage => _configs['profileBackgroundImage'] as String? ?? '';
+  bool get profileShowSignature => _configs['profileShowSignature'] as bool? ?? true;
+  bool get profileShowId => _configs['profileShowId'] as bool? ?? true;
+  bool get profileShowLevel => _configs['profileShowLevel'] as bool? ?? true;
+  String get buttonStyle => _configs['buttonStyle'] as String? ?? 'modern';
+  String get roomSendMessageImage => _configs['roomSendMessageImage'] as String? ?? '';
   dynamic getConfig(String key) => _rawConfig[key];
 
   Color? getColorConfig(String key) {
