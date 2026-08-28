@@ -1585,94 +1585,213 @@ export default function AppVisualDesigner() {
                     </div>
 
                     {/* Achievements Cards Customization */}
-                    <div className="pt-2 border-t border-white/5 space-y-3">
-                      <h4 className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
-                        <span>🏆</span> {lang === 'ar' ? 'تخصيص بطاقات الإنجازات (جدار الهدايا، المركبة، الإطار)' : 'Achievements Cards'}
-                      </h4>
+                    <div className="pt-4 border-t border-white/10 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                          <span className="text-base">🏆</span> {lang === 'ar' ? 'تخصيص بطاقات الإنجازات (جدار الهدايا، المركبة، الإطار)' : 'Achievements Cards Customization'}
+                        </h4>
+                        <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded-full font-semibold">
+                          {lang === 'ar' ? 'رفع مباشر من الجهاز 📁' : 'Direct Device Upload 📁'}
+                        </span>
+                      </div>
 
-                      {/* Gift Wall Card */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية جدار الهدايا' : 'Gift Wall BG'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="text" value={currentConfig.giftWallCardBg || ''} onChange={e => updateField(activeTab, 'giftWallCardBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
-                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallCardBg')} />
-                            </label>
+                      {/* 1. Gift Wall Card (جدار الهدايا) */}
+                      <div className="bg-[#141417] rounded-2xl border border-pink-500/20 p-4 space-y-3">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <span className="text-xs font-bold text-pink-300 flex items-center gap-1.5">
+                            <span className="text-sm">🎁</span> {lang === 'ar' ? 'بطاقة جدار الهدايا (Gift Wall Card)' : 'Gift Wall Card'}
+                          </span>
+                          <span className="text-[9px] text-slate-400">بطاقة عمودية 140px</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Background Image */}
+                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة خلفية جدار الهدايا' : 'Background Image'}</label>
+                            <div className="flex items-center gap-2">
+                              {currentConfig.giftWallCardBg ? (
+                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group">
+                                  <img src={currentConfig.giftWallCardBg} className="w-full h-full object-cover" />
+                                  <button onClick={() => updateField(activeTab, 'giftWallCardBg', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-slate-600 shrink-0 text-[10px]">خلفية</div>
+                              )}
+                              <div className="flex-1 space-y-1">
+                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallCardBg')} />
+                                </label>
+                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الصورة...' : 'Or enter URL...'} value={currentConfig.giftWallCardBg || ''} onChange={e => updateField(activeTab, 'giftWallCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Icon Image */}
+                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة جدار الهدايا' : 'Gift Wall Icon'}</label>
+                            <div className="flex items-center gap-2">
+                              {currentConfig.giftWallIcon ? (
+                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group flex items-center justify-center p-1">
+                                  <img src={currentConfig.giftWallIcon} className="max-w-full max-h-full object-contain" />
+                                  <button onClick={() => updateField(activeTab, 'giftWallIcon', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-2xl shrink-0">🎁</div>
+                              )}
+                              <div className="flex-1 space-y-1">
+                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-pink-600/20 hover:bg-pink-600/30 text-pink-300 border border-pink-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallIcon')} />
+                                </label>
+                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الأيقونة...' : 'Or enter URL...'} value={currentConfig.giftWallIcon || ''} onChange={e => updateField(activeTab, 'giftWallIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة جدار الهدايا' : 'Gift Wall Icon'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="text" value={currentConfig.giftWallIcon || ''} onChange={e => updateField(activeTab, 'giftWallIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
-                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftWallIcon')} />
-                            </label>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار جدار الهدايا' : 'Gift Wall Border'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="color" value={to6Hex(currentConfig.giftWallCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
-                            <input type="text" value={currentConfig.giftWallCardBorder || ''} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+
+                        {/* Border Color */}
+                        <div className="flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                          <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار جدار الهدايا' : 'Card Border Color'}</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={to6Hex(currentConfig.giftWallCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
+                            <input type="text" value={currentConfig.giftWallCardBorder || ''} onChange={e => updateField(activeTab, 'giftWallCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white font-mono text-center" />
                           </div>
                         </div>
                       </div>
 
-                      {/* Vehicle Card */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية بطاقة المركبة' : 'Vehicle Card BG'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="text" value={currentConfig.vehicleCardBg || ''} onChange={e => updateField(activeTab, 'vehicleCardBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
-                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleCardBg')} />
-                            </label>
+                      {/* 2. Vehicle Card (بطاقة المركبة) */}
+                      <div className="bg-[#141417] rounded-2xl border border-amber-500/20 p-4 space-y-3">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                            <span className="text-sm">🏎️</span> {lang === 'ar' ? 'بطاقة المركبة (Vehicle Card)' : 'Vehicle Card'}
+                          </span>
+                          <span className="text-[9px] text-slate-400">بطاقة أفقية 64px</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Background Image */}
+                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة خلفية بطاقة المركبة' : 'Background Image'}</label>
+                            <div className="flex items-center gap-2">
+                              {currentConfig.vehicleCardBg ? (
+                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group">
+                                  <img src={currentConfig.vehicleCardBg} className="w-full h-full object-cover" />
+                                  <button onClick={() => updateField(activeTab, 'vehicleCardBg', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-slate-600 shrink-0 text-[10px]">خلفية</div>
+                              )}
+                              <div className="flex-1 space-y-1">
+                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleCardBg')} />
+                                </label>
+                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الصورة...' : 'Or enter URL...'} value={currentConfig.vehicleCardBg || ''} onChange={e => updateField(activeTab, 'vehicleCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Icon Image */}
+                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المركبة' : 'Vehicle Icon'}</label>
+                            <div className="flex items-center gap-2">
+                              {currentConfig.vehicleIcon ? (
+                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group flex items-center justify-center p-1">
+                                  <img src={currentConfig.vehicleIcon} className="max-w-full max-h-full object-contain" />
+                                  <button onClick={() => updateField(activeTab, 'vehicleIcon', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-2xl shrink-0">🏎️</div>
+                              )}
+                              <div className="flex-1 space-y-1">
+                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleIcon')} />
+                                </label>
+                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الأيقونة...' : 'Or enter URL...'} value={currentConfig.vehicleIcon || ''} onChange={e => updateField(activeTab, 'vehicleIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المركبة' : 'Vehicle Icon'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="text" value={currentConfig.vehicleIcon || ''} onChange={e => updateField(activeTab, 'vehicleIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
-                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'vehicleIcon')} />
-                            </label>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار المركبة' : 'Vehicle Border'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="color" value={to6Hex(currentConfig.vehicleCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
-                            <input type="text" value={currentConfig.vehicleCardBorder || ''} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+
+                        {/* Border Color */}
+                        <div className="flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                          <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار بطاقة المركبة' : 'Card Border Color'}</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={to6Hex(currentConfig.vehicleCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
+                            <input type="text" value={currentConfig.vehicleCardBorder || ''} onChange={e => updateField(activeTab, 'vehicleCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white font-mono text-center" />
                           </div>
                         </div>
                       </div>
 
-                      {/* Frame Card */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية بطاقة الإطار' : 'Frame Card BG'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="text" value={currentConfig.frameCardBg || ''} onChange={e => updateField(activeTab, 'frameCardBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
-                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameCardBg')} />
-                            </label>
+                      {/* 3. Frame Card (بطاقة الإطار) */}
+                      <div className="bg-[#141417] rounded-2xl border border-purple-500/20 p-4 space-y-3">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                          <span className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                            <span className="text-sm">👑</span> {lang === 'ar' ? 'بطاقة الإطار (Avatar Frame Card)' : 'Frame Card'}
+                          </span>
+                          <span className="text-[9px] text-slate-400">بطاقة أفقية 64px</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Background Image */}
+                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة خلفية بطاقة الإطار' : 'Background Image'}</label>
+                            <div className="flex items-center gap-2">
+                              {currentConfig.frameCardBg ? (
+                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group">
+                                  <img src={currentConfig.frameCardBg} className="w-full h-full object-cover" />
+                                  <button onClick={() => updateField(activeTab, 'frameCardBg', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-slate-600 shrink-0 text-[10px]">خلفية</div>
+                              )}
+                              <div className="flex-1 space-y-1">
+                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameCardBg')} />
+                                </label>
+                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الصورة...' : 'Or enter URL...'} value={currentConfig.frameCardBg || ''} onChange={e => updateField(activeTab, 'frameCardBg', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Icon Image */}
+                          <div className="space-y-1.5 bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                            <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإطار' : 'Frame Icon'}</label>
+                            <div className="flex items-center gap-2">
+                              {currentConfig.frameIcon ? (
+                                <div className="w-12 h-12 rounded-lg border border-white/10 overflow-hidden bg-black/40 shrink-0 relative group flex items-center justify-center p-1">
+                                  <img src={currentConfig.frameIcon} className="max-w-full max-h-full object-contain" />
+                                  <button onClick={() => updateField(activeTab, 'frameIcon', '')} className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex items-center justify-center text-rose-400 text-xs transition-opacity">✕</button>
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-2xl shrink-0">👑</div>
+                              )}
+                              <div className="flex-1 space-y-1">
+                                <label className="cursor-pointer w-full py-1.5 px-2.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 rounded-lg flex items-center justify-center gap-1.5 text-[11px] font-semibold transition-colors">
+                                  <Upload className="w-3.5 h-3.5" />
+                                  <span>{lang === 'ar' ? 'اختيار من الجهاز' : 'Pick from Device'}</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameIcon')} />
+                                </label>
+                                <input type="text" placeholder={lang === 'ar' ? 'أو أدخل رابط الأيقونة...' : 'Or enter URL...'} value={currentConfig.frameIcon || ''} onChange={e => updateField(activeTab, 'frameIcon', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-[10px] text-white" />
+                              </div>
+                            </div>
                           </div>
                         </div>
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإطار' : 'Frame Icon'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="text" value={currentConfig.frameIcon || ''} onChange={e => updateField(activeTab, 'frameIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
-                            <label className="cursor-pointer px-2 py-1 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
-                              <Upload className="w-3.5 h-3.5" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'frameIcon')} />
-                            </label>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="block text-[9px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار بطاقة الإطار' : 'Frame Border'}</label>
-                          <div className="flex gap-1.5">
-                            <input type="color" value={to6Hex(currentConfig.frameCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
-                            <input type="text" value={currentConfig.frameCardBorder || ''} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white" />
+
+                        {/* Border Color */}
+                        <div className="flex items-center justify-between bg-white/[0.02] p-2.5 rounded-xl border border-white/5">
+                          <label className="text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار بطاقة الإطار' : 'Card Border Color'}</label>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={to6Hex(currentConfig.frameCardBorder || '#382F24')} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-8 h-7 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0 cursor-pointer" />
+                            <input type="text" value={currentConfig.frameCardBorder || ''} onChange={e => updateField(activeTab, 'frameCardBorder', e.target.value)} className="w-24 bg-[#161618] border border-white/10 rounded-lg py-1 px-2 text-xs text-white font-mono text-center" />
                           </div>
                         </div>
                       </div>
