@@ -13,6 +13,8 @@ import 'create_room_screen.dart';
 import '../../screens/room/room_screen.dart' show navigateToRoom;
 import '../../screens/room/widgets/svga_player.dart';
 import '../../screens/rank/rank_screen.dart';
+import 'package:zero/screens/user_profile/user_profile_screen.dart';
+import 'global_search_delegate.dart';
 
 class RoomDiscoverScreen extends StatefulWidget {
   const RoomDiscoverScreen({super.key});
@@ -81,9 +83,7 @@ class _RoomDiscoverScreenState extends State<RoomDiscoverScreen>
   void _onSearch() {
     showSearch(
       context: context,
-      delegate: _RoomSearchDelegate((query) {
-        setState(() => _searchQuery = query.toLowerCase());
-      }),
+      delegate: GlobalSearchDelegate(),
     );
   }
 
@@ -818,42 +818,3 @@ class _BannerCarouselState extends State<_BannerCarousel> {
   }
 }
 
-class _RoomSearchDelegate extends SearchDelegate<String?> {
-  final ValueChanged<String> onSearchChanged;
-
-  _RoomSearchDelegate(this.onSearchChanged);
-
-  @override
-  List<Widget>? buildActions(BuildContext context) {
-    return [
-      IconButton(
-        icon: const Icon(Icons.clear),
-        onPressed: () {
-          query = '';
-          onSearchChanged('');
-        },
-      ),
-    ];
-  }
-
-  @override
-  Widget? buildLeading(BuildContext context) {
-    return IconButton(
-      icon: const Icon(Icons.arrow_back),
-      onPressed: () => close(context, null),
-    );
-  }
-
-  @override
-  Widget buildResults(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      onSearchChanged(query);
-    });
-    return const SizedBox.shrink();
-  }
-
-  @override
-  Widget buildSuggestions(BuildContext context) {
-    return const SizedBox.shrink();
-  }
-}
