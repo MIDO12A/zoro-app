@@ -522,12 +522,13 @@ class _GiftPanelState extends State<GiftPanel> {
       'categoryId': gift.categoryId,
     });
 
+    var allOk = true;
     if (widget.roomId.isNotEmpty && currentUser != null) {
       final fb = SupabaseService();
       final receivers = _selectedUserId != null
           ? [{'id': _selectedUserId, 'name': _selectedUserName ?? ''}]
           : widget.targetUsers;
-      var allOk = true;
+      
       for (final r in receivers) {
         final ok = await fb.sendGift(
           roomId: widget.roomId,
@@ -853,3 +854,4 @@ class GiftBannerOverlay extends StatelessWidget {
     );
   }
 }
+

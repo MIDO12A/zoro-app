@@ -626,6 +626,20 @@ class _RoomScreenState extends State<RoomScreen> {
     });
   }
 
+  void _clearMessages() {
+    setState(() {
+      _messages.clear();
+    });
+  }
+
+  seat_model.SeatModel? get _currentUserSeat {
+    if (_currentUserId == null) return null;
+    for (final seat in _seats) {
+      if (seat.user?.id == _currentUserId) return seat;
+    }
+    return null;
+  }
+
   void _processSeatMap(Map<int, Map<String, dynamic>> seatMap) {
     if (!mounted) return;
     // Preserve locked state before reset

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -451,7 +452,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       builder: (context, _) {
         final config = DynamicConfigService();
         return Scaffold(
-          backgroundColor: config.miniProfileBgColor,
+          backgroundColor: Colors.black87,
           body: SafeArea(
             child: Stack(
               children: [
@@ -591,7 +592,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   height: 30,
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [Colors.transparent, config.miniProfileBgColor],
+                      colors: [Colors.transparent, Colors.black87],
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                     ),
@@ -599,7 +600,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 ),
                 Container(
                   height: 42,
-                  color: config.miniProfileBgColor,
+                  color: Colors.black87,
                 ),
               ],
             ),
@@ -720,12 +721,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 color: Colors.black26,
                               ),
                               clipBehavior: Clip.antiAlias,
-                              child: config.miniProfileJoinRoomIcon.isEmpty
+                              child: ''.isEmpty
                                 ? const Icon(Icons.meeting_room, color: Colors.white)
-                                : (config.miniProfileJoinRoomIcon.toLowerCase().endsWith('.svga')
-                                    ? SvgaPlayer(svgaUrl: config.miniProfileJoinRoomIcon)
+                                : (''.toLowerCase().endsWith('.svga')
+                                    ? SvgaPlayer(svgaUrl: '')
                                     : CachedNetworkImage(
-                                        imageUrl: config.miniProfileJoinRoomIcon,
+                                        imageUrl: '',
                                         fit: BoxFit.contain,
                                       )),
                             ),
@@ -806,7 +807,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   width: 24,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: Colors.white70.shade300,
+                    color: Colors.white70.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -2405,6 +2406,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return '${diff.inDays}d ago';
   }
 }
+
 
 
 
