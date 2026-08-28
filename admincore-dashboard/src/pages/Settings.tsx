@@ -12,8 +12,6 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [vipUrl, setVipUrl] = useState('');
   const [vipSaving, setVipSaving] = useState(false);
-  const [supabaseServiceKey, setSupabaseServiceKey] = useState('');
-  const [supabaseSaving, setSupabaseSaving] = useState(false);
 
   useEffect(() => {
     const status = getCloudinaryStatus();
@@ -28,13 +26,6 @@ export default function Settings() {
     } else {
       setApiKey(localStorage.getItem('cloudinary_api_key') || '');
       setApiSecret(localStorage.getItem('cloudinary_api_secret') || '');
-    }
-    const adminCfg = localStorage.getItem('supabase_admin_config');
-    if (adminCfg) {
-      try {
-        const parsed = JSON.parse(adminCfg);
-        setSupabaseServiceKey(parsed.serviceRoleKey || '');
-      } catch {}
     }
     supabase.from('app_config').select('value').eq('key', 'vip_url').maybeSingle().then(res => {
       if (res?.data?.value) setVipUrl(String(res.data.value));

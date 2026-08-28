@@ -10,3 +10,6 @@ coverage/
 .vercel
 .env*
 public/assets/
+
+.vercel
+.env*

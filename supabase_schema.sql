@@ -230,7 +230,7 @@ CREATE POLICY "level_config_select_all" ON level_config
   FOR SELECT USING (true);
 
 CREATE POLICY "level_config_all_admin" ON level_config
-  USING (true);
+  USING (auth.role() = 'service_role' OR (auth.role() = 'authenticated' AND EXISTS (SELECT 1 FROM admin_users WHERE uid = auth.uid()::text)));
 
 -- 14. VIP CONFIG
 CREATE TABLE vip_config (
@@ -270,20 +270,13 @@ CREATE POLICY "anon_read_vip_config" ON vip_config
   FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "service_write_vip_config" ON vip_config;
-CREATE POLICY "service_write_vip_config" ON vip_config
-  FOR ALL USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "anon_write_vip_config" ON vip_config;
-CREATE POLICY "anon_write_vip_config" ON vip_config
-  FOR INSERT WITH CHECK (true);
-
 DROP POLICY IF EXISTS "anon_update_vip_config" ON vip_config;
-CREATE POLICY "anon_update_vip_config" ON vip_config
-  FOR UPDATE USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "anon_delete_vip_config" ON vip_config;
-CREATE POLICY "anon_delete_vip_config" ON vip_config
-  FOR DELETE USING (true);
+
+CREATE POLICY "admin_write_vip_config" ON vip_config
+  FOR ALL USING (auth.role() = 'service_role' OR (auth.role() = 'authenticated' AND EXISTS (SELECT 1 FROM admin_users WHERE uid = auth.uid()::text)))
+  WITH CHECK (auth.role() = 'service_role' OR (auth.role() = 'authenticated' AND EXISTS (SELECT 1 FROM admin_users WHERE uid = auth.uid()::text)));
 
 -- 23. Storage bucket for admin uploads
 INSERT INTO storage.buckets (id, name, public) VALUES ('admin-uploads', 'admin-uploads', true)
@@ -560,7 +553,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
 
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "notifications_select_all" ON notifications FOR SELECT USING (true);
-CREATE POLICY "notifications_insert_all" ON notifications FOR INSERT WITH CHECK (true);
+CREATE POLICY "notifications_insert_admin" ON notifications FOR INSERT WITH CHECK (auth.role() = 'service_role' OR (auth.role() = 'authenticated' AND EXISTS (SELECT 1 FROM admin_users WHERE uid = auth.uid()::text)));
 
 -- ============================================================
 -- GIFT CATEGORIES (for categorizing gifts in the panel)
@@ -574,9 +567,9 @@ CREATE TABLE IF NOT EXISTS gift_categories (
 
 ALTER TABLE gift_categories ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "gift_categories_select_all" ON gift_categories FOR SELECT USING (true);
-CREATE POLICY "gift_categories_insert_admin" ON gift_categories FOR INSERT WITH CHECK (true);
-CREATE POLICY "gift_categories_update_admin" ON gift_categories FOR UPDATE USING (true);
-CREATE POLICY "gift_categories_delete_admin" ON gift_categories FOR DELETE USING (true);
+CREATE POLICY "gift_categories_insert_admin" ON gift_categories FOR INSERT WITH CHECK (auth.role() = 'service_role' OR (auth.role() = 'authenticated' AND EXISTS (SELECT 1 FROM admin_users WHERE uid = auth.uid()::text)));
+CREATE POLICY "gift_categories_update_admin" ON gift_categories FOR UPDATE USING (auth.role() = 'service_role' OR (auth.role() = 'authenticated' AND EXISTS (SELECT 1 FROM admin_users WHERE uid = auth.uid()::text)));
+CREATE POLICY "gift_categories_delete_admin" ON gift_categories FOR DELETE USING (auth.role() = 'service_role' OR (auth.role() = 'authenticated' AND EXISTS (SELECT 1 FROM admin_users WHERE uid = auth.uid()::text)));
 
 ALTER PUBLICATION supabase_realtime ADD TABLE gift_categories;
 

@@ -426,47 +426,7 @@ class _UserProfileState extends State<UserProfile> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () {
-                ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('قريباً...'), duration: Duration(seconds: 1)));
-              },
-              child: Container(
-                height: 80,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.pinkAccent.withOpacity(0.5), width: 1),
-                  gradient: const LinearGradient(colors: [Color(0xFF5A1A4A), Color(0xFF2A0D2A)]),
-                  image: config.miniprofileIntimateCardBg.isNotEmpty
-                      ? DecorationImage(image: R.cachedImage(config.miniprofileIntimateCardBg), fit: BoxFit.cover)
-                      : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('علاقة حميمة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(width: 8),
-                            Icon(Icons.favorite, color: Colors.pink[200], size: 16),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        const Text('اربط علاقة حميمة الآن!', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
+          // 1. Partner card (golden) — يظهر على اليمين في RTL
           Expanded(
             child: GestureDetector(
               onTap: () {
@@ -500,6 +460,48 @@ class _UserProfileState extends State<UserProfile> {
                         ),
                         const SizedBox(height: 4),
                         const Text('ID:15652', style: TextStyle(color: Colors.amber, fontSize: 11)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          // 2. Intimate relation card (pink) — يظهر على اليسار في RTL
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text('قريباً...'), duration: Duration(seconds: 1)));
+              },
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.pinkAccent.withOpacity(0.5), width: 1),
+                  gradient: const LinearGradient(colors: [Color(0xFF5A1A4A), Color(0xFF2A0D2A)]),
+                  image: config.miniprofileIntimateCardBg.isNotEmpty
+                      ? DecorationImage(image: R.cachedImage(config.miniprofileIntimateCardBg), fit: BoxFit.cover)
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Icon(Icons.arrow_back_ios, size: 12, color: Colors.white54),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('علاقة حميمة', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            const SizedBox(width: 8),
+                            Icon(Icons.favorite, color: Colors.pink[200], size: 16),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        const Text('اربط علاقة حميمة الآن!', style: TextStyle(color: Colors.white54, fontSize: 10)),
                       ],
                     ),
                   ],
