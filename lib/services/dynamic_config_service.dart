@@ -200,13 +200,16 @@ class DynamicConfigService extends ChangeNotifier {
 
   // Mini Profile Visuals
   String get miniprofileBgImage => _screenStr('userProfile', 'backgroundImage', _rawConfig['userProfile']?['backgroundImage']?.toString() ?? '');
+  String get miniprofileCardFrameImg => _screenStr('userProfile', 'cardFrameImg', _rawConfig['userProfile']?['cardFrameImg']?.toString() ?? '');
   Color get miniprofileBgColor => _screenColor('userProfile', 'backgroundColor', const Color(0xFF16141D));
   Color get miniprofileBorderColor => _screenColor('userProfile', 'borderColor', const Color(0xFF382F24));
   Color get miniprofileTextColor => _screenColor('userProfile', 'textColor', Colors.white);
   Color get miniprofileSubTextColor => _screenColor('userProfile', 'subTextColor', const Color(0xFF9BA1B6));
   Color get miniprofileButtonColor => _screenColor('userProfile', 'buttonColor', const Color(0xFFE8BD56));
   String get miniprofileGiftBarBg => _screenStr('userProfile', 'giftBarBg', _rawConfig['userProfile']?['giftBarBg']?.toString() ?? '');
+  String get miniprofileGiftBarBorderImg => _screenStr('userProfile', 'giftBarBorderImg', _rawConfig['userProfile']?['giftBarBorderImg']?.toString() ?? '');
   Color get miniprofileGiftBarBorder => _screenColor('userProfile', 'giftBarBorder', const Color(0xFF5E4321));
+  String get miniprofileHostBadgeImg => _screenStr('userProfile', 'hostBadgeImg', _rawConfig['userProfile']?['hostBadgeImg']?.toString() ?? '');
   Color get miniprofileHostBadgeBg => _screenColor('userProfile', 'hostBadgeBg', const Color(0xFF1E5BB5));
   String get miniprofileIntimateCardBg => _screenStr('userProfile', 'intimateCardBg', _rawConfig['userProfile']?['intimateCardBg']?.toString() ?? '');
   String get miniprofileFamilyCardBg => _screenStr('userProfile', 'familyCardBg', _rawConfig['userProfile']?['familyCardBg']?.toString() ?? '');

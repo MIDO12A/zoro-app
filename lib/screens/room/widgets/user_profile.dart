@@ -306,25 +306,53 @@ class _UserProfileState extends State<UserProfile> {
               // 3. Host / Role Badge (مضيف)
               if (isHost) ...[
                 const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: config.miniprofileHostBadgeBg,
-                    gradient: config.miniprofileHostBadgeBg == const Color(0xFF1E5BB5)
-                        ? const LinearGradient(colors: [Color(0xFF1E5BB5), Color(0xFF0F3675)])
-                        : null,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF5C9DFF), width: 0.8),
-                  ),
-                  child: const Text(
-                    'مضيف',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                if (config.miniprofileHostBadgeImg.isNotEmpty)
+                  SizedBox(
+                    height: 24,
+                    child: Image(
+                      image: R.cachedImage(config.miniprofileHostBadgeImg),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: config.miniprofileHostBadgeBg,
+                          gradient: config.miniprofileHostBadgeBg == const Color(0xFF1E5BB5)
+                              ? const LinearGradient(colors: [Color(0xFF1E5BB5), Color(0xFF0F3675)])
+                              : null,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF5C9DFF), width: 0.8),
+                        ),
+                        child: const Text(
+                          'مضيف',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: config.miniprofileHostBadgeBg,
+                      gradient: config.miniprofileHostBadgeBg == const Color(0xFF1E5BB5)
+                          ? const LinearGradient(colors: [Color(0xFF1E5BB5), Color(0xFF0F3675)])
+                          : null,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF5C9DFF), width: 0.8),
+                    ),
+                    child: const Text(
+                      'مضيف',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
               ],
               const SizedBox(height: 14),
 
@@ -703,6 +731,24 @@ class _UserProfileState extends State<UserProfile> {
             ),
           ),
         ),
+        // Decorative Card Frame Image Overlay
+        if (config.miniprofileCardFrameImg.isNotEmpty)
+          Positioned(
+            top: 36,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                child: Image(
+                  image: R.cachedImage(config.miniprofileCardFrameImg),
+                  fit: BoxFit.fill,
+                  errorBuilder: (_, __, ___) => const SizedBox(),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

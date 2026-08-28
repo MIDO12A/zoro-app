@@ -87,13 +87,16 @@ const defaultVisuals: ScreenVisuals = {
   },
   userProfile: {
     backgroundImage: '',
+    cardFrameImg: '',
     backgroundColor: '#16141D',
     borderColor: '#382F24',
     textColor: '#ffffff',
     subTextColor: '#9BA1B6',
     buttonColor: '#E8BD56',
+    hostBadgeImg: '',
     hostBadgeBg: '#1E5BB5',
     giftBarBg: '',
+    giftBarBorderImg: '',
     giftBarBorder: '#5E4321',
     intimateCardBg: '',
     familyCardBg: '',
@@ -834,17 +837,21 @@ export default function AppVisualDesigner() {
 
                       {/* Host Badge */}
                       <div className="flex justify-center">
-                        <span
-                          className="text-[10px] font-bold px-3 py-0.5 rounded-full text-white border border-blue-400/50 shadow-sm"
-                          style={{ backgroundColor: currentConfig.hostBadgeBg || '#1E5BB5' }}
-                        >
-                          مضيف
-                        </span>
+                        {currentConfig.hostBadgeImg ? (
+                          <img src={currentConfig.hostBadgeImg} className="h-5 object-contain" />
+                        ) : (
+                          <span
+                            className="text-[10px] font-bold px-3 py-0.5 rounded-full text-white border border-blue-400/50 shadow-sm"
+                            style={{ backgroundColor: currentConfig.hostBadgeBg || '#1E5BB5' }}
+                          >
+                            مضيف
+                          </span>
+                        )}
                       </div>
 
                       {/* Received Gifts Bar */}
                       <div
-                        className="h-12 rounded-xl border p-2 flex items-center justify-between"
+                        className="h-12 rounded-xl border p-2 flex items-center justify-between relative overflow-hidden"
                         style={{
                           backgroundColor: currentConfig.giftBarBg ? 'transparent' : '#221A11',
                           backgroundImage: currentConfig.giftBarBg ? `url(${currentConfig.giftBarBg})` : 'none',
@@ -852,13 +859,16 @@ export default function AppVisualDesigner() {
                           borderColor: currentConfig.giftBarBorder || '#5E4321',
                         }}
                       >
-                        <span className="text-[10px] text-white/50">〈</span>
-                        <div className="flex items-center gap-1.5">
+                        {currentConfig.giftBarBorderImg && (
+                          <img src={currentConfig.giftBarBorderImg} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
+                        )}
+                        <span className="text-[10px] text-white/50 relative z-10">〈</span>
+                        <div className="flex items-center gap-1.5 relative z-10">
                           <span className="text-xs">🌙<sub className="text-[7px]">x22</sub></span>
                           <span className="text-xs">💎<sub className="text-[7px]">x38</sub></span>
                           <span className="text-xs">🍀<sub className="text-[7px]">x57</sub></span>
                         </div>
-                        <div className="flex flex-col items-end">
+                        <div className="flex flex-col items-end relative z-10">
                           <div className="flex items-center gap-1">
                             <span className="text-[9px] font-bold text-white">استلام</span>
                             <span className="text-[10px]">🎁</span>
@@ -1671,6 +1681,15 @@ export default function AppVisualDesigner() {
                     {activeTab === 'userProfile' && (
                       <>
                         <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة إطار وزخرفة البطاقة المصغرة' : 'Card Frame / Border Image'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.cardFrameImg || ''} onChange={e => updateField(activeTab, 'cardFrameImg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'cardFrameImg')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
                           <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون إطار البطاقة المصغرة' : 'Card Border Color'}</label>
                           <div className="flex gap-2">
                             <input type="color" value={to6Hex(currentConfig.borderColor || '#382F24')} onChange={e => updateField(activeTab, 'borderColor', e.target.value)} className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
@@ -1678,18 +1697,36 @@ export default function AppVisualDesigner() {
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون شارة المضيف' : 'Host Badge Color'}</label>
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة شارة المضيف' : 'Host Badge Image'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.hostBadgeImg || ''} onChange={e => updateField(activeTab, 'hostBadgeImg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'hostBadgeImg')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'لون شارة المضيف (افتراضي)' : 'Host Badge Color'}</label>
                           <div className="flex gap-2">
                             <input type="color" value={to6Hex(currentConfig.hostBadgeBg || '#1E5BB5')} onChange={e => updateField(activeTab, 'hostBadgeBg', e.target.value)} className="w-10 h-8 p-0.5 bg-[#161618] border border-white/10 rounded-lg shrink-0" />
                             <input type="text" value={currentConfig.hostBadgeBg || ''} onChange={e => updateField(activeTab, 'hostBadgeBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية شريط استلام الهدايا' : 'Gift Bar Background'}</label>
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'خلفية شريط استلام الهدايا (صورة)' : 'Gift Bar Background Image'}</label>
                           <div className="flex gap-2">
                             <input type="text" value={currentConfig.giftBarBg || ''} onChange={e => updateField(activeTab, 'giftBarBg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
                             <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
                               <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftBarBg')} />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'صورة إطار شريط الهدايا' : 'Gift Bar Frame Image'}</label>
+                          <div className="flex gap-2">
+                            <input type="text" value={currentConfig.giftBarBorderImg || ''} onChange={e => updateField(activeTab, 'giftBarBorderImg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                            <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                              <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'giftBarBorderImg')} />
                             </label>
                           </div>
                         </div>
