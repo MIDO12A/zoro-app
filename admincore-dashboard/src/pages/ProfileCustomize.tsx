@@ -150,6 +150,38 @@ export default function ProfileCustomizePage() {
         )}
       </div>
 
+      {/* Profile Top Bar Icons */}
+      <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-4">
+        <h3 className="text-white text-sm font-semibold">Top Bar Icons (أيقونات الشريط العلوي)</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { key: 'profileSettingsIcon', label: 'Settings Icon (الإعدادات)' },
+            { key: 'profileEditIcon', label: 'Edit Icon (التعديل)' },
+            { key: 'profileShareIcon', label: 'Share Icon (المشاركة)' },
+            { key: 'roomSendMessageImage', label: 'Room Send Message (زر إرسال الغرفة)' },
+          ].map(({ key, label }) => (
+            <div key={key}>
+              <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1.5">{label}</label>
+              <div className="flex flex-col gap-2">
+                {(config as any)[key] ? (
+                  <div className="relative w-16 h-16">
+                    <img src={(config as any)[key]} className="w-16 h-16 object-contain rounded bg-white/5 p-1 border border-white/10" />
+                    <button onClick={() => setConfig(p => ({ ...p, [key]: '' }))} className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center">×</button>
+                  </div>
+                ) : (
+                  <label className="w-16 h-16 rounded-lg border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all">
+                    <Upload className="w-4 h-4 text-slate-500 mb-1" />
+                    <span className="text-[8px] text-slate-600">Upload</span>
+                    <input type="file" accept="image/*" onChange={(e) => handleUpload(key, e)} className="hidden" />
+                  </label>
+                )}
+                <input type="text" value={(config as any)[key] || ''} onChange={e => setConfig(p => ({ ...p, [key]: e.target.value }))} placeholder="URL..." className="w-full bg-[#161618] border border-white/10 rounded py-1.5 px-2 text-[10px] text-white font-mono" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Toggles Visibility */}
       <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-4">
         <h3 className="text-white text-sm font-semibold">Components Visibility (إخفاء وإظهار)</h3>

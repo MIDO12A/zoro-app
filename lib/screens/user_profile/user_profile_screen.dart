@@ -489,7 +489,32 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  Widget _buildTopIcon(String url, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        margin: const EdgeInsetsDirectional.only(end: 12),
+        decoration: const BoxDecoration(
+          color: Colors.black26,
+          shape: BoxShape.circle,
+        ),
+        child: ClipOval(
+          child: CachedImg(
+            url,
+            fit: BoxFit.cover,
+            error: (_, __, ___) => const Icon(Icons.broken_image, size: 16, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTitleBar(DynamicConfigService config, UserModel? user) {
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final isOwnProfile = widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid);
+
     return Positioned(
       top: 0,
       left: 0,
@@ -508,6 +533,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             ),
             const Spacer(),
+            if (isOwnProfile && config.profileEditIcon.isNotEmpty)
+              _buildTopIcon(config.profileEditIcon, () {
+                // TODO: Edit Profile
+              }),
+            if (isOwnProfile && config.profileSettingsIcon.isNotEmpty)
+              _buildTopIcon(config.profileSettingsIcon, () {
+                // TODO: Settings
+              }),
+            if (config.profileShareIcon.isNotEmpty)
+              _buildTopIcon(config.profileShareIcon, () {
+                // TODO: Share Profile
+              }),
           ],
         ),
       ),

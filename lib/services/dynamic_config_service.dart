@@ -930,6 +930,9 @@ class DynamicConfigService extends ChangeNotifier {
     return [const Color(0xFF1E1E2C), const Color(0xFF03030A)];
   }
   String get customProfileBgImage => _rawConfig['profileBackgroundImage'] as String? ?? '';
+  String get profileSettingsIcon => _rawConfig['profileSettingsIcon'] as String? ?? '';
+  String get profileEditIcon => _rawConfig['profileEditIcon'] as String? ?? '';
+  String get profileShareIcon => _rawConfig['profileShareIcon'] as String? ?? '';
   bool get profileShowSignature => _rawConfig['profileShowSignature'] as bool? ?? true;
   bool get profileShowId => _rawConfig['profileShowId'] as bool? ?? true;
   bool get profileShowLevel => _rawConfig['profileShowLevel'] as bool? ?? true;
