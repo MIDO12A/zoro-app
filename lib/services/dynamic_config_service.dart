@@ -199,17 +199,17 @@ class DynamicConfigService extends ChangeNotifier {
   Color get rankSubTextColor => _parseColor(_rankSubTextColor, Colors.white60);
 
   // Mini Profile Visuals
-  String get miniprofileBgImage => _rawConfig['miniprofile']?['backgroundImage']?.toString() ?? '';
-  String get miniprofileIntimateCardBg => _rawConfig['miniprofile']?['intimateCardBg']?.toString() ?? '';
-  String get miniprofileFamilyCardBg => _rawConfig['miniprofile']?['familyCardBg']?.toString() ?? '';
-  String get miniprofileSupportersBanner => _rawConfig['miniprofile']?['supportersBanner']?.toString() ?? '';
-  String get miniprofileSupporterSlot => _rawConfig['miniprofile']?['supporterSlot']?.toString() ?? '';
-  String get miniprofileGoldCrown => _rawConfig['miniprofile']?['goldCrown']?.toString() ?? '';
-  String get miniprofileSilverCrown => _rawConfig['miniprofile']?['silverCrown']?.toString() ?? '';
-  String get miniprofileBronzeCrown => _rawConfig['miniprofile']?['bronzeCrown']?.toString() ?? '';
-  String get miniprofileIdentityTitleImg => _rawConfig['miniprofile']?['identityTitleImg']?.toString() ?? '';
-  String get miniprofileBadgesTitleImg => _rawConfig['miniprofile']?['badgesTitleImg']?.toString() ?? '';
-  String get miniprofileAchievementsTitleImg => _rawConfig['miniprofile']?['achievementsTitleImg']?.toString() ?? '';
+  String get miniprofileBgImage => _rawConfig['userProfile']?['backgroundImage']?.toString() ?? '';
+  String get miniprofileIntimateCardBg => _rawConfig['userProfile']?['intimateCardBg']?.toString() ?? '';
+  String get miniprofileFamilyCardBg => _rawConfig['userProfile']?['familyCardBg']?.toString() ?? '';
+  String get miniprofileSupportersBanner => _rawConfig['userProfile']?['supportersBanner']?.toString() ?? '';
+  String get miniprofileSupporterSlot => _rawConfig['userProfile']?['supporterSlot']?.toString() ?? '';
+  String get miniprofileGoldCrown => _rawConfig['userProfile']?['goldCrown']?.toString() ?? '';
+  String get miniprofileSilverCrown => _rawConfig['userProfile']?['silverCrown']?.toString() ?? '';
+  String get miniprofileBronzeCrown => _rawConfig['userProfile']?['bronzeCrown']?.toString() ?? '';
+  String get miniprofileIdentityTitleImg => _rawConfig['userProfile']?['identityTitleImg']?.toString() ?? '';
+  String get miniprofileBadgesTitleImg => _rawConfig['userProfile']?['badgesTitleImg']?.toString() ?? '';
+  String get miniprofileAchievementsTitleImg => _rawConfig['userProfile']?['achievementsTitleImg']?.toString() ?? '';
 
 
   // Getters
