@@ -1,0 +1,531 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Zero Backend API",
+    "description": "API Documentation for Zero Application Backend, used for integrating with Apidog, Swagger, and frontend clients.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "BearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/v1/auth/signup": {
+      "post": {
+        "summary": "Register a new user",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password", "name"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" },
+                  "name": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created successfully" },
+          "400": { "description": "Invalid request or user already exists" }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "summary": "Authenticate user and get token",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Successful login" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "summary": "Get currently logged-in user profile",
+        "responses": {
+          "200": { "description": "Success" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/users/search": {
+      "get": {
+        "summary": "Search users by name or custom ID",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } },
+          { "name": "custom_id", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/users/{uid}/profile": {
+      "get": {
+        "summary": "Get user profile details by UID",
+        "parameters": [
+          { "name": "uid", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Success" },
+          "404": { "description": "User not found" }
+        }
+      }
+    },
+    "/api/v1/users/profile": {
+      "put": {
+        "summary": "Update current user profile information",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "photo_url": { "type": "string" },
+                  "gender": { "type": "string", "enum": ["male", "female"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Profile updated" }
+        }
+      }
+    },
+    "/api/v1/users/by-custom/{customId}": {
+      "get": {
+        "summary": "Find user by custom numeric ID",
+        "parameters": [
+          { "name": "customId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Success" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/api/v1/users/{uid}/ban": {
+      "put": {
+        "summary": "Ban a user (Admin only)",
+        "parameters": [
+          { "name": "uid", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "User banned" }
+        }
+      }
+    },
+    "/api/v1/users/{uid}/unban": {
+      "put": {
+        "summary": "Unban a user (Admin only)",
+        "parameters": [
+          { "name": "uid", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "User unbanned" }
+        }
+      }
+    },
+    "/api/v1/users/generate-id": {
+      "post": {
+        "summary": "Generate a unique 7-digit numeric custom ID",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/users/make-admin": {
+      "put": {
+        "summary": "Elevate user role to admin (Admin only)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["uid"],
+                "properties": {
+                  "uid": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "User role updated to admin" }
+        }
+      }
+    },
+    "/api/v1/levels/config": {
+      "get": {
+        "summary": "Get full level configurations, XP requirements, and rewards",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/levels/{uid}": {
+      "get": {
+        "summary": "Get user current levels (Main, Wealth, Recharge, Gems)",
+        "parameters": [
+          { "name": "uid", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/levels/add-xp": {
+      "post": {
+        "summary": "Award XP to a user (Admin only)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["uid", "amount", "type"],
+                "properties": {
+                  "uid": { "type": "string" },
+                  "amount": { "type": "integer" },
+                  "type": { "type": "string", "enum": ["experience", "wealth_exp", "recharge_exp", "gems_exp"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "XP added" }
+        }
+      }
+    },
+    "/api/v1/vip/tiers": {
+      "get": {
+        "summary": "List VIP configurations and monthly costs",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/vip/{uid}": {
+      "get": {
+        "summary": "Get user VIP progress and details",
+        "parameters": [
+          { "name": "uid", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/vip/set-tier": {
+      "put": {
+        "summary": "Set user VIP tier manually (Admin only)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["uid", "tier"],
+                "properties": {
+                  "uid": { "type": "string" },
+                  "tier": { "type": "integer", "minimum": 0, "maximum": 15 }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "VIP Tier updated" }
+        }
+      }
+    },
+    "/api/v1/recharge/plans": {
+      "get": {
+        "summary": "Get all coin recharge plans and costs",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/recharge/create-order": {
+      "post": {
+        "summary": "Create a new recharge order",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["planId"],
+                "properties": {
+                  "planId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Order created" }
+        }
+      }
+    },
+    "/api/v1/recharge/complete-order": {
+      "post": {
+        "summary": "Complete and credit a recharge order (Admin only)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["orderId"],
+                "properties": {
+                  "orderId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Order completed and credited" }
+        }
+      }
+    },
+    "/api/v1/recharge/orders": {
+      "get": {
+        "summary": "Get recharge history of current user",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/recharge/orders/all": {
+      "get": {
+        "summary": "Get all system recharge orders (Admin only)",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/agencies/create": {
+      "post": {
+        "summary": "Create a new agency",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Agency created" }
+        }
+      }
+    },
+    "/api/v1/agencies/my": {
+      "get": {
+        "summary": "Get current user agency details and members",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/agencies/join": {
+      "post": {
+        "summary": "Join an agency using code",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["code"],
+                "properties": {
+                  "code": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Joined successfully" }
+        }
+      }
+    },
+    "/api/v1/agencies/add-agent": {
+      "post": {
+        "summary": "Add member to an agency directly (Admin only)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["agencyId", "userUid"],
+                "properties": {
+                  "agencyId": { "type": "string" },
+                  "userUid": { "type": "string" },
+                  "commissionRate": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Agent added" }
+        }
+      }
+    },
+    "/api/v1/agencies/all": {
+      "get": {
+        "summary": "List all agencies (Admin only)",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/rankings/wealth": {
+      "get": {
+        "summary": "Get top 100 wealth ranking (gifts sent)",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/rankings/charm": {
+      "get": {
+        "summary": "Get top 100 charm ranking (gifts received)",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/rankings/room": {
+      "get": {
+        "summary": "Get top 100 room rankings (gifts in room)",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/rankings/recharge": {
+      "get": {
+        "summary": "Get top 100 recharge rankings",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/rankings/level": {
+      "get": {
+        "summary": "Get top 100 level rankings (experience)",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/cp-rewards/status": {
+      "get": {
+        "summary": "Get CP rewards engine status",
+        "security": [],
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/cp-rewards/distribute": {
+      "post": {
+        "summary": "Trigger manual distribution of CP weekly rewards",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/cp-rewards/expire": {
+      "post": {
+        "summary": "Trigger manual expiration check on CP rewards",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    },
+    "/api/v1/cp-rewards/check": {
+      "post": {
+        "summary": "Trigger general check for rewards",
+        "responses": {
+          "200": { "description": "Success" }
+        }
+      }
+    }
+  }
+}

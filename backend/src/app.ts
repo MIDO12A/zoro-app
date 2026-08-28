@@ -9,6 +9,8 @@ import agencyRoutes from './routes/agencies';
 import rankingRoutes from './routes/rankings';
 import cpRewardRoutes from './routes/cpRewards';
 
+import openapiDoc from './openapi.json';
+
 const app = express();
 
 app.use(cors());
@@ -16,6 +18,38 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Serve OpenAPI Specification JSON for Apidog/Swagger Syncing
+app.get('/swagger.json', (_req, res) => {
+  res.json(openapiDoc);
+});
+
+// Serve interactive Swagger UI documentation using CDN
+app.get('/docs', (_req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zero Backend API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: '/swagger.json',
+        dom_id: '#swagger-ui',
+      });
+    };
+  </script>
+</body>
+</html>
+  `);
 });
 
 app.use('/api/v1/auth', authRoutes);
