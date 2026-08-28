@@ -1313,6 +1313,14 @@ class StorageBucket {
     return path;
   }
 
+  Future<String> uploadBinary(
+    String path,
+    Uint8List data, {
+    FileOptions? fileOptions,
+  }) async {
+    return upload(path, data, fileOptions: fileOptions);
+  }
+
   String getPublicUrl(String path) {
     final url = _uploadedUrls[path];
     if (url != null && url.isNotEmpty) return url;
@@ -1322,7 +1330,8 @@ class StorageBucket {
 
 class FileOptions {
   final bool upsert;
-  const FileOptions({this.upsert = false});
+  final String? contentType;
+  const FileOptions({this.upsert = false, this.contentType});
 }
 
 /// Realtime-channel shim backed by Firestore snapshot listeners.
