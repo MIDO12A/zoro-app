@@ -100,6 +100,11 @@ const defaultVisuals: ScreenVisuals = {
     identityTitleImg: '',
     badgesTitleImg: '',
     achievementsTitleImg: '',
+    profileFollowIcon: '',
+    profileChatIcon: '',
+    profileGiftIcon: '',
+    profileReportIcon: '',
+    profileEditIcon: '',
   },
   eventInfo: {
     backgroundImage: '',
@@ -1084,6 +1089,51 @@ export default function AppVisualDesigner() {
                         <input type="text" value={currentConfig.achievementsTitleImg || ''} onChange={e => updateField(activeTab, 'achievementsTitleImg', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
                         <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
                           <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'achievementsTitleImg')} />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المتابعة' : 'Follow Icon'}</label>
+                      <div className="flex gap-2">
+                        <input type="text" value={currentConfig.profileFollowIcon || ''} onChange={e => updateField(activeTab, 'profileFollowIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileFollowIcon')} />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة المحادثة' : 'Chat Icon'}</label>
+                      <div className="flex gap-2">
+                        <input type="text" value={currentConfig.profileChatIcon || ''} onChange={e => updateField(activeTab, 'profileChatIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileChatIcon')} />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإهداء' : 'Gift Icon'}</label>
+                      <div className="flex gap-2">
+                        <input type="text" value={currentConfig.profileGiftIcon || ''} onChange={e => updateField(activeTab, 'profileGiftIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileGiftIcon')} />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة الإبلاغ' : 'Report Icon'}</label>
+                      <div className="flex gap-2">
+                        <input type="text" value={currentConfig.profileReportIcon || ''} onChange={e => updateField(activeTab, 'profileReportIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileReportIcon')} />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] uppercase text-slate-400 font-bold">{lang === 'ar' ? 'أيقونة التعديل' : 'Edit Icon'}</label>
+                      <div className="flex gap-2">
+                        <input type="text" value={currentConfig.profileEditIcon || ''} onChange={e => updateField(activeTab, 'profileEditIcon', e.target.value)} className="flex-1 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white" />
+                        <label className="cursor-pointer px-3 py-1.5 bg-indigo-600/20 text-indigo-400 rounded-lg flex items-center justify-center">
+                          <Upload className="w-4 h-4" /><input type="file" className="hidden" onChange={e => e.target.files?.[0] && handleImageUpload(e.target.files[0], activeTab, 'profileEditIcon')} />
                         </label>
                       </div>
                     </div>

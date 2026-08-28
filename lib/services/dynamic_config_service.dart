@@ -210,6 +210,13 @@ class DynamicConfigService extends ChangeNotifier {
   String get miniprofileIdentityTitleImg => _rawConfig['userProfile']?['identityTitleImg']?.toString() ?? '';
   String get miniprofileBadgesTitleImg => _rawConfig['userProfile']?['badgesTitleImg']?.toString() ?? '';
   String get miniprofileAchievementsTitleImg => _rawConfig['userProfile']?['achievementsTitleImg']?.toString() ?? '';
+  
+  // Profile Icons
+  String get miniprofileFollowIcon => _rawConfig['userProfile']?['profileFollowIcon']?.toString() ?? '';
+  String get miniprofileChatIcon => _rawConfig['userProfile']?['profileChatIcon']?.toString() ?? '';
+  String get miniprofileGiftIcon => _rawConfig['userProfile']?['profileGiftIcon']?.toString() ?? '';
+  String get miniprofileReportIcon => _rawConfig['userProfile']?['profileReportIcon']?.toString() ?? '';
+  String get miniprofileEditIcon => _rawConfig['userProfile']?['profileEditIcon']?.toString() ?? '';
 
 
   // Getters

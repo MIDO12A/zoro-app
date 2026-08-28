@@ -231,7 +231,17 @@ class _UserProfileState extends State<UserProfile> {
                         _showReportDialog();
                       }
                     },
-                    child: Icon(widget.isCurrentUser ? Icons.edit_square : Icons.report_problem_outlined, color: Colors.white, size: 24),
+                    child: Builder(builder: (ctx) {
+                      if (widget.isCurrentUser) {
+                        return config.miniprofileEditIcon.isNotEmpty
+                            ? Image(image: R.cachedImage(config.miniprofileEditIcon), width: 24, height: 24, color: Colors.white)
+                            : const Icon(Icons.edit_square, color: Colors.white, size: 24);
+                      } else {
+                        return config.miniprofileReportIcon.isNotEmpty
+                            ? Image(image: R.cachedImage(config.miniprofileReportIcon), width: 24, height: 24, color: Colors.white)
+                            : const Icon(Icons.report_problem_outlined, color: Colors.white, size: 24);
+                      }
+                    }),
                   ),
                   GestureDetector(
                     onTap: widget.onViewProfile,
@@ -259,7 +269,7 @@ class _UserProfileState extends State<UserProfile> {
                   children: [
                     if (widget.showMicControls) _buildMicOperate(),
                     if (widget.showMicControls) const SizedBox(height: 12),
-                    _buildOperateRow(),
+                    _buildOperateRow(config),
                   ],
                 ),
               ),
@@ -766,7 +776,7 @@ class _UserProfileState extends State<UserProfile> {
     ],
   );
 
-  Widget _buildOperateRow() {
+  Widget _buildOperateRow(DynamicConfigService config) {
     if (widget.isCurrentUser) {
       return const SizedBox();
     }
@@ -786,11 +796,13 @@ class _UserProfileState extends State<UserProfile> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    widget.isFollowed ? Icons.favorite : Icons.favorite_border,
-                    color: widget.isFollowed ? Colors.red : const Color(0xFF16151A),
-                    size: 16,
-                  ),
+                  config.miniprofileFollowIcon.isNotEmpty && !widget.isFollowed
+                      ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 16, height: 16, color: const Color(0xFF16151A))
+                      : Icon(
+                          widget.isFollowed ? Icons.favorite : Icons.favorite_border,
+                          color: widget.isFollowed ? Colors.red : const Color(0xFF16151A),
+                          size: 16,
+                        ),
                   const SizedBox(width: 4),
                   Text(
                     widget.isFollowed ? 'Following' : 'Follow',
@@ -808,10 +820,24 @@ class _UserProfileState extends State<UserProfile> {
           child: GestureDetector(
             onTap: widget.onChat,
             child: _opBtn(
-              icon: R.roomUserChatIc,
+              icon: config.miniprofileChatIcon.isNotEmpty ? config.miniprofileChatIcon : R.roomUserChatIc,
+              isNetworkIcon: config.miniprofileChatIcon.isNotEmpty,
               label: 'Chat',
-              marginStart: 4,
-              marginEnd: 4,
+              marginStart: 2,
+              marginEnd: 2,
+            ),
+          ),
+        ),
+        Expanded(
+          child: GestureDetector(
+            onTap: widget.onGift,
+            child: _opBtn(
+              icon: config.miniprofileGiftIcon,
+              isNetworkIcon: config.miniprofileGiftIcon.isNotEmpty,
+              fallbackIcon: Icons.card_giftcard,
+              label: 'Gift',
+              marginStart: 2,
+              marginEnd: 0,
             ),
           ),
         ),
@@ -821,6 +847,8 @@ class _UserProfileState extends State<UserProfile> {
 
   Widget _opBtn({
     required String icon,
+    bool isNetworkIcon = false,
+    IconData? fallbackIcon,
     required String label,
     double marginStart = 0,
     double marginEnd = 0,
@@ -834,12 +862,12 @@ class _UserProfileState extends State<UserProfile> {
     child: Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Image.asset(
-          icon,
-          width: 16,
-          height: 16,
-          errorBuilder: (_, __, ___) => const SizedBox(),
-        ),
+        if (icon.isNotEmpty && isNetworkIcon)
+          Image(image: R.cachedImage(icon), width: 16, height: 16, errorBuilder: (_, __, ___) => fallbackIcon != null ? Icon(fallbackIcon, size: 16, color: const Color(0xFF16151A)) : const SizedBox())
+        else if (icon.isNotEmpty && !isNetworkIcon)
+          Image.asset(icon, width: 16, height: 16, errorBuilder: (_, __, ___) => fallbackIcon != null ? Icon(fallbackIcon, size: 16, color: const Color(0xFF16151A)) : const SizedBox())
+        else if (fallbackIcon != null)
+          Icon(fallbackIcon, size: 16, color: const Color(0xFF16151A)),
         const SizedBox(width: 4),
         Text(
           label,
