@@ -63,13 +63,28 @@ class _AgencyInviteByIdScreenState extends State<AgencyInviteByIdScreen> {
       // 1. Resolve custom numeric ID to Firebase UID if possible
       String uidToSearch = id;
       try {
-        final q1 = await FirebaseFirestore.instance.collection('users').where('custom_id', isEqualTo: id).limit(1).get();
-        if (q1.docs.isNotEmpty) {
-          uidToSearch = q1.docs.first.id;
+        final intId = int.tryParse(id);
+        
+        // Try string custom_id
+        var query = await FirebaseFirestore.instance.collection('users').where('custom_id', isEqualTo: id).limit(1).get();
+        
+        // Try integer custom_id if string fails
+        if (query.docs.isEmpty && intId != null) {
+          query = await FirebaseFirestore.instance.collection('users').where('custom_id', isEqualTo: intId).limit(1).get();
+        }
+        
+        if (query.docs.isNotEmpty) {
+          uidToSearch = query.docs.first.id;
         } else {
-          final q2 = await FirebaseFirestore.instance.collection('users').where('customId', isEqualTo: id).limit(1).get();
-          if (q2.docs.isNotEmpty) {
-            uidToSearch = q2.docs.first.id;
+          // Try string customId
+          query = await FirebaseFirestore.instance.collection('users').where('customId', isEqualTo: id).limit(1).get();
+          // Try int customId
+          if (query.docs.isEmpty && intId != null) {
+            query = await FirebaseFirestore.instance.collection('users').where('customId', isEqualTo: intId).limit(1).get();
+          }
+          
+          if (query.docs.isNotEmpty) {
+            uidToSearch = query.docs.first.id;
           } else {
             // Also try direct document ID
             final doc = await FirebaseFirestore.instance.collection('users').doc(id).get();
