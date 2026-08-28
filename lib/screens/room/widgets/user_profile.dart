@@ -688,8 +688,10 @@ class _UserProfileState extends State<UserProfile> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (userCover.endsWith('.svga'))
-                      SvgaPlayer(assetPath: userCover, fit: BoxFit.cover)
+                    if (detectAssetType(userCover) == AssetType.svga)
+                      SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
+                    else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
+                      VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
                     else
                       Image(
                         image: R.cachedImage(userCover),
