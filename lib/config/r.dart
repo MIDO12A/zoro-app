@@ -10,6 +10,7 @@ import '../core/widgets/cached_image.dart';
 enum AssetType { svga, vap, mp4, webp, gif, png, other }
 
 AssetType detectAssetType(String url) {
+  if (url.isEmpty) return AssetType.other;
   final match = RegExp(r'[?&]assetType=(\w+)', caseSensitive: false).firstMatch(url);
   if (match != null) {
     switch (match.group(1)!.toLowerCase()) {
@@ -21,13 +22,17 @@ AssetType detectAssetType(String url) {
       case 'png': return AssetType.png;
     }
   }
-  final lower = url.toLowerCase();
-  if (lower.endsWith('.svga')) return AssetType.svga;
-  if (lower.endsWith('.vap')) return AssetType.vap;
-  if (lower.endsWith('.mp4')) return AssetType.mp4;
-  if (lower.endsWith('.webp')) return AssetType.webp;
-  if (lower.endsWith('.gif')) return AssetType.gif;
-  if (lower.endsWith('.png')) return AssetType.png;
+  final clean = url.split('?')[0].split('#')[0].toLowerCase();
+  if (clean.endsWith('.svga')) return AssetType.svga;
+  if (clean.endsWith('.vap')) return AssetType.vap;
+  if (clean.endsWith('.mp4')) return AssetType.mp4;
+  if (clean.endsWith('.webp')) return AssetType.webp;
+  if (clean.endsWith('.gif')) return AssetType.gif;
+  if (clean.endsWith('.png')) return AssetType.png;
+  if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return AssetType.png;
+  if (clean.contains('.svga')) return AssetType.svga;
+  if (clean.contains('.vap')) return AssetType.vap;
+  if (clean.contains('.mp4')) return AssetType.mp4;
   return AssetType.other;
 }
 

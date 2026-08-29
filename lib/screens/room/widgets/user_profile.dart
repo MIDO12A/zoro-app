@@ -88,14 +88,21 @@ class _UserProfileState extends State<UserProfile> {
     if (uid == null || uid.isEmpty) return;
     try {
       final svc = SupabaseService();
-      final userData = await Supabase.instance.client
-          .from('users')
-          .select('custom_id, active_frame, active_cover, profile_bg_url, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces, country, country_code')
-          .eq('uid', uid)
-          .maybeSingle();
-      if (userData != null) {
-        _extraUserData = userData;
+      // 1. Fetch user model directly from service
+      final userObj = await svc.getUser(uid);
+      if (userObj != null) {
+        _extraUserData.addAll(userObj.toMap());
       }
+      try {
+        final userData = await Supabase.instance.client
+            .from('users')
+            .select('custom_id, active_frame, active_cover, profile_bg_url, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces, country, country_code')
+            .eq('uid', uid)
+            .maybeSingle();
+        if (userData != null) {
+          _extraUserData.addAll(userData);
+        }
+      } catch (_) {}
 
       // Load received gifts
       try {
@@ -121,6 +128,19 @@ class _UserProfileState extends State<UserProfile> {
       } catch (_) {}
 
       // Load store items to resolve itemId -> svgaAsset / videoAsset URL
+      try {
+        final storeList = await svc.getStoreItems();
+        for (final item in storeList) {
+          final anim = (item.videoAsset != null && item.videoAsset!.isNotEmpty)
+              ? item.videoAsset!
+              : (item.svgaAsset != null && item.svgaAsset!.isNotEmpty)
+                  ? item.svgaAsset!
+                  : item.iconAsset;
+          if (anim.isNotEmpty) {
+            _storeSvgaMap[item.itemId] = anim;
+          }
+        }
+      } catch (_) {}
       try {
         final storeItems = await Supabase.instance.client
             .from('store_items')
