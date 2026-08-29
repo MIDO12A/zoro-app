@@ -412,14 +412,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   String _resolveSvga(String itemId) {
-    if (itemId.startsWith('http://') || itemId.startsWith('https://')) return itemId;
+    if (itemId.isEmpty) return '';
+    if (itemId.startsWith('http://') || itemId.startsWith('https://') || itemId.startsWith('assets/')) return itemId;
     if (_storeSvgaMap.containsKey(itemId)) return _storeSvgaMap[itemId]!;
     final storeItem = supabase.getStoreItemSync(itemId);
-    if (storeItem?.svgaAsset != null && storeItem!.svgaAsset!.isNotEmpty) {
-      _storeSvgaMap[itemId] = storeItem.svgaAsset!;
-      return storeItem.svgaAsset!;
+    if (storeItem != null) {
+      final anim = (storeItem.videoAsset != null && storeItem.videoAsset!.isNotEmpty)
+          ? storeItem.videoAsset!
+          : (storeItem.svgaAsset != null && storeItem.svgaAsset!.isNotEmpty)
+              ? storeItem.svgaAsset!
+              : (storeItem.iconAsset.isNotEmpty ? storeItem.iconAsset : '');
+      if (anim.isNotEmpty) {
+        _storeSvgaMap[itemId] = anim;
+        return anim;
+      }
     }
-    if (itemId.startsWith('assets/')) return itemId;
     return itemId;
   }
 

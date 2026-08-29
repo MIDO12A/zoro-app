@@ -120,17 +120,23 @@ class _UserProfileState extends State<UserProfile> {
         _visitorsCount = visitorsList.length;
       } catch (_) {}
 
-      // Load store items to resolve itemId -> svgaAsset URL
+      // Load store items to resolve itemId -> svgaAsset / videoAsset URL
       try {
         final storeItems = await Supabase.instance.client
             .from('store_items')
-            .select('item_id, svga_asset');
+            .select('item_id, id, svga_asset, video_asset, icon_asset');
         if (storeItems != null) {
           for (final item in (storeItems as List)) {
-            final id = item['item_id']?.toString();
-            final svga = item['svga_asset']?.toString();
-            if (id != null && svga != null && svga.isNotEmpty) {
-              _storeSvgaMap[id] = svga;
+            final id = item['item_id']?.toString() ?? item['id']?.toString();
+            final docId = item['id']?.toString();
+            final asset = (item['video_asset']?.toString().isNotEmpty == true)
+                ? item['video_asset'].toString()
+                : (item['svga_asset']?.toString().isNotEmpty == true)
+                    ? item['svga_asset'].toString()
+                    : item['icon_asset']?.toString();
+            if (asset != null && asset.isNotEmpty) {
+              if (id != null) _storeSvgaMap[id] = asset;
+              if (docId != null) _storeSvgaMap[docId] = asset;
             }
           }
         }
@@ -142,10 +148,26 @@ class _UserProfileState extends State<UserProfile> {
   }
 
   String _resolveSvga(String itemId) {
+    if (itemId.isEmpty) return '';
     if (itemId.startsWith('http://') || itemId.startsWith('https://') || itemId.startsWith('assets/')) {
       return itemId;
     }
-    return _storeSvgaMap[itemId] ?? itemId;
+    if (_storeSvgaMap.containsKey(itemId)) {
+      return _storeSvgaMap[itemId]!;
+    }
+    final storeItem = SupabaseService().getStoreItemSync(itemId);
+    if (storeItem != null) {
+      final anim = (storeItem.videoAsset != null && storeItem.videoAsset!.isNotEmpty)
+          ? storeItem.videoAsset!
+          : (storeItem.svgaAsset != null && storeItem.svgaAsset!.isNotEmpty)
+              ? storeItem.svgaAsset!
+              : storeItem.iconAsset;
+      if (anim.isNotEmpty) {
+        _storeSvgaMap[itemId] = anim;
+        return anim;
+      }
+    }
+    return itemId;
   }
 
   String _formatCount(int count) {
@@ -192,12 +214,13 @@ class _UserProfileState extends State<UserProfile> {
     final subTextColor = config.miniprofileSubTextColor;
     final btnColor = config.miniprofileButtonColor;
 
-    final userCover = _extraUserData['profile_bg_url']?.toString() ??
+    final rawUserCover = _extraUserData['profile_bg_url']?.toString() ??
         _extraUserData['active_cover']?.toString() ??
         widget.user['profile_bg_url']?.toString() ??
         widget.user['active_cover']?.toString() ??
         widget.user['cover']?.toString() ??
         '';
+    final userCover = _resolveSvga(rawUserCover);
     final hasUserCover = userCover.isNotEmpty;
 
     return Stack(
