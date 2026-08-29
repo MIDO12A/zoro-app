@@ -237,15 +237,19 @@ class _UserProfileState extends State<UserProfile> {
     final cardBgColor = config.miniprofileBgColor;
     final cardBorderColor = config.miniprofileBorderColor;
     final textColor = config.miniprofileTextColor;
-    final subTextColor = config.miniprofileSubTextColor;
-    final btnColor = config.miniprofileButtonColor;
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final isMe = widget.isCurrentUser || (currentUser != null && (widget.user['uid'] == currentUser.uid || widget.user['id'] == currentUser.uid));
 
-    final rawUserCover = _extraUserData['profile_bg_url']?.toString() ??
-        _extraUserData['active_cover']?.toString() ??
-        widget.user['profile_bg_url']?.toString() ??
-        widget.user['active_cover']?.toString() ??
-        widget.user['cover']?.toString() ??
-        '';
+    final rawUserCover = (isMe && currentUser?.profileBgUrl != null && currentUser!.profileBgUrl!.isNotEmpty)
+        ? currentUser.profileBgUrl!
+        : (isMe && currentUser?.activeCover != null && currentUser!.activeCover!.isNotEmpty)
+            ? currentUser.activeCover!
+            : _extraUserData['profile_bg_url']?.toString() ??
+                _extraUserData['active_cover']?.toString() ??
+                widget.user['profile_bg_url']?.toString() ??
+                widget.user['active_cover']?.toString() ??
+                widget.user['cover']?.toString() ??
+                '';
     final userCover = _resolveSvga(rawUserCover);
     final hasUserCover = userCover.isNotEmpty;
 
@@ -257,15 +261,8 @@ class _UserProfileState extends State<UserProfile> {
         Container(
           width: double.infinity,
           margin: const EdgeInsets.only(top: 36),
-          padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
           decoration: BoxDecoration(
             color: cardBgColor,
-            image: (!hasUserCover && config.miniprofileBgImage.isNotEmpty)
-                ? DecorationImage(
-                    image: R.cachedImage(config.miniprofileBgImage),
-                    fit: BoxFit.cover,
-                  )
-                : null,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             border: Border.all(color: cardBorderColor, width: 1),
             boxShadow: [
@@ -276,10 +273,64 @@ class _UserProfileState extends State<UserProfile> {
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 1. User Name & Gender & VIP Badge
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            child: Stack(
+              children: [
+                // Background cover header banner
+                if (hasUserCover)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: SizedBox(
+                      height: 140,
+                      width: double.infinity,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (detectAssetType(userCover) == AssetType.svga)
+                            SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
+                          else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
+                            VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
+                          else
+                            Image(
+                              image: R.cachedImage(userCover),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const SizedBox(),
+                            ),
+                          Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  Colors.transparent,
+                                  cardBgColor.withOpacity(0.7),
+                                  cardBgColor,
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (config.miniprofileBgImage.isNotEmpty)
+                  Positioned.fill(
+                    child: Image(
+                      image: R.cachedImage(config.miniprofileBgImage),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+
+                // Card Content
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 1. User Name & Gender & VIP Badge
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -680,54 +731,13 @@ class _UserProfileState extends State<UserProfile> {
                       onTap: widget.onFollow,
                     ),
                   ],
+                    ],
+                  ),
                 ),
               ],
-            ],
-          ),
-        ),
-
-        // User Custom Cover Banner (Top Header)
-        if (hasUserCover)
-          Positioned(
-            top: 36,
-            left: 0,
-            right: 0,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: SizedBox(
-                height: 110,
-                width: double.infinity,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (detectAssetType(userCover) == AssetType.svga)
-                      SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
-                    else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
-                      VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
-                    else
-                      Image(
-                        image: R.cachedImage(userCover),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const SizedBox(),
-                      ),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            cardBgColor.withOpacity(0.5),
-                            cardBgColor,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ),
           ),
+        ),
 
         // Centered Avatar
         Positioned(

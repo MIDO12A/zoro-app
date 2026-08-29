@@ -245,7 +245,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             _allOwnedFrames = allOwnedFList;
             _currentRoomId = roomId;
             _giftsCatalog = giftsCat;
-            _profileBgUrl = extraUserData?['profile_bg_url']?.toString();
+            _profileBgUrl = extraUserData?['profile_bg_url']?.toString() ?? targetUser?.profileBgUrl ?? targetUser?.activeCover;
             _activeFrame = resolvedFrame;
             _ownedLevelFrames = resolvedFrames;
             _userAgency = userAgency;
