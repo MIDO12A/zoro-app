@@ -281,43 +281,36 @@ class _UserProfileState extends State<UserProfile> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             child: Stack(
               children: [
-                // Background cover header banner
+                // Full Background User Cover (replaces default appearance completely)
                 if (hasUserCover)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: SizedBox(
-                      height: 140,
-                      width: double.infinity,
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          if (detectAssetType(userCover) == AssetType.svga)
-                            SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
-                          else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
-                            VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
-                          else
-                            Image(
-                              image: R.cachedImage(userCover),
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const SizedBox(),
-                            ),
-                          Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Colors.transparent,
-                                  cardBgColor.withOpacity(0.7),
-                                  cardBgColor,
-                                ],
-                              ),
+                  Positioned.fill(
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (detectAssetType(userCover) == AssetType.svga)
+                          SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
+                        else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
+                          VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
+                        else
+                          Image(
+                            image: R.cachedImage(userCover),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox(),
+                          ),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.black.withOpacity(0.20),
+                                Colors.black.withOpacity(0.45),
+                                Colors.black.withOpacity(0.75),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   )
                 else if (config.miniprofileBgImage.isNotEmpty)

@@ -596,11 +596,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget _buildNewProfileHeader(DynamicConfigService config, UserModel? user) {
     final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
     final isOwnProfile = widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid);
-    final coverUrl = (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
+    final coverRaw = (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
         ? _profileBgUrl!
-        : (user?.activeCover != null && user!.activeCover!.isNotEmpty)
-            ? user!.activeCover!
-            : '';
+        : (user?.profileBgUrl != null && user!.profileBgUrl!.isNotEmpty)
+            ? user!.profileBgUrl!
+            : (user?.activeCover != null && user!.activeCover!.isNotEmpty)
+                ? user!.activeCover!
+                : '';
+    final coverUrl = _resolveSvga(coverRaw);
     final hasCover = coverUrl.isNotEmpty;
     final coverType = hasCover ? detectAssetType(coverUrl) : AssetType.other;
 
