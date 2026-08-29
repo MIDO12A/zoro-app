@@ -823,6 +823,13 @@ class FirebaseService {
     });
   }
 
+  Future<List<StoreItemModel>> getStoreItems() async {
+    final snap = await _db.collection('store_items').get();
+    final items = snap.docs.map((e) => StoreItemModel.fromMap(_data(e))).toList();
+    _storeItems = {for (final item in items) item.itemId: item};
+    return items;
+  }
+
   StoreItemModel? getStoreItemSync(String itemId) => _storeItems[itemId];
 
   Stream<List<BannerConfig>> bannersStream() {
