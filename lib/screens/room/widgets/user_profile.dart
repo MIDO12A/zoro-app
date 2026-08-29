@@ -11,7 +11,6 @@ import '../../../core/supabase_compat.dart';
 import '../../../core/widgets/cached_image.dart';
 import '../../../models/gift_model.dart' as gm;
 import '../../user_profile/user_profile_screen.dart';
-import '../../message/chat_screen.dart';
 import 'svga_frame.dart';
 import 'svga_player.dart';
 import 'vap_player.dart';
