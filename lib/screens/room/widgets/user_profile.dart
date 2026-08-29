@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../../providers/user_provider.dart';
 import '../../../config/r.dart';
 import '../../../config/app_colors.dart';
 import '../../../services/level_service.dart';
@@ -9,6 +11,7 @@ import '../../../core/supabase_compat.dart';
 import '../../../core/widgets/cached_image.dart';
 import '../../../models/gift_model.dart' as gm;
 import '../../user_profile/user_profile_screen.dart';
+import '../../message/chat_screen.dart';
 import 'svga_frame.dart';
 import 'svga_player.dart';
 import 'vap_player.dart';
@@ -237,6 +240,8 @@ class _UserProfileState extends State<UserProfile> {
     final cardBgColor = config.miniprofileBgColor;
     final cardBorderColor = config.miniprofileBorderColor;
     final textColor = config.miniprofileTextColor;
+    final subTextColor = config.miniprofileSubTextColor;
+    final btnColor = config.miniprofileButtonColor;
     final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
     final isMe = widget.isCurrentUser || (currentUser != null && (widget.user['uid'] == currentUser.uid || widget.user['id'] == currentUser.uid));
 
@@ -731,13 +736,15 @@ class _UserProfileState extends State<UserProfile> {
                       onTap: widget.onFollow,
                     ),
                   ],
-                    ],
-                  ),
                 ),
               ],
-            ),
+            ],
           ),
         ),
+      ],
+    ),
+  ),
+),
 
         // Centered Avatar
         Positioned(
