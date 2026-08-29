@@ -233,10 +233,13 @@ class FirebaseService {
     final doc = await _db.collection('rooms').doc(roomId).get();
     if (!doc.exists) return;
     final d = doc.data() ?? {};
-    final mods = List<String>.from(d['moderator_uids'] ?? []);
+    final mods = List<String>.from(d['moderators'] ?? d['moderator_uids'] ?? []);
     if (!mods.contains(uid)) {
       mods.add(uid);
-      await _db.collection('rooms').doc(roomId).update({'moderator_uids': mods});
+      await _db.collection('rooms').doc(roomId).update({
+        'moderators': mods,
+        'moderator_uids': mods,
+      });
     }
   }
 
@@ -244,9 +247,12 @@ class FirebaseService {
     final doc = await _db.collection('rooms').doc(roomId).get();
     if (!doc.exists) return;
     final d = doc.data() ?? {};
-    final mods = List<String>.from(d['moderator_uids'] ?? []);
+    final mods = List<String>.from(d['moderators'] ?? d['moderator_uids'] ?? []);
     mods.remove(uid);
-    await _db.collection('rooms').doc(roomId).update({'moderator_uids': mods});
+    await _db.collection('rooms').doc(roomId).update({
+      'moderators': mods,
+      'moderator_uids': mods,
+    });
   }
 
   // ═══════════════════════════════════════════════════════

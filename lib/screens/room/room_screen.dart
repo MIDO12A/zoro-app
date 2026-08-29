@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'widgets/nine_patch_image.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
