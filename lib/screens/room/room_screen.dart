@@ -1649,6 +1649,8 @@ class _RoomScreenState extends State<RoomScreen> {
                 isCurrentUser: _selectedUser?.id == _currentUserId,
                 isFollowed: _selectedUser?.id != null && _followedUsers.contains(_selectedUser!.id!),
                 isModerator: _isOwnerOrModerator,
+                isRoomOwner: _isOwner,
+                isTargetModerator: _selectedUser?.id != null && _moderators.contains(_selectedUser!.id!),
                 isBlocked: _selectedUser?.id != null && _blockedUsers.contains(_selectedUser!.id!),
                 currentUserId: _currentUserId,
                 onClose: () => setState(() {
@@ -1660,6 +1662,33 @@ class _RoomScreenState extends State<RoomScreen> {
                   Navigator.push(context, MaterialPageRoute(
                     builder: (_) => UserProfileScreen(targetUid: _selectedUser!.id),
                   ));
+                },
+                onToggleAdmin: () async {
+                  final targetUid = _selectedUser?.id;
+                  if (targetUid == null) return;
+                  final isMod = _moderators.contains(targetUid);
+                  try {
+                    if (isMod) {
+                      await FirebaseFirestore.instance.collection('rooms').doc(widget.roomId).update({
+                        'moderators': FieldValue.arrayRemove([targetUid]),
+                      });
+                      setState(() => _moderators.remove(targetUid));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('تم إلغاء إشراف ${_selectedUser?.name}')),
+                      );
+                    } else {
+                      await FirebaseFirestore.instance.collection('rooms').doc(widget.roomId).update({
+                        'moderators': FieldValue.arrayUnion([targetUid]),
+                      });
+                      setState(() => _moderators.add(targetUid));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('تم تعيين ${_selectedUser?.name} كمشرف في الغرفة 👑')),
+                      );
+                    }
+                  } catch (e) {
+                    debugPrint('Error toggling moderator: $e');
+                  }
+                  setState(() => _showProfile = false);
                 },
                 onFollow: () {
                   final userId = _selectedUser?.id;

@@ -20,6 +20,8 @@ class UserProfile extends StatefulWidget {
   final bool isCurrentUser;
   final bool isFollowed;
   final bool isModerator;
+  final bool isRoomOwner;
+  final bool isTargetModerator;
   final bool isBlocked;
   final String? currentUserId;
   final VoidCallback? onClose;
@@ -35,6 +37,7 @@ class UserProfile extends StatefulWidget {
   final VoidCallback? onUnblock;
   final VoidCallback? onKick;
   final VoidCallback? onMute;
+  final VoidCallback? onToggleAdmin;
 
   const UserProfile({
     super.key,
@@ -43,6 +46,8 @@ class UserProfile extends StatefulWidget {
     this.isCurrentUser = false,
     this.isFollowed = false,
     this.isModerator = false,
+    this.isRoomOwner = false,
+    this.isTargetModerator = false,
     this.isBlocked = false,
     this.currentUserId,
     this.onClose,
@@ -58,6 +63,7 @@ class UserProfile extends StatefulWidget {
     this.onUnblock,
     this.onKick,
     this.onMute,
+    this.onToggleAdmin,
   });
 
   @override
@@ -570,44 +576,7 @@ class _UserProfileState extends State<UserProfile> {
               ],
 
               // 7. Bottom Action Buttons Bar
-              if (widget.isCurrentUser) ...[
-                GestureDetector(
-                  onTap: () {
-                    widget.onClose?.call();
-                    if (widget.onViewProfile != null) {
-                      widget.onViewProfile!();
-                    } else {
-                      final targetId = widget.user['id']?.toString() ?? widget.user['uid']?.toString();
-                      if (targetId != null) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => UserProfileScreen(targetUid: targetId)),
-                        );
-                      }
-                    }
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: btnColor,
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFE8BD56), Color(0xFFC99427)],
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Text(
-                      'عرض الملف الشخصي',
-                      style: TextStyle(
-                        color: Color(0xFF1A1408),
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ] else ...[
+              if (!widget.isCurrentUser) ...[
                 Row(
                   children: [
                     // Main Golden Gift Button
@@ -909,33 +878,36 @@ class _UserProfileState extends State<UserProfile> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.person_outline, color: Colors.white),
-              title: const Text('عرض الملف الشخصي الكامل', style: TextStyle(color: Colors.white)),
-              onTap: () {
-                Navigator.pop(ctx);
-                widget.onClose?.call();
-                widget.onViewProfile?.call();
-              },
-            ),
             if (!widget.isCurrentUser) ...[
-              ListTile(
-                leading: const Icon(Icons.report_problem_outlined, color: Colors.orangeAccent),
-                title: const Text('إبلاغ عن المستخدم', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showReportDialog();
-                },
-              ),
+              // 1. Assign / Remove Admin/Moderator (تعيين كأدمن / مشرف)
+              if (widget.isRoomOwner || widget.isModerator)
+                ListTile(
+                  leading: Icon(
+                    widget.isTargetModerator ? Icons.admin_panel_settings : Icons.admin_panel_settings_outlined,
+                    color: Colors.amber,
+                  ),
+                  title: Text(
+                    widget.isTargetModerator ? 'إلغاء الإشراف في الغرفة' : 'تعيين كأدمن / مشرف في الغرفة',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    widget.onToggleAdmin?.call();
+                  },
+                ),
+
+              // 2. Mute in Room (كتم في الغرفة)
               if (widget.isModerator)
                 ListTile(
-                  leading: const Icon(Icons.volume_off_outlined, color: Colors.amber),
+                  leading: const Icon(Icons.volume_off_outlined, color: Colors.amberAccent),
                   title: const Text('كتم في الغرفة', style: TextStyle(color: Colors.white)),
                   onTap: () {
                     Navigator.pop(ctx);
                     widget.onMute?.call();
                   },
                 ),
+
+              // 3. Kick from Room (طرد من الغرفة)
               if (widget.isModerator)
                 ListTile(
                   leading: const Icon(Icons.exit_to_app, color: Colors.redAccent),
@@ -945,6 +917,41 @@ class _UserProfileState extends State<UserProfile> {
                     widget.onKick?.call();
                   },
                 ),
+
+              // 4. Block / Unblock User (حظر / إلغاء حظر)
+              ListTile(
+                leading: Icon(
+                  widget.isBlocked ? Icons.lock_open : Icons.block,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  widget.isBlocked ? 'إلغاء حظر المستخدم' : 'حظر المستخدم',
+                  style: const TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  if (widget.isBlocked) {
+                    widget.onUnblock?.call();
+                  } else {
+                    widget.onBlock?.call();
+                  }
+                },
+              ),
+
+              // 5. Report User (إبلاغ عن المستخدم)
+              ListTile(
+                leading: const Icon(Icons.report_problem_outlined, color: Colors.orangeAccent),
+                title: const Text('إبلاغ عن المستخدم', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showReportDialog();
+                },
+              ),
+            ] else ...[
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('خيارات المستخدم', style: TextStyle(color: Colors.white54, fontSize: 13)),
+              ),
             ],
           ],
         ),
