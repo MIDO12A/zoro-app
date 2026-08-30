@@ -181,14 +181,35 @@ class SupabaseClient {
       return {'status': 'error'};
     }
     
-    // First attempt: Search by customId
-    var snap = await _db
+    // Comprehensive search: custom_id (string/int), customId (string/int), id, uid
+    final intId = int.tryParse(kayanId);
+    QuerySnapshot<Map<String, dynamic>> snap = await _db
         .collection('users')
-        .where('customId', isEqualTo: kayanId)
+        .where('custom_id', isEqualTo: kayanId)
         .limit(1)
         .get();
         
-    // Second attempt: Search by id if customId not found
+    if (snap.docs.isEmpty && intId != null) {
+      snap = await _db
+          .collection('users')
+          .where('custom_id', isEqualTo: intId)
+          .limit(1)
+          .get();
+    }
+    if (snap.docs.isEmpty) {
+      snap = await _db
+          .collection('users')
+          .where('customId', isEqualTo: kayanId)
+          .limit(1)
+          .get();
+    }
+    if (snap.docs.isEmpty && intId != null) {
+      snap = await _db
+          .collection('users')
+          .where('customId', isEqualTo: intId)
+          .limit(1)
+          .get();
+    }
     if (snap.docs.isEmpty) {
       snap = await _db
           .collection('users')
@@ -196,13 +217,27 @@ class SupabaseClient {
           .limit(1)
           .get();
     }
+    if (snap.docs.isEmpty) {
+      final doc = await _db.collection('users').doc(kayanId).get();
+      if (doc.exists && doc.data() != null) {
+        snap = await _db.collection('users').where(FieldPath.documentId, isEqualTo: kayanId).limit(1).get();
+      }
+    }
     
     if (snap.docs.isEmpty) return {'status': 'not_found'};
     
     final targetUid = snap.docs.first.id;
     final userData = snap.docs.first.data();
     
-    // Check if already invited or joined
+    // Check if user is an agent or agency owner (agents cannot be invited as hosts)
+    final isAgent = userData['is_agent'] == true ||
+        userData['role'] == 'agent' ||
+        userData['role'] == 'owner';
+    if (isAgent) {
+      return {'status': 'is_agent'};
+    }
+
+    // Check if already in any agency
     final existingMember = await _db
         .collection('host_agency_members')
         .where('user_id', isEqualTo: targetUid)
@@ -210,7 +245,11 @@ class SupabaseClient {
         .limit(1)
         .get();
     if (existingMember.docs.isNotEmpty) {
-       return {'status': 'already_member'};
+      final currentAgency = existingMember.docs.first.data()['agency_id']?.toString();
+      if (currentAgency == agencyId) {
+        return {'status': 'already_member'};
+      }
+      return {'status': 'in_other_agency'};
     }
 
     final existingRequest = await _db

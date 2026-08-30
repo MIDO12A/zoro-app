@@ -738,7 +738,7 @@ debugPrint('[agency_withdrawal_screen] error: $e');
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Color(0xFF00D4FF))),
-            hintText: 'الاسم أو الكايان ID',
+            hintText: 'ابحث بالاسم أو الـ ID الرقمي للوكيل',
             hintStyle: const TextStyle(color: Colors.white24),
             prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38),
             suffixIcon: _searching
@@ -759,10 +759,11 @@ debugPrint('[agency_withdrawal_screen] error: $e');
               backgroundImage: r['avatar_url'] != null ? EncryptedImageProvider(r['avatar_url'] as String) : null,
               child: r['avatar_url'] == null ? const Icon(Icons.person, color: Color(0xFF00D4FF)) : null,
             ),
-            title: Text(r['display_name'] as String? ?? '—', style: const TextStyle(color: Colors.white)),
+            title: Text(r['display_name'] as String? ?? '—', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             subtitle: r['kayan_id'] != null
-                ? Text('#${r['kayan_id']}', style: const TextStyle(color: Colors.white38, fontSize: 11))
+                ? Text('ID: ${r['kayan_id']}', style: const TextStyle(color: Colors.white54, fontSize: 11))
                 : null,
+            trailing: const Icon(Icons.chevron_left_rounded, color: Colors.white38),
             onTap: () => setState(() {
               _selectedAgent = r;
               _results = [];
@@ -772,30 +773,85 @@ debugPrint('[agency_withdrawal_screen] error: $e');
 
         // الوكيل المختار
         if (_selectedAgent != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: const Color(0xFF00D4FF).withOpacity(0.08),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF00D4FF).withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF00D4FF).withOpacity(0.35)),
             ),
-            child: Row(children: [
-              const Icon(Icons.verified_rounded, color: Color(0xFF00D4FF), size: 18),
-              const SizedBox(width: 8),
-              Text('وكيل مختار: ${_selectedAgent!['display_name']}',
-                  style: const TextStyle(color: Color(0xFF00D4FF), fontWeight: FontWeight.w600)),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => setState(() { _selectedAgent = null; _searchCtrl.clear(); }),
-                child: const Icon(Icons.close_rounded, color: Colors.white38, size: 18),
-              ),
-            ]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: const Color(0xFF00D4FF).withOpacity(0.2),
+                    backgroundImage: _selectedAgent!['avatar_url'] != null
+                        ? EncryptedImageProvider(_selectedAgent!['avatar_url'] as String)
+                        : null,
+                    child: _selectedAgent!['avatar_url'] == null
+                        ? const Icon(Icons.person, color: Color(0xFF00D4FF))
+                        : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('${_selectedAgent!['display_name']}',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text('معرف الوكيل: ${_selectedAgent!['kayan_id'] ?? _selectedAgent!['id']}',
+                            style: const TextStyle(color: Color(0xFF00D4FF), fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() { _selectedAgent = null; _searchCtrl.clear(); }),
+                    child: const Icon(Icons.close_rounded, color: Colors.white38, size: 20),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                // زر التواصل المباشر مع الوكيل
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF00D4FF),
+                      side: const BorderSide(color: Color(0xFF00D4FF)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                    label: const Text('تواصل مع الوكيل لتحويل العملات إليه', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onTap: () {
+                      final agentUid = _selectedAgent!['id']?.toString() ?? _selectedAgent!['user_id']?.toString() ?? '';
+                      final myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
+                      if (agentUid.isNotEmpty && myUid.isNotEmpty) {
+                        final convId = (myUid.compareTo(agentUid) < 0) ? '${myUid}_$agentUid' : '${agentUid}_$myUid';
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => MessageReplyDetailScreen(
+                              conversationId: convId,
+                              otherUid: agentUid,
+                              otherName: _selectedAgent!['display_name']?.toString() ?? 'وكيل الشحن',
+                              otherPhotoUrl: _selectedAgent!['avatar_url']?.toString() ?? '',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
 
         const SizedBox(height: 20),
-        Text('كمية الألماس للتحويل', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+        Text('كمية الرصيد / الألماس للتحويل', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
         const SizedBox(height: 8),
         TextField(
           controller: _diamondsCtrl,
@@ -819,7 +875,7 @@ debugPrint('[agency_withdrawal_screen] error: $e');
             ),
             child: _processing
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                : const Text('تحويل فوري', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                : const Text('تحويل فوري إلى وكيل الشحن', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           ),
         ),
       ]),

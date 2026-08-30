@@ -118,10 +118,12 @@ class _AgencyInviteByIdScreenState extends State<AgencyInviteByIdScreen> {
             _errorMsg = 'تم إرسال الدعوة مسبقاً';
           }
         });
+      } else if (status == 'is_agent') {
+        setState(() => _errorMsg = '⚠️ هذا المستخدم وكيل، لا يمكن دعوته كمضيف');
       } else if (status == 'already_member') {
         setState(() => _errorMsg = '⚠️ هذا المستخدم عضو بالفعل في الوكالة');
       } else if (status == 'in_other_agency') {
-        setState(() => _errorMsg = '⚠️ المستخدم ينتمي لوكالة أخرى');
+        setState(() => _errorMsg = '⚠️ هذا المستخدم منضم بالفعل لوكالة أخرى');
       } else if (status == 'not_found') {
         setState(() => _errorMsg = '❌ لم يُعثر على مستخدم بهذا الـ ID');
       } else if (status == 'not_authenticated') {
@@ -417,7 +419,7 @@ class _AgencyInviteByIdScreenState extends State<AgencyInviteByIdScreen> {
                           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                           decoration: const InputDecoration(
-                            hintText: 'أدخل Kayan ID...',
+                            hintText: 'أدخل المعرف الرقمي (ID)...',
                             hintStyle: TextStyle(color: Colors.white38),
                             border: InputBorder.none,
                           ),
