@@ -597,73 +597,41 @@ class _UserProfileState extends State<UserProfile> {
                 const SizedBox(height: 12),
               ],
 
-              // 7. Bottom Action Buttons Bar
+              // 7. Bottom Action Buttons Bar (Clean, transparent, customizable from control panel)
               if (!widget.isCurrentUser) ...[
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // Main Golden Gift Button
-                    Expanded(
-                      flex: 3,
-                      child: GestureDetector(
-                        onTap: () {
-                          widget.onClose?.call();
-                          widget.onGift?.call();
-                        },
-                        child: Container(
-                          height: 48,
-                          decoration: BoxDecoration(
-                            image: config.miniprofileGiftBtnBg.isNotEmpty
-                                ? DecorationImage(image: R.cachedImage(config.miniprofileGiftBtnBg), fit: BoxFit.fill)
-                                : null,
-                            gradient: config.miniprofileGiftBtnBg.isNotEmpty
-                                ? null
-                                : const LinearGradient(
-                                    colors: [Color(0xFFE8BD56), Color(0xFFC99427)],
-                                  ),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              if (config.miniprofileGiftIcon.isNotEmpty)
-                                Image(image: R.cachedImage(config.miniprofileGiftIcon), width: 22, height: 22, errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 16)))
-                              else
-                                const Text('🎁', style: TextStyle(fontSize: 16)),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'هدية',
-                                style: TextStyle(
-                                  color: Color(0xFF1A1408),
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                    // 1. Gift Button (هدية)
+                    _buildRoundActionBtn(
+                      customBgImg: config.miniprofileGiftBtnBg,
+                      icon: config.miniprofileGiftIcon.isNotEmpty
+                          ? Image(image: R.cachedImage(config.miniprofileGiftIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 24)))
+                          : const Text('🎁', style: TextStyle(fontSize: 24)),
+                      onTap: () {
+                        widget.onClose?.call();
+                        widget.onGift?.call();
+                      },
                     ),
-                    const SizedBox(width: 10),
 
-                    // @ Mention Button
+                    // 2. @ Mention Button
                     _buildRoundActionBtn(
                       customBgImg: config.miniprofileMentionBtnBg,
                       icon: config.miniprofileMentionIcon.isNotEmpty
-                          ? Image(image: R.cachedImage(config.miniprofileMentionIcon), width: 26, height: 26, errorBuilder: (_, __, ___) => const Text('@', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)))
-                          : const Text('@', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          ? Image(image: R.cachedImage(config.miniprofileMentionIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => const Text('@', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)))
+                          : const Text('@', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
                       onTap: () {
                         widget.onClose?.call();
                         widget.onMention?.call();
                       },
                     ),
-                    const SizedBox(width: 10),
 
-                    // Chat/Message Button - Opens direct 1-on-1 private chat
+                    // 3. Chat/Message Button (Direct 1-on-1 private chat with real name and photo)
                     _buildRoundActionBtn(
                       customBgImg: config.miniprofileChatBtnBg,
                       icon: config.miniprofileChatIcon.isNotEmpty
-                          ? Image(image: R.cachedImage(config.miniprofileChatIcon), width: 26, height: 26, errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 22))
-                          : const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 22),
+                          ? Image(image: R.cachedImage(config.miniprofileChatIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 26))
+                          : const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 26),
                       onTap: () {
                         widget.onClose?.call();
                         if (widget.onChat != null) {
@@ -690,17 +658,16 @@ class _UserProfileState extends State<UserProfile> {
                         }
                       },
                     ),
-                    const SizedBox(width: 10),
 
-                    // Follow Button
+                    // 4. Follow Button (متابعة)
                     _buildRoundActionBtn(
                       customBgImg: config.miniprofileFollowBtnBg,
                       icon: config.miniprofileFollowIcon.isNotEmpty && !widget.isFollowed
-                          ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 26, height: 26, errorBuilder: (_, __, ___) => Icon(widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded, color: widget.isFollowed ? Colors.pinkAccent : Colors.white, size: 22))
+                          ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => Icon(widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded, color: widget.isFollowed ? Colors.pinkAccent : Colors.white, size: 26))
                           : Icon(
                               widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded,
                               color: widget.isFollowed ? Colors.pinkAccent : Colors.white,
-                              size: 22,
+                              size: 26,
                             ),
                       onTap: widget.onFollow,
                     ),
@@ -842,8 +809,8 @@ class _UserProfileState extends State<UserProfile> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 48,
-        height: 48,
+        width: 52,
+        height: 52,
         decoration: BoxDecoration(
           color: customBgImg.isNotEmpty ? null : Colors.transparent,
           image: customBgImg.isNotEmpty
