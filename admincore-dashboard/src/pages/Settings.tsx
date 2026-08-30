@@ -12,6 +12,8 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [vipUrl, setVipUrl] = useState('');
   const [vipSaving, setVipSaving] = useState(false);
+  const [supabaseServiceKey, setSupabaseServiceKey] = useState('');
+  const [supabaseSaving, setSupabaseSaving] = useState(false);
 
   useEffect(() => {
     const status = getCloudinaryStatus();

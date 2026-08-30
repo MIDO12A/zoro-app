@@ -395,6 +395,8 @@ const defaultVisuals: ScreenVisuals = {
     textColor: '#ffffff',
     subTextColor: '#9BA1B6',
     buttonColor: '#FFE082',
+    coverHeight: '',
+    coverAspectRatio: '',
   },
   eventInfo: {
     backgroundImage: '',
@@ -457,6 +459,8 @@ const fieldLabels: Record<string, Record<string, string>> = {
   cardBgColor: { ar: 'لون خلفية البطاقة', en: 'Card Background' },
   cardBgImage: { ar: 'صورة خلفية البطاقة', en: 'Card Background Image' },
   cardBorderColor: { ar: 'لون حدود البطاقة', en: 'Card Border Color' },
+  coverHeight: { ar: 'ارتفاع غلاف المستخدم (dp - اتركه فارغاً للاتوماتيكي)', en: 'User Cover Height (dp - empty for auto)' },
+  coverAspectRatio: { ar: 'نسبة عرض:ارتفاع الغلاف (افتراضي 0.45)', en: 'Cover Width:Height Ratio (default 0.45)' },
   cardBorderImage: { ar: 'صورة حدود البطاقة', en: 'Card Border Image' },
   textColor: { ar: 'لون النص', en: 'Text Color' },
   textImage: { ar: 'صورة النص', en: 'Text Image' },

@@ -281,22 +281,26 @@ class _UserProfileState extends State<UserProfile> {
         // Full Background User Cover (extends high above the avatar and spans the entire area)
         if (hasUserCover)
           Positioned(
-            top: -160,
+            top: -config.miniprofileCoverHeight > 0
+                ? -config.miniprofileCoverHeight * 0.22
+                : -160,
             left: 0,
             right: 0,
-            bottom: 0,
+            height: config.miniprofileCoverHeight > 0
+                ? config.miniprofileCoverHeight
+                : MediaQuery.of(context).size.width / config.miniprofileCoverAspectRatio,
             child: IgnorePointer(
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   if (detectAssetType(userCover) == AssetType.svga)
-                    SvgaPlayer(assetPath: userCover, fit: BoxFit.fill, loops: true)
+                    SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
                   else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
-                    VapPlayer(url: userCover, fit: BoxFit.fill, loops: true)
+                    VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
                   else
                     Image(
                       image: R.cachedImage(userCover),
-                      fit: BoxFit.fill,
+                      fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const SizedBox(),
                     ),
                 ],

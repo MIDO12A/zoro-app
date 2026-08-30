@@ -1075,6 +1075,8 @@ class DynamicConfigService extends ChangeNotifier {
   }
   String get customProfileBgImage => _rawConfig['profileBackgroundImage'] as String? ?? '';
   String get profileBgSvga => _rawConfig['profileBgSvga'] as String? ?? '';
+  double get miniprofileCoverHeight => double.tryParse(_screenStr('userProfile', 'coverHeight', '')) ?? 0;
+  double get miniprofileCoverAspectRatio => double.tryParse(_screenStr('userProfile', 'coverAspectRatio', '')) ?? (750 / 1666);
   String get profileSettingsIcon => _rawConfig['profileSettingsIcon'] as String? ?? '';
   String get profileEditIcon => _rawConfig['profileEditIcon'] as String? ?? '';
   String get profileShareIcon => _rawConfig['profileShareIcon'] as String? ?? '';
