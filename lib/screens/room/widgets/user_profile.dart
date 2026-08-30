@@ -231,21 +231,11 @@ class _UserProfileState extends State<UserProfile> {
 
   @override
   Widget build(BuildContext context) {
-    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
-    final isMe = widget.isCurrentUser || (currentUser != null && (widget.user['uid'] == currentUser.uid || widget.user['id'] == currentUser.uid));
-    final rawUserCover = (isMe && currentUser?.activeCover != null && currentUser!.activeCover!.isNotEmpty)
-        ? currentUser.activeCover!
-        : _extraUserData['active_cover']?.toString() ??
-            widget.user['active_cover']?.toString() ??
-            '';
-    final userCover = _resolveSvga(rawUserCover);
-    final hasUserCover = userCover.isNotEmpty;
-
     return GestureDetector(
       onTap: widget.onClose,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        color: hasUserCover ? Colors.transparent : Colors.black45,
+        color: Colors.transparent,
         alignment: Alignment.bottomCenter,
         child: GestureDetector(
           onTap: () {},
@@ -288,10 +278,10 @@ class _UserProfileState extends State<UserProfile> {
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
       children: [
-        // Full Background User Cover (extends fully above the avatar and spans the entire area)
+        // Full Background User Cover (extends high above the avatar and spans the entire area)
         if (hasUserCover)
           Positioned(
-            top: -100,
+            top: -160,
             left: 0,
             right: 0,
             bottom: 0,
@@ -317,7 +307,7 @@ class _UserProfileState extends State<UserProfile> {
         // Main bottom card
         Container(
           width: double.infinity,
-          margin: const EdgeInsets.only(top: 36),
+          margin: const EdgeInsets.only(top: 48),
           decoration: BoxDecoration(
             color: hasUserCover ? Colors.transparent : cardBgColor,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -346,7 +336,7 @@ class _UserProfileState extends State<UserProfile> {
 
                 // Card Content
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 44, 16, 20),
+                  padding: const EdgeInsets.fromLTRB(16, 54, 16, 20),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -682,9 +672,9 @@ class _UserProfileState extends State<UserProfile> {
   ),
 ),
 
-        // Centered Avatar
+        // Centered Avatar (Raised high with ample breathing room above user name)
         Positioned(
-          top: 0,
+          top: 4,
           child: GestureDetector(
             onTap: () {
               if (widget.onViewProfile != null) {
@@ -731,7 +721,7 @@ class _UserProfileState extends State<UserProfile> {
 
         // Top-Right Three-Dot Options Button (...)
         Positioned(
-          top: 46,
+          top: 58,
           right: 20,
           child: GestureDetector(
             onTap: () => _showOptionsMenu(),
