@@ -219,7 +219,7 @@ class UpdateService {
 
   CancelToken? _cancelToken;
 
-  void startDownloadInBackground(String url) async {
+  Future<void> startDownloadInBackground(String initialUrl) async {
     if (isDownloading) return;
 
     isDownloading = true;
@@ -242,24 +242,66 @@ class UpdateService {
       final fileName = 'zero_update_${DateTime.now().millisecondsSinceEpoch}.apk';
       final savePath = '${dir.path}${Platform.pathSeparator}$fileName';
 
-      await Dio().download(
-        url,
-        savePath,
-        cancelToken: _cancelToken,
-        onReceiveProgress: (received, total) {
-          receivedBytes = received;
-          totalBytes = total > 0 ? total : received;
-          downloadProgress = totalBytes > 0 ? (receivedBytes / totalBytes) : 0.0;
-          _stateController.add(null);
-        },
-        options: Options(
-          responseType: ResponseType.bytes,
-          receiveTimeout: const Duration(hours: 1),
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
-          },
-        ),
-      );
+      // Candidate URLs in priority order
+      final urls = <String>{
+        initialUrl,
+        'https://github.com/MIDO12A/zoro-app/releases/latest/download/zero-app.apk',
+        'https://github.com/MIDO12A/zoro-app/releases/latest/download/app-arm64-v8a-release.apk',
+        'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app.apk',
+      }.toList();
+
+      bool success = false;
+      dynamic lastError;
+
+      for (final url in urls) {
+        if (_cancelToken?.isCancelled ?? false) break;
+        try {
+          debugPrint('Attempting APK download from: $url');
+          final dio = Dio();
+          await dio.download(
+            url,
+            savePath,
+            cancelToken: _cancelToken,
+            onReceiveProgress: (received, total) {
+              receivedBytes = received;
+              totalBytes = total > 0 ? total : received;
+              downloadProgress = totalBytes > 0 ? (receivedBytes / totalBytes) : 0.0;
+              _stateController.add(null);
+            },
+            options: Options(
+              responseType: ResponseType.bytes,
+              followRedirects: true,
+              maxRedirects: 10,
+              receiveTimeout: const Duration(minutes: 10),
+              sendTimeout: const Duration(minutes: 2),
+              headers: {
+                'User-Agent':
+                    'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
+                'Accept': 'application/octet-stream, application/vnd.android.package-archive, */*',
+              },
+            ),
+          );
+
+          final file = File(savePath);
+          if (await file.exists() && await file.length() > 1024 * 1024) {
+            success = true;
+            break;
+          }
+        } catch (err) {
+          lastError = err;
+          debugPrint('Download attempt failed for $url: $err');
+          if (err is DioException && err.type == DioExceptionType.cancel) {
+            isDownloading = false;
+            isDownloaded = false;
+            _stateController.add(null);
+            return;
+          }
+        }
+      }
+
+      if (!success) {
+        throw lastError ?? Exception('Failed to download valid APK');
+      }
 
       isDownloading = false;
       isDownloaded = true;
@@ -274,7 +316,7 @@ class UpdateService {
         _stateController.add(null);
         return;
       }
-      downloadError = 'فشل التنزيل، تأكد من الاتصال وحاول مرة أخرى';
+      downloadError = 'تعذر تنزيل التحديث تلقائياً، يرجى إعادة المحاولة';
       _stateController.add(null);
     }
   }
