@@ -8,6 +8,7 @@ import '../data/agency_repository.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../core/cache/encrypted_image_provider.dart';
+import '../../../screens/message/message_reply_detail_screen.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 //  AgencyWithdrawalScreen v2 — شاشة السحب المالي الشاملة
@@ -825,7 +826,7 @@ debugPrint('[agency_withdrawal_screen] error: $e');
                     ),
                     icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
                     label: const Text('تواصل مع الوكيل لتحويل العملات إليه', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    onTap: () {
+                    onPressed: () {
                       final agentUid = _selectedAgent!['id']?.toString() ?? _selectedAgent!['user_id']?.toString() ?? '';
                       final myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
                       if (agentUid.isNotEmpty && myUid.isNotEmpty) {
