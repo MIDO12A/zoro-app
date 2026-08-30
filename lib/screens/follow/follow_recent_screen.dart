@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../services/supabase_service.dart';
+import '../../providers/user_provider.dart';
+import '../user_profile/user_profile_screen.dart';
 
 class FollowRecentScreen extends StatefulWidget {
   final int initialTab;
@@ -12,7 +15,7 @@ class FollowRecentScreen extends StatefulWidget {
 }
 
 class _FollowRecentScreenState extends State<FollowRecentScreen>
-    with SingleTickerProviderStateMixin {
+  with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final supabase = SupabaseService();
 
@@ -31,8 +34,9 @@ class _FollowRecentScreenState extends State<FollowRecentScreen>
   Future<void> _loadData() async {
     setState(() => _loading = true);
     try {
-      final uid = widget.targetUid;
-      if (uid != null) {
+      final myUid = Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
+      final uid = widget.targetUid ?? myUid;
+      if (uid != null && uid.isNotEmpty) {
         _following = await supabase.getFollowing(uid);
         _fans = await supabase.getFans(uid);
         _visitors = await supabase.getVisitors(uid);
@@ -74,14 +78,14 @@ class _FollowRecentScreenState extends State<FollowRecentScreen>
                     isScrollable: true,
                     labelColor: const Color(0xFF16151A),
                     unselectedLabelColor: const Color(0xFF9BA1B6),
-                    labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                    labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     unselectedLabelStyle: const TextStyle(fontSize: 13),
                     indicator: _buildTabIndicator(),
                     indicatorSize: TabBarIndicatorSize.label,
-                    tabs: [
-                      Tab(text: 'Following', height: 44),
-                      Tab(text: 'Fans', height: 44),
-                      Tab(text: 'Visitors', height: 44),
+                    tabs: const [
+                      Tab(text: 'المتابَعين', height: 44),
+                      Tab(text: 'المعجبين', height: 44),
+                      Tab(text: 'الزوار', height: 44),
                     ],
                   ),
                 ),
@@ -119,7 +123,7 @@ class _FollowRecentScreenState extends State<FollowRecentScreen>
     if (items.isEmpty) {
       return Center(
         child: Text(
-          isVisitor ? 'No visitors yet' : 'No users yet',
+          isVisitor ? 'لا يوجد زوار حتى الآن' : 'لا يوجد مستخدمين حتى الآن',
           style: const TextStyle(color: Color(0xFF9BA1B6), fontSize: 14),
         ),
       );
@@ -136,7 +140,7 @@ class _FollowRecentScreenState extends State<FollowRecentScreen>
   }
 
   Widget _buildUserItem(Map<String, dynamic> item, {bool isVisitor = false}) {
-    final name = item['name']?.toString() ?? '';
+    final name = item['name']?.toString() ?? 'User';
     final id = item['uid']?.toString() ?? item['id']?.toString() ?? '';
     final gender = item['gender']?.toString() ?? 'male';
     final level = (item['level'] as num?)?.toInt() ?? 0;
@@ -149,7 +153,7 @@ class _FollowRecentScreenState extends State<FollowRecentScreen>
       onTap: () {
         if (id.isNotEmpty) {
           Navigator.push(context, MaterialPageRoute(
-            builder: (_) => FollowRecentScreen(targetUid: id),
+            builder: (_) => UserProfileScreen(targetUid: id),
           ));
         }
       },

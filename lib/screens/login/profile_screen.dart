@@ -299,21 +299,27 @@ class ProfileScreen extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: _buildDataItem('${user?.followers ?? 0}', 'متابع', () {
+            child: _buildDataItem('${user?.following ?? 0}', 'المتابَعين', () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const FollowRecentScreen(),
+                  builder: (context) => FollowRecentScreen(
+                    initialTab: 0,
+                    targetUid: user?.uid,
+                  ),
                 ),
               );
             }),
           ),
           Expanded(
-            child: _buildDataItem('${user?.following ?? 0}', 'المتابعين', () {
+            child: _buildDataItem('${user?.followers ?? 0}', 'المعجبين', () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const FollowRecentScreen(),
+                  builder: (context) => FollowRecentScreen(
+                    initialTab: 1,
+                    targetUid: user?.uid,
+                  ),
                 ),
               );
             }),
@@ -323,7 +329,10 @@ class ProfileScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const FollowRecentScreen(),
+                  builder: (context) => FollowRecentScreen(
+                    initialTab: 2,
+                    targetUid: user?.uid,
+                  ),
                 ),
               );
             }),

@@ -1221,14 +1221,49 @@ class FirebaseService {
     }
   }
 
+  Future<void> recordProfileVisit({
+    required String visitedUid,
+    required String visitorUid,
+    String? visitorName,
+    String? visitorPhoto,
+  }) async {
+    if (visitedUid.isEmpty || visitorUid.isEmpty || visitedUid == visitorUid) {
+      return;
+    }
+    try {
+      final now = DateTime.now().toUtc().toIso8601String();
+      final visitDocId = '${visitedUid}_$visitorUid';
+      await _db.collection('profile_visits').doc(visitDocId).set({
+        'visited_uid': visitedUid,
+        'visitor_uid': visitorUid,
+        'visitor_name': visitorName ?? '',
+        'visitor_photo': visitorPhoto ?? '',
+        'visited_at': now,
+      }, SetOptions(merge: true));
+
+      final countSnap = await _db
+          .collection('profile_visits')
+          .where('visited_uid', isEqualTo: visitedUid)
+          .count()
+          .get();
+      await _db.collection('users').doc(visitedUid).update({
+        'visitors': countSnap.count,
+      });
+    } catch (e) {
+      debugPrint('recordProfileVisit error: $e');
+    }
+  }
+
   Future<int> incrementVisitors(String uid) async {
     try {
-      final ref = _db.collection('users').doc(uid);
-      final snap = await ref.get();
-      if (!snap.exists) return 0;
-      final current = ((snap.data()?['visitors'] ?? 0) as int) + 1;
-      await ref.update({'visitors': current});
-      return current;
+      final countSnap = await _db
+          .collection('profile_visits')
+          .where('visited_uid', isEqualTo: uid)
+          .count()
+          .get();
+      final count = countSnap.count;
+      await _db.collection('users').doc(uid).update({'visitors': count});
+      return count;
     } catch (e) {
       debugPrint('incrementVisitors error: $e');
       return 0;
@@ -1292,13 +1327,18 @@ class FirebaseService {
         final doc = await _db.collection('users').doc(uid).get();
         if (!doc.exists) continue;
         final d = doc.data() ?? {};
+        final photo = d['photoUrl']?.toString() ?? d['photo_url']?.toString() ?? d['avatar']?.toString() ?? '';
+        final name = d['name']?.toString() ?? 'User';
         users.add({
           'uid': uid,
-          'name': d['name'],
-          'photo_url': d['photo_url'],
-          'gender': d['gender'],
-          'level': d['level'],
-          'country_idx': d['country_idx'],
+          'id': uid,
+          'name': name,
+          'photo_url': photo,
+          'avatar': photo,
+          'gender': d['gender']?.toString() ?? 'male',
+          'level': (d['level'] as num?)?.toInt() ?? 1,
+          'country_idx': (d['country_idx'] as num?)?.toInt() ?? 0,
+          'custom_id': d['custom_id']?.toString() ?? d['customId']?.toString() ?? '',
         });
       } catch (_) {}
     }
@@ -1306,29 +1346,42 @@ class FirebaseService {
   }
 
   Future<List<Map<String, dynamic>>> getVisitors(String uid) async {
+    if (uid.isEmpty) return [];
     try {
       final snap = await _db
           .collection('profile_visits')
           .where('visited_uid', isEqualTo: uid)
           .limit(50)
           .get();
-      final items = snap.docs.map((e) {
-        final d = e.data();
-        return {'visitor_uid': d['visitor_uid']?.toString() ?? '', 'visited_at': d['visited_at']?.toString() ?? ''};
-      }).toList();
-      items.sort((a, b) => b['visited_at'].toString().compareTo(a['visited_at'].toString()));
+      final items = snap.docs.map((e) => e.data()).toList();
+      items.sort((a, b) => (b['visited_at'] ?? '').toString().compareTo((a['visited_at'] ?? '').toString()));
+      
+      final uids = items
+          .map((e) => e['visitor_uid']?.toString() ?? '')
+          .where((id) => id.isNotEmpty && id != uid)
+          .toSet()
+          .toList();
 
-      final uids = items.map((e) => e['visitor_uid'].toString()).where((id) => id.isNotEmpty).toList();
       final userMap = <String, Map<String, dynamic>>{};
       for (final u in await _batchFetchUsers(uids)) {
         userMap[u['uid'].toString()] = u;
       }
       final result = <Map<String, dynamic>>[];
       for (final item in items) {
-        final visitorUid = item['visitor_uid'].toString();
+        final visitorUid = item['visitor_uid']?.toString() ?? '';
+        if (visitorUid.isEmpty || visitorUid == uid) continue;
         final user = userMap[visitorUid];
         if (user != null) {
-          result.add({...user, 'time': item['visited_at'].toString()});
+          result.add({...user, 'time': item['visited_at']?.toString() ?? ''});
+        } else {
+          result.add({
+            'uid': visitorUid,
+            'id': visitorUid,
+            'name': item['visitor_name']?.toString() ?? 'User',
+            'photo_url': item['visitor_photo']?.toString() ?? '',
+            'avatar': item['visitor_photo']?.toString() ?? '',
+            'time': item['visited_at']?.toString() ?? '',
+          });
         }
       }
       return result;

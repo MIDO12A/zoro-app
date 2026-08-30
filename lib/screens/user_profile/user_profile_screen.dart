@@ -92,9 +92,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         if (currentUser != null) {
           final following = await supabase.isFollowing(currentUser.uid, uid);
           if (mounted) setState(() => _isFollowing = following);
-        }
-        if (targetUser != null) {
-          supabase.incrementVisitors(uid);
+          if (currentUser.uid != uid && targetUser != null) {
+            supabase.recordProfileVisit(
+              visitedUid: uid,
+              visitorUid: currentUser.uid,
+              visitorName: currentUser.name,
+              visitorPhoto: currentUser.photoUrl,
+            );
+          }
         }
       } else {
         targetUser = currentUser;
