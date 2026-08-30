@@ -54,29 +54,20 @@ jobs:
 
       # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
       # strictly increasing and higher than any previously installed APK.
-      # 2000008300 leaves a safe gap over any previous number (user requested > 2000007181).
+      # 2000008400 leaves a safe gap over any previous number (user requested > 2000007181).
       - name: Build release APKs
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000008300 + BUILD_NUM))
-          flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
-            echo "::error::Flutter build failed. Showing last 200 lines of build log:"
-            tail -n 200 build_log.txt
-            exit 1
-          }
+          VERSION_CODE=$((2000008400 + BUILD_NUM))
+          flutter build apk --release --split-per-abi --build-number=$VERSION_CODE
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
       - name: Rename APKs
         run: |
-          find . -name "*.apk" -type f
-          find . -name "*arm64*.apk" -exec cp {} zero-app.apk \; || true
-          find . -name "*armeabi*.apk" -exec cp {} zero-app-arm32.apk \; || true
-          find . -name "*x86_64*.apk" -exec cp {} zero-app-x86_64.apk \; || true
-          [ -f zero-app.apk ] || find . -name "*.apk" -exec cp {} zero-app.apk \; || true
-          [ -f zero-app-arm32.apk ] || cp zero-app.apk zero-app-arm32.apk || true
-          [ -f zero-app-x86_64.apk ] || cp zero-app.apk zero-app-x86_64.apk || true
-          ls -la zero-app*.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk zero-app.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk zero-app-arm32.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk zero-app-x86_64.apk
 
       - name: Create build info
         env:
