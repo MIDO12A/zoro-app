@@ -597,41 +597,41 @@ class _UserProfileState extends State<UserProfile> {
                 const SizedBox(height: 12),
               ],
 
-              // 7. Bottom Action Buttons Bar (Clean, transparent, customizable from control panel)
+              // 7. Bottom Action Buttons Bar (Frameless 52x52 icons, 100% transparent, customizable from control panel)
               if (!widget.isCurrentUser) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    // 1. Gift Button (هدية)
+                    // 1. Gift Button (هدية - 52x52 icon)
                     _buildRoundActionBtn(
                       customBgImg: config.miniprofileGiftBtnBg,
                       icon: config.miniprofileGiftIcon.isNotEmpty
-                          ? Image(image: R.cachedImage(config.miniprofileGiftIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 24)))
-                          : const Text('🎁', style: TextStyle(fontSize: 24)),
+                          ? Image(image: R.cachedImage(config.miniprofileGiftIcon), width: 52, height: 52, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 36)))
+                          : const Text('🎁', style: TextStyle(fontSize: 36)),
                       onTap: () {
                         widget.onClose?.call();
                         widget.onGift?.call();
                       },
                     ),
 
-                    // 2. @ Mention Button
+                    // 2. @ Mention Button (52x52 icon)
                     _buildRoundActionBtn(
                       customBgImg: config.miniprofileMentionBtnBg,
                       icon: config.miniprofileMentionIcon.isNotEmpty
-                          ? Image(image: R.cachedImage(config.miniprofileMentionIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => const Text('@', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)))
-                          : const Text('@', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                          ? Image(image: R.cachedImage(config.miniprofileMentionIcon), width: 52, height: 52, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Text('@', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)))
+                          : const Text('@', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
                       onTap: () {
                         widget.onClose?.call();
                         widget.onMention?.call();
                       },
                     ),
 
-                    // 3. Chat/Message Button (Direct 1-on-1 private chat with real name and photo)
+                    // 3. Chat/Message Button (Direct 1-on-1 private chat, 52x52 icon)
                     _buildRoundActionBtn(
                       customBgImg: config.miniprofileChatBtnBg,
                       icon: config.miniprofileChatIcon.isNotEmpty
-                          ? Image(image: R.cachedImage(config.miniprofileChatIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 26))
-                          : const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 26),
+                          ? Image(image: R.cachedImage(config.miniprofileChatIcon), width: 52, height: 52, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 38))
+                          : const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 38),
                       onTap: () {
                         widget.onClose?.call();
                         if (widget.onChat != null) {
@@ -659,15 +659,15 @@ class _UserProfileState extends State<UserProfile> {
                       },
                     ),
 
-                    // 4. Follow Button (متابعة)
+                    // 4. Follow Button (متابعة - 52x52 icon)
                     _buildRoundActionBtn(
                       customBgImg: config.miniprofileFollowBtnBg,
                       icon: config.miniprofileFollowIcon.isNotEmpty && !widget.isFollowed
-                          ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 32, height: 32, errorBuilder: (_, __, ___) => Icon(widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded, color: widget.isFollowed ? Colors.pinkAccent : Colors.white, size: 26))
+                          ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 52, height: 52, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Icon(widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded, color: widget.isFollowed ? Colors.pinkAccent : Colors.white, size: 38))
                           : Icon(
                               widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded,
                               color: widget.isFollowed ? Colors.pinkAccent : Colors.white,
-                              size: 26,
+                              size: 38,
                             ),
                       onTap: widget.onFollow,
                     ),
@@ -811,13 +811,11 @@ class _UserProfileState extends State<UserProfile> {
       child: Container(
         width: 52,
         height: 52,
-        decoration: BoxDecoration(
-          color: customBgImg.isNotEmpty ? null : Colors.transparent,
-          image: customBgImg.isNotEmpty
-              ? DecorationImage(image: R.cachedImage(customBgImg), fit: BoxFit.contain)
-              : null,
-          shape: BoxShape.circle,
-        ),
+        decoration: customBgImg.isNotEmpty
+            ? BoxDecoration(
+                image: DecorationImage(image: R.cachedImage(customBgImg), fit: BoxFit.contain),
+              )
+            : null,
         alignment: Alignment.center,
         child: icon,
       ),
