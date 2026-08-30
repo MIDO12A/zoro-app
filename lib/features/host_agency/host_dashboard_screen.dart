@@ -122,7 +122,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     _rtDiamonds = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_ledger:$uid',
       event: PostgresChangeEvent.insert,
-    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
+      table: 'agency_diamond_ledger',
       filter: PostgresChangeFilter(
         type: PostgresChangeFilterType.eq,
         column: 'user_id',
@@ -229,18 +229,18 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
       _loadV3Data(uid);
 
       // استخدام get_host_dashboard_v2
-      final results = await Future.wait<dynamic>([
+            final results = await Future.wait<dynamic>([
         AgencyRepository.getHostStats(),
         _sb.from('profiles')
             .select('display_name, avatar_url, level, coins')
             .eq('id', uid)
             .maybeSingle(),
-    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
+        _sb.from('agency_diamond_ledger')
             .select('amount, direction, created_at')
             .eq('user_id', uid)
             .eq('direction', 1)
             .gte('created_at', DateTime.now().toUtc().subtract(const Duration(hours: 24)).toIso8601String()),
-    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
+        _sb.from('agency_diamond_ledger')
             .select('amount, direction, created_at')
             .eq('user_id', uid)
             .eq('direction', 1)

@@ -236,10 +236,21 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
       ),
     );
   }
+  // ── main body ─────────────────────────────────────────────────────────────
+  Widget _buildLoading() => const Center(
     child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Icon(Icons.error_outline, color: _red, size: 48),
+      _NeonSpinner(),
+      SizedBox(height: 16),
+      Text('جارٍ تحميل بيانات الوكالة...',
+          style: TextStyle(color: _textMuted, fontFamily: 'IBM Plex Sans Arabic')),
+    ]),
+  );
+
+  Widget _buildError() => Center(
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.error_outline, color: _red, size: 48),
       const SizedBox(height: 12),
-          Text(_error ?? 'خطأ غير معروف',
+      Text(_error ?? 'خطأ غير معروف', style: const TextStyle(color: _red,
           fontFamily: 'IBM Plex Sans Arabic')),
       const SizedBox(height: 16),
       _GlassButton(label: 'إعادة المحاولة', color: _purple,
@@ -247,7 +258,6 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
     ]),
   );
 
-  // ── main body ─────────────────────────────────────────────────────────────
   Widget _buildBody() {
     final d          = _data!;
     final agency     = d['agency']     as Map? ?? {};
@@ -400,7 +410,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
               style: TextStyle(color: _textMuted, fontSize: 14,
                   fontFamily: 'IBM Plex Sans Arabic')),
           const SizedBox(height: 16),
-          _RewardChip(type: r['reward_type'], value: r['reward_value']),
+          _RewardChip(type: r['reward_type']?.toString() ?? '', value: r['reward_value']),
           const SizedBox(height: 20),
           _GlassButton(label: 'رائع! 🚀', color: _gold,
               onTap: () => setState(() => _pendingReward = null)),
