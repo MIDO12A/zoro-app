@@ -134,6 +134,10 @@ class UserModel {
     List<String>? ownedLevelFrames,
     List<String>? ownedLevelBadges,
     List<String>? ownedNecklaces,
+    bool? isRechargeAgent,
+    String? rechargeAgencyName,
+    String? rechargeAgencyLogo,
+    String? whatsappNumber,
   }) {
     return UserModel(
       uid: uid,
@@ -177,6 +181,10 @@ class UserModel {
       ownedLevelFrames: ownedLevelFrames ?? this.ownedLevelFrames,
       ownedLevelBadges: ownedLevelBadges ?? this.ownedLevelBadges,
       ownedNecklaces: ownedNecklaces ?? this.ownedNecklaces,
+      isRechargeAgent: isRechargeAgent ?? this.isRechargeAgent,
+      rechargeAgencyName: rechargeAgencyName ?? this.rechargeAgencyName,
+      rechargeAgencyLogo: rechargeAgencyLogo ?? this.rechargeAgencyLogo,
+      whatsappNumber: whatsappNumber ?? this.whatsappNumber,
     );
   }
 
