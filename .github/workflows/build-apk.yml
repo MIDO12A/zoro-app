@@ -55,12 +55,12 @@ jobs:
       # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
       # strictly increasing and higher than any previously installed APK.
       # Base must stay above the latest deployed build (1.0.46+2000004180).
-      # 2000008100 leaves a safe gap over any previous number (user requested > 2000007181).
+      # 2000008200 leaves a safe gap over any previous number (user requested > 2000007181).
       - name: Build release APKs
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000008100 + BUILD_NUM))
+          VERSION_CODE=$((2000008200 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
             echo "::error::Flutter build failed. Showing last 200 lines of build log:"
             tail -n 200 build_log.txt
@@ -70,39 +70,22 @@ jobs:
 
       - name: Rename APKs
         run: |
-          echo "=== All APKs found across repo ==="
-          find . -name "*.apk" -not -path "*/.*"
+          for f in $(find build -name "*.apk" 2>/dev/null); do
+            echo "Processing APK: $f"
+            if [[ "$f" == *"arm64"* ]]; then
+              cp -f "$f" zero-app.apk
+            elif [[ "$f" == *"armeabi"* || "$f" == *"arm32"* || "$f" == *"v7a"* ]]; then
+              cp -f "$f" zero-app-arm32.apk
+            elif [[ "$f" == *"x86_64"* ]]; then
+              cp -f "$f" zero-app-x86_64.apk
+            else
+              if [ ! -f zero-app.apk ]; then cp -f "$f" zero-app.apk; fi
+            fi
+          done
           
-          ARM64_FILE=$(find . -name "*arm64*.apk" -not -path "*/.*" | head -n 1)
-          ARM32_FILE=$(find . -name "*armeabi*.apk" -not -path "*/.*" | head -n 1)
-          X86_FILE=$(find . -name "*x86_64*.apk" -not -path "*/.*" | head -n 1)
-          ANY_APK=$(find . -name "*release*.apk" -not -path "*/.*" | head -n 1)
-          if [ -z "$ANY_APK" ]; then
-            ANY_APK=$(find . -name "*.apk" -not -path "*/.*" | head -n 1)
-          fi
-          
-          echo "Selected ARM64: $ARM64_FILE"
-          echo "Selected ARM32: $ARM32_FILE"
-          echo "Selected X86:   $X86_FILE"
-          echo "Selected ANY:   $ANY_APK"
-          
-          if [ -n "$ARM64_FILE" ]; then
-            cp -v "$ARM64_FILE" zero-app.apk
-          elif [ -n "$ANY_APK" ]; then
-            cp -v "$ANY_APK" zero-app.apk
-          fi
-          
-          if [ -n "$ARM32_FILE" ]; then
-            cp -v "$ARM32_FILE" zero-app-arm32.apk
-          elif [ -f zero-app.apk ]; then
-            cp -v zero-app.apk zero-app-arm32.apk
-          fi
-          
-          if [ -n "$X86_FILE" ]; then
-            cp -v "$X86_FILE" zero-app-x86_64.apk
-          elif [ -f zero-app.apk ]; then
-            cp -v zero-app.apk zero-app-x86_64.apk
-          fi
+          if [ ! -f zero-app.apk ]; then cp -f build/app/outputs/flutter-apk/*.apk zero-app.apk; fi
+          if [ ! -f zero-app-arm32.apk ]; then cp -f zero-app.apk zero-app-arm32.apk; fi
+          if [ ! -f zero-app-x86_64.apk ]; then cp -f zero-app.apk zero-app-x86_64.apk; fi
           
           ls -lh zero-app*.apk
 
@@ -116,14 +99,18 @@ jobs:
 
       - name: Publish to GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_VER: ${{ steps.ver.outputs.ver }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest \
-            "zero-app.apk#zero-app.apk (arm64)" \
-            "zero-app-arm32.apk#zero-app-arm32.apk (arm32)" \
-            "zero-app-x86_64.apk#zero-app-x86_64.apk (x86_64)" \
-            "build_info.json#build_info.json" \
-            --title "Update v${{ github.run_number }}" \
-            --notes "Auto-build of commit ${{ github.sha }}" \
+          TAG_NAME="v${APP_VER}+${VERSION_CODE}"
+          RELEASE_TITLE="Release v${APP_VER} (Build ${VERSION_CODE})"
+          NOTES="Automatic build for commit ${GITHUB_SHA}."
+
+          gh release create "$TAG_NAME" \
+            zero-app.apk \
+            zero-app-arm32.apk \
+            zero-app-x86_64.apk \
+            build_info.json \
+            --title "$RELEASE_TITLE" \
+            --notes "$NOTES" \
             --latest
