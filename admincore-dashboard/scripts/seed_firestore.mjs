@@ -39,6 +39,8 @@ const FILES = [
   '20260622_cp_features.sql', // cp_settings, cp_gifts, cp_cars
   '20260628_cp_rank_rewards.sql', // cp_rank_rewards
   '20260730_weekly_signin.sql', // signin_rewards
+  '20260425000000_host_agency_commission_milestones.sql', // commission_settings, host_milestones
+  '20250620_fix_all_missing_tables.sql', // commission_settings (fallback), agency_diamond_ledger, agency_withdrawal_requests, agency_chat_messages
 ];
 
 // Which column holds the Firestore document ID for each table.
@@ -52,6 +54,10 @@ const KEY_FIELDS = {
   vip_config: 'tier',
   gift_categories: 'id',
   signin_rewards: 'day_number',
+  commission_settings: 'key',
+  host_milestones: 'id',
+  host_agencies: 'id',
+  host_agency_members: 'id',
 };
 
 function md5(s) {

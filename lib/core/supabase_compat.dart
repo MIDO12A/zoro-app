@@ -494,16 +494,56 @@ class SupabaseClient {
   // ═══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> _rpcAgencyGetEngineSettings(
       Map<String, dynamic>? p) async {
+    // إعدادات محرك الوكالة مخزّنة في Firestore كوثائق منفصلة {key, value}
+    // (doc id = key). نقرأ كل الوثائق ونبني منها خريطة مسطّحة واحدة بمفاتيح
+    // AgencyEngineSettings.fromMap، بدل إعادة وثيقة واحدة فقط (limit 1) الذي
+    // كان يضيّع كل القيم ويجعل التطبيق يعتمد على أرقام وهمية متصلّبة.
+    final values = <String, double>{};
     try {
-      final snap = await _db.collection('commission_settings').limit(1).get();
-      if (snap.docs.isNotEmpty) {
-        return Map<String, dynamic>.from(snap.docs.first.data());
+      final snap = await _db.collection('commission_settings').get();
+      for (final d in snap.docs) {
+        final data = d.data();
+        final key = (data['key'] ?? d.id).toString();
+        final raw = data['value'] ?? data[key];
+        if (raw is num) values[key] = raw.toDouble();
       }
     } catch (_) {}
+
+    double v(String key, double fallback) => values[key] ?? fallback;
+
+    // التعيين من مفاتيح SQL (commission_settings) إلى مفاتيح fromMap.
+    // النسب المخزّنة في SQL ككسر (0.65) تُحوَّل إلى نسبة مئوية صحيحة (65).
+    double pct(num v) => (v >= 1 ? v : v * 100).toDouble();
+
+    final hostShare   = pct(v('host_rate', 0.65));
+    final agencyShare = pct(v('agency_rate', 0.05));
+    final platformShare = pct(v('platform_rate', 0.30));
+
+    final goldToDiamond = v('gold_to_diamond', 1.0);
+    final diamondsPerUsd = v('diamonds_per_usd', 10000);
+    final usdPerDiamond  = diamondsPerUsd > 0 ? 1 / diamondsPerUsd : 0.0001;
+
     return <String, dynamic>{
-      'exchange_rate': 0.9,
-      'min_withdrawal': 100,
-      'max_withdrawal': 50000,
+      // المفاتيح المتوافقة مع AgencyEngineSettings.fromMap
+      'host_share_pct':           hostShare.floor(),
+      'agency_share_pct':         agencyShare.floor(),
+      'platform_share_pct':       platformShare.floor(),
+      'diamond_to_coin_rate':     goldToDiamond,
+      'diamond_to_usd_rate':      usdPerDiamond,
+      'daily_exchange_limit_diamonds': v('daily_exchange_limit_diamonds', 500000),
+      'withdrawal_fee_pct':       v('withdrawal_fee_pct', 10.0),
+      'min_withdrawal_usd':       v('min_withdrawal_usd', 10.0),
+      'min_diamonds_to_withdraw': v('min_diamonds_to_withdraw', 100000),
+      'withdrawal_cycle_days':    v('withdrawal_cycle_days', 30),
+      'trial_period_days':        v('trial_period_days', 7),
+      'exit_penalty_coins':       v('exit_penalty_coins', 300000),
+      'engine_enabled':           values.containsKey('engine_enabled')
+          ? values['engine_enabled']! > 0
+          : true,
+      // مفتاح توافقي قديم — يُحدَّث ليطابق معدل الألماس→كوينز الفعلي
+      'exchange_rate':            goldToDiamond,
+      'min_withdrawal':           v('min_withdrawal_usd', 10.0),
+      'max_withdrawal':           v('max_withdrawal_usd', 50000),
     };
   }
 
@@ -773,7 +813,11 @@ class SupabaseClient {
     if (available < diamonds) return {'status': 'error', 'message': 'insufficient'};
 
     final engine = await _rpcAgencyGetEngineSettings(null);
-    final coinsOut = (diamonds * ((engine['exchange_rate'] as num?)?.toDouble() ?? 0.9)).floor();
+    final coinsOut = (diamonds *
+            ((engine['diamond_to_coin_rate'] as num?)?.toDouble() ??
+                (engine['exchange_rate'] as num?)?.toDouble() ??
+                1.0))
+        .floor();
 
     // Deduct from member
     await memberDoc.reference.update({
@@ -1018,7 +1062,11 @@ class SupabaseClient {
     if (ownerBalance < diamonds) return {'status': 'error', 'message': 'insufficient'};
 
     final engine = await _rpcAgencyGetEngineSettings(null);
-    final coinsOut = (diamonds * ((engine['exchange_rate'] as num?)?.toDouble() ?? 0.9)).floor();
+    final coinsOut = (diamonds *
+            ((engine['diamond_to_coin_rate'] as num?)?.toDouble() ??
+                (engine['exchange_rate'] as num?)?.toDouble() ??
+                1.0))
+        .floor();
 
     await agencySnap.reference.update({
       'owner_diamonds_balance': FieldValue.increment(-diamonds),

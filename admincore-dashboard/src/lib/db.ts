@@ -711,7 +711,11 @@ export async function getCommissionSettings(): Promise<CommissionSettingModel[]>
 
 export async function updateCommissionSetting(id: string, value: number): Promise<boolean> {
   try {
-    await supabase.from('commission_settings').update({ value, updated_at: new Date().toISOString() }).eq('id', id)
+    // استخدم upsert (setDoc merge) بدل update حتى يعمل تحديث الإعداد
+    // حتى لو لم تكن الوثيقة موجودة بعد (كان updateDoc يرمي not-found).
+    await supabase.from('commission_settings').upsert({
+      key: id, value, updated_at: new Date().toISOString(),
+    })
     return true
   } catch { return false }
 }
