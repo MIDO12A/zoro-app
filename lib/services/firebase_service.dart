@@ -1246,7 +1246,7 @@ class FirebaseService {
           .where('visited_uid', isEqualTo: visitedUid)
           .count()
           .get();
-      final count = countSnap.count ?? 0;
+      final int count = countSnap.count ?? 0;
       await _db.collection('users').doc(visitedUid).update({
         'visitors': count,
       });
@@ -1262,7 +1262,7 @@ class FirebaseService {
           .where('visited_uid', isEqualTo: uid)
           .count()
           .get();
-      final count = countSnap.count ?? 0;
+      final int count = countSnap.count ?? 0;
       await _db.collection('users').doc(uid).update({'visitors': count});
       return count;
     } catch (e) {
