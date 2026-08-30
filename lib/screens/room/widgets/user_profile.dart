@@ -283,13 +283,13 @@ class _UserProfileState extends State<UserProfile> {
                       fit: StackFit.expand,
                       children: [
                         if (detectAssetType(userCover) == AssetType.svga)
-                          SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
+                          SvgaPlayer(assetPath: userCover, fit: BoxFit.fill, loops: true)
                         else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
-                          VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
+                          VapPlayer(url: userCover, fit: BoxFit.fill, loops: true)
                         else
                           Image(
                             image: R.cachedImage(userCover),
-                            fit: BoxFit.cover,
+                            fit: BoxFit.fill,
                             errorBuilder: (_, __, ___) => const SizedBox(),
                           ),
                         Container(
