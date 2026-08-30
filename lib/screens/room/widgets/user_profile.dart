@@ -231,11 +231,21 @@ class _UserProfileState extends State<UserProfile> {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final isMe = widget.isCurrentUser || (currentUser != null && (widget.user['uid'] == currentUser.uid || widget.user['id'] == currentUser.uid));
+    final rawUserCover = (isMe && currentUser?.activeCover != null && currentUser!.activeCover!.isNotEmpty)
+        ? currentUser.activeCover!
+        : _extraUserData['active_cover']?.toString() ??
+            widget.user['active_cover']?.toString() ??
+            '';
+    final userCover = _resolveSvga(rawUserCover);
+    final hasUserCover = userCover.isNotEmpty;
+
     return GestureDetector(
       onTap: widget.onClose,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        color: Colors.black54,
+        color: hasUserCover ? Colors.transparent : Colors.black45,
         alignment: Alignment.bottomCenter,
         child: GestureDetector(
           onTap: () {},
@@ -278,10 +288,10 @@ class _UserProfileState extends State<UserProfile> {
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
       children: [
-        // Full Background User Cover (extends above the avatar and spans whole height)
+        // Full Background User Cover (extends fully above the avatar and spans the entire area)
         if (hasUserCover)
           Positioned(
-            top: -45,
+            top: -100,
             left: 0,
             right: 0,
             bottom: 0,
@@ -299,19 +309,6 @@ class _UserProfileState extends State<UserProfile> {
                       fit: BoxFit.fill,
                       errorBuilder: (_, __, ___) => const SizedBox(),
                     ),
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withOpacity(0.20),
-                          Colors.black.withOpacity(0.60),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
