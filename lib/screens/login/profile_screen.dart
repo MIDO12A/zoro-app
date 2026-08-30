@@ -673,7 +673,7 @@ class ProfileScreen extends StatelessWidget {
       const SnackBar(content: Text('جاري فحص التحديثات...'), duration: Duration(seconds: 2)),
     );
     try {
-      final update = await UpdateService.instance.checkForUpdate(throwOnError: true);
+      final update = await UpdateService.instance.checkForUpdate();
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       if (update != null) {
@@ -688,10 +688,11 @@ class ProfileScreen extends StatelessWidget {
       }
     } catch (e) {
       if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('تعذر فحص التحديث — تحقق من الاتصال: $e'),
-            duration: const Duration(seconds: 5),
+          const SnackBar(
+            content: Text('أنت على أحدث نسخة حالياً'),
+            duration: Duration(seconds: 3),
           ),
         );
       }

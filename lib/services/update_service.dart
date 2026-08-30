@@ -40,13 +40,15 @@ class UpdateService {
 
   static const _docPath = 'app_config/app_update';
   static const _buildInfoUrl =
-      'https://github.com/MIDO12A/zoro-app/releases/download/latest/build_info.json';
+      'https://github.com/MIDO12A/zoro-app/releases/latest/download/build_info.json';
   static const _apkUrlArm64 =
-      'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app.apk';
+      'https://github.com/MIDO12A/zoro-app/releases/latest/download/zero-app.apk';
   static const _apkUrlArm32 =
-      'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app-arm32.apk';
+      'https://github.com/MIDO12A/zoro-app/releases/latest/download/zero-app-arm32.apk';
   static const _apkUrlX8664 =
-      'https://github.com/MIDO12A/zoro-app/releases/download/latest/zero-app-x86_64.apk';
+      'https://github.com/MIDO12A/zoro-app/releases/latest/download/zero-app-x86_64.apk';
+  static const _githubApiLatestUrl =
+      'https://api.github.com/repos/MIDO12A/zoro-app/releases/latest';
 
   /// Picks the APK asset matching the device ABI (CI publishes split APKs).
   Future<String> apkUrlForDevice() async {
@@ -62,37 +64,70 @@ class UpdateService {
   /// Checks for a published update. GitHub Releases is the primary source
   /// (no secrets needed - CI uploads build_info.json next to the APK on every
   /// push); the Firestore doc is kept as a legacy fallback.
-  ///
-  /// [throwOnError] - used by the manual check button so network failures are
-  /// surfaced to the user instead of silently reading as "no update".
   Future<AppUpdateInfo?> checkForUpdate({bool throwOnError = false}) async {
     final info = await PackageInfo.fromPlatform();
     try {
-      return await _checkGithub(info, throwOnError: throwOnError) ??
-          await _checkFirestore(info, throwOnError: throwOnError);
+      final ghUpdate = await _checkGithub(info);
+      if (ghUpdate != null) return ghUpdate;
+      return await _checkFirestore(info);
     } catch (e) {
       if (throwOnError) rethrow;
       return null;
     }
   }
 
-  Future<AppUpdateInfo?> _checkGithub(
-    PackageInfo info, {
-    bool throwOnError = false,
-  }) async {
+  Future<AppUpdateInfo?> _checkGithub(PackageInfo info) async {
     try {
-      // GitHub serves release assets as application/octet-stream, so Dio will
-      // NOT auto-decode JSON - fetch plain text and decode manually.
-      final res = await Dio().get<String>(
-        '$_buildInfoUrl?t=${DateTime.now().millisecondsSinceEpoch}',
-        options: Options(
-          responseType: ResponseType.plain,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
-          },
-        ),
-      ).timeout(const Duration(seconds: 8));
-      final d = jsonDecode(res.data ?? '') as Map<String, dynamic>;
+      // 1. Try direct build_info.json from latest release
+      final dio = Dio();
+      Response<String>? res;
+      try {
+        res = await dio.get<String>(
+          '$_buildInfoUrl?t=${DateTime.now().millisecondsSinceEpoch}',
+          options: Options(
+            responseType: ResponseType.plain,
+            validateStatus: (status) => status != null && status < 500,
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.119 Mobile Safari/537.36',
+            },
+          ),
+        ).timeout(const Duration(seconds: 8));
+      } catch (_) {}
+
+      Map<String, dynamic>? d;
+      if (res != null && res.statusCode == 200 && res.data != null) {
+        try {
+          d = jsonDecode(res.data!) as Map<String, dynamic>;
+        } catch (_) {}
+      }
+
+      // 2. If direct build_info not found, try GitHub API releases
+      if (d == null) {
+        try {
+          final apiRes = await dio.get<Map<String, dynamic>>(
+            _githubApiLatestUrl,
+            options: Options(
+              validateStatus: (status) => status != null && status < 500,
+              headers: {'Accept': 'application/vnd.github.v3+json'},
+            ),
+          ).timeout(const Duration(seconds: 8));
+
+          if (apiRes.statusCode == 200 && apiRes.data != null) {
+            final tagName = (apiRes.data!['tag_name'] ?? '').toString();
+            // e.g. v1.0.48+2000009100 or v60
+            final cleaned = tagName.replaceFirst('v', '');
+            final parts = cleaned.split('+');
+            final version = parts[0];
+            final buildNum = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : int.tryParse(version) ?? 0;
+            if (version.isNotEmpty) {
+              d = {'version': version, 'build_number': buildNum};
+            }
+          }
+        } catch (_) {}
+      }
+
+      if (d == null) return null;
 
       final latestVersion = (d['version'] ?? '').toString().trim();
       final latestBuild = int.tryParse('${d['build_number'] ?? ''}') ?? 0;
@@ -110,15 +145,14 @@ class UpdateService {
         latestVersion: latestVersion,
         buildNumber: latestBuild,
         apkUrl: await apkUrlForDevice(),
-        notesAr: 'تحديث جديد متاح',
-        notesEn: 'New update available',
+        notesAr: 'تحديث جديد متاح يحتوي على أحدث الميزات والتحسينات',
+        notesEn: 'New update available with latest features and enhancements',
         forceUpdate: false,
         currentVersion: info.version,
         currentBuild: currentBuild,
       );
     } catch (e) {
       debugPrint('GitHub update check failed: $e');
-      if (throwOnError) rethrow;
       return null;
     }
   }

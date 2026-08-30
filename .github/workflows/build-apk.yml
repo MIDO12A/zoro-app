@@ -91,7 +91,7 @@ jobs:
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.ver.outputs.ver }}+${{ env.VERSION_CODE }}
+          tag_name: latest
           name: Release v${{ steps.ver.outputs.ver }} (${{ env.VERSION_CODE }})
           body: Auto-build of commit ${{ github.sha }} with version code ${{ env.VERSION_CODE }}.
           files: release_assets/*
