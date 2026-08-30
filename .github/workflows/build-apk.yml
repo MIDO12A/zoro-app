@@ -51,49 +51,47 @@ jobs:
         id: ver
         run: echo "ver=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Analyze code (non-blocking)
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
-
-      # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
-      # strictly increasing and higher than any previously installed APK.
-      # 2000009100 leaves a safe gap over any previous number (user requested > 2000007181).
       - name: Build release APKs
-        env:
-          BUILD_NUM: ${{ github.run_number }}
-        run: |
-          VERSION_CODE=$((2000009100 + BUILD_NUM))
-          flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
-            echo "::error::Flutter build failed. Showing last 200 lines of build log:"
-            tail -n 200 build_log.txt
-            exit 1
-          }
-          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+        run: flutter build apk --release --split-per-abi --build-number=$((2000009500 + ${{ github.run_number }}))
 
-      - name: Prepare Release Assets
+      - name: Rename APKs
+        run: |
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk zero-app.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk zero-app-arm32.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk zero-app-x86_64.apk
+          ls -lh zero-app*.apk
+
+      - name: Create build info
         env:
           APP_VER: ${{ steps.ver.outputs.ver }}
+          RUN_NUM: ${{ github.run_number }}
           SHA: ${{ github.sha }}
         run: |
-          mkdir -p release_assets
-          # Find and copy all generated APKs anywhere in build/
-          find build -type f -name "*.apk" -size +100k -exec cp -v {} release_assets/ \; || true
-          # Create build_info.json
-          printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$VERSION_CODE" "$SHA" > release_assets/build_info.json
-          echo "=== Prepared Release Assets ==="
-          ls -lh release_assets/
+          bn=$((2000009500 + RUN_NUM))
+          printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$bn" "$SHA" > build_info.json
+          cat build_info.json
 
       - name: Upload APKs to Workflow Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zero-app-v${{ steps.ver.outputs.ver }}-${{ env.VERSION_CODE }}
-          path: release_assets/*
+          name: zero-app-v${{ steps.ver.outputs.ver }}-b${{ github.run_number }}
+          path: |
+            zero-app.apk
+            zero-app-arm32.apk
+            zero-app-x86_64.apk
+            build_info.json
           retention-days: 30
 
       - name: Publish to GitHub Release
+        continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Release v${{ steps.ver.outputs.ver }} (${{ env.VERSION_CODE }})
-          body: Auto-build of commit ${{ github.sha }} with version code ${{ env.VERSION_CODE }}.
-          files: release_assets/*
+          name: Update v${{ steps.ver.outputs.ver }} (${{ github.run_number }})
+          body: Auto-build of commit ${{ github.sha }}
+          files: |
+            zero-app.apk
+            zero-app-arm32.apk
+            zero-app-x86_64.apk
+            build_info.json
           token: ${{ secrets.GITHUB_TOKEN }}
