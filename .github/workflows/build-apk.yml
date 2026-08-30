@@ -59,7 +59,7 @@ jobs:
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000003600 + BUILD_NUM))
+          VERSION_CODE=$((2000003700 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
             echo "::error::Flutter build failed. Showing last 200 lines of build log:"
             tail -n 200 build_log.txt
@@ -69,9 +69,16 @@ jobs:
 
       - name: Rename APKs
         run: |
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk zero-app.apk
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk zero-app-arm32.apk
-          cp build/app/outputs/flutter-apk/app-x86_64-release.apk zero-app-x86_64.apk
+          find build -name "*.apk" -type f
+          ARM64=$(find build -name "*arm64*.apk" | head -n 1)
+          ARM32=$(find build -name "*armeabi*.apk" | head -n 1)
+          X86=$(find build -name "*x86_64*.apk" | head -n 1)
+          UNIVERSAL=$(find build -name "app-release.apk" -o -name "*-release.apk" | head -n 1)
+
+          if [ -n "$ARM64" ]; then cp "$ARM64" zero-app.apk; else cp "$UNIVERSAL" zero-app.apk; fi
+          if [ -n "$ARM32" ]; then cp "$ARM32" zero-app-arm32.apk; else cp zero-app.apk zero-app-arm32.apk; fi
+          if [ -n "$X86" ]; then cp "$X86" zero-app-x86_64.apk; else cp zero-app.apk zero-app-x86_64.apk; fi
+          ls -la zero-app*.apk
 
       - name: Create build info
         env:
