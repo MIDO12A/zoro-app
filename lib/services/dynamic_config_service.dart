@@ -271,12 +271,75 @@ class DynamicConfigService extends ChangeNotifier {
   Color get fullProfileFrameCardBorder => _screenColor('fullProfile', 'frameCardBorder', const Color(0x1AFFFFFF));
   String get fullProfileFrameIcon => _screenStr('fullProfile', 'frameIcon', _screenStr('userProfile', 'frameIcon', ''));
 
-  // Agency & Host SVGA Necklaces
-  String get agencyLeaderNecklaceSvga => _screenStr('agency', 'leaderNecklaceSvga', _rawConfig['agency']?['leaderNecklaceSvga']?.toString() ?? '');
-  String get agencyLeaderNecklaceImg => _screenStr('agency', 'leaderNecklaceImg', _rawConfig['agency']?['leaderNecklaceImg']?.toString() ?? '');
+  // Agency & Host SVGA Necklaces (Comprehensive multi-key fallback from control panel)
+  String get agencyLeaderNecklaceSvga {
+    final v = _screenStr('agency', 'leaderNecklaceSvga',
+        _screenStr('agency', 'agentNecklaceSvga',
+            _screenStr('necklaces', 'leaderNecklaceSvga',
+                _screenStr('necklaces', 'agentNecklaceSvga',
+                    _screenStr('miniprofile', 'agentBadgeSvga',
+                        _screenStr('userProfile', 'agentBadgeSvga', ''))))));
+    if (v.isNotEmpty) return v;
+    return _rawConfig['agency']?['leaderNecklaceSvga']?.toString() ??
+        _rawConfig['agency']?['agentNecklaceSvga']?.toString() ??
+        _rawConfig['agencyLeaderNecklaceSvga']?.toString() ??
+        _rawConfig['agentNecklaceSvga']?.toString() ??
+        _rawConfig['leaderNecklaceSvga']?.toString() ??
+        _rawConfig['agent_necklace_svga']?.toString() ??
+        _rawConfig['leader_necklace_svga']?.toString() ??
+        _rawConfig['agentBadgeSvga']?.toString() ??
+        '';
+  }
+
+  String get agencyLeaderNecklaceImg {
+    final v = _screenStr('agency', 'leaderNecklaceImg',
+        _screenStr('agency', 'agentNecklaceImg',
+            _screenStr('necklaces', 'leaderNecklaceImg',
+                _screenStr('necklaces', 'agentNecklaceImg',
+                    _screenStr('miniprofile', 'agentBadgeImg',
+                        _screenStr('userProfile', 'agentBadgeImg', ''))))));
+    if (v.isNotEmpty) return v;
+    return _rawConfig['agency']?['leaderNecklaceImg']?.toString() ??
+        _rawConfig['agency']?['agentNecklaceImg']?.toString() ??
+        _rawConfig['agencyLeaderNecklaceImg']?.toString() ??
+        _rawConfig['agentNecklaceImg']?.toString() ??
+        _rawConfig['leaderNecklaceImg']?.toString() ??
+        _rawConfig['agent_necklace_img']?.toString() ??
+        _rawConfig['leader_necklace_img']?.toString() ??
+        _rawConfig['agentBadgeImg']?.toString() ??
+        '';
+  }
+
   String get agencyLeaderNecklaceName => _screenStr('agency', 'leaderNecklaceName', _rawConfig['agency']?['leaderNecklaceName']?.toString() ?? 'قلادة الوكيل');
-  String get agencyHostNecklaceSvga => _screenStr('agency', 'hostNecklaceSvga', _rawConfig['agency']?['hostNecklaceSvga']?.toString() ?? '');
-  String get agencyHostNecklaceImg => _screenStr('agency', 'hostNecklaceImg', _rawConfig['agency']?['hostNecklaceImg']?.toString() ?? '');
+
+  String get agencyHostNecklaceSvga {
+    final v = _screenStr('agency', 'hostNecklaceSvga',
+        _screenStr('necklaces', 'hostNecklaceSvga',
+            _screenStr('miniprofile', 'hostBadgeSvga',
+                _screenStr('userProfile', 'hostBadgeSvga', ''))));
+    if (v.isNotEmpty) return v;
+    return _rawConfig['agency']?['hostNecklaceSvga']?.toString() ??
+        _rawConfig['agencyHostNecklaceSvga']?.toString() ??
+        _rawConfig['hostNecklaceSvga']?.toString() ??
+        _rawConfig['host_necklace_svga']?.toString() ??
+        _rawConfig['hostBadgeSvga']?.toString() ??
+        '';
+  }
+
+  String get agencyHostNecklaceImg {
+    final v = _screenStr('agency', 'hostNecklaceImg',
+        _screenStr('necklaces', 'hostNecklaceImg',
+            _screenStr('miniprofile', 'hostBadgeImg',
+                _screenStr('userProfile', 'hostBadgeImg', ''))));
+    if (v.isNotEmpty) return v;
+    return _rawConfig['agency']?['hostNecklaceImg']?.toString() ??
+        _rawConfig['agencyHostNecklaceImg']?.toString() ??
+        _rawConfig['hostNecklaceImg']?.toString() ??
+        _rawConfig['host_necklace_img']?.toString() ??
+        _rawConfig['hostBadgeImg']?.toString() ??
+        '';
+  }
+
   String get agencyHostNecklaceName => _screenStr('agency', 'hostNecklaceName', _rawConfig['agency']?['hostNecklaceName']?.toString() ?? 'قلادة المضيف');
 
   // Getters

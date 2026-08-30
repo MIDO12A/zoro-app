@@ -861,6 +861,22 @@ class _UserProfileState extends State<UserProfile> {
       );
     }
 
+    // Active Equipped Necklace (from backpack / store)
+    final activeNecklace = _extraUserData['active_necklace']?.toString() ??
+        widget.user['active_necklace']?.toString() ??
+        '';
+    if (activeNecklace.isNotEmpty) {
+      final resolved = _resolveSvga(activeNecklace);
+      if (resolved.isNotEmpty) {
+        badgeWidgets.add(
+          _buildBadgeItem(
+            svgaUrl: detectAssetType(resolved) == AssetType.svga ? resolved : '',
+            imageUrl: resolved,
+          ),
+        );
+      }
+    }
+
     // 3. Owned Necklaces / Medals
     final ownedNecklaces = _extraUserData['owned_necklaces'];
     if (ownedNecklaces is List) {
