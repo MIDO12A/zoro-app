@@ -1220,35 +1220,39 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               ),
             )
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              reverse: true,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: necklaces.map((n) {
-                  final svga = n['svga_url']?.toString();
-                  final img = n['image_url']?.toString();
-                  return GestureDetector(
-                    onTap: () => _showNecklaceDetail(n),
-                    child: Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.white10),
+            LayoutBuilder(builder: (context, constraints) {
+              // Bigger necklaces: exactly 3 fit side by side across the section width
+              final double tile = ((constraints.maxWidth - 16) / 3).clamp(72.0, 130.0);
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                reverse: true,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: necklaces.map((n) {
+                    final svga = n['svga_url']?.toString();
+                    final img = n['image_url']?.toString();
+                    return GestureDetector(
+                      onTap: () => _showNecklaceDetail(n),
+                      child: Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        width: tile,
+                        height: tile,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: (svga != null && svga.isNotEmpty)
+                            ? SvgaPlayer(assetPath: svga, width: tile, height: tile)
+                            : (img != null && img.isNotEmpty)
+                                ? CachedImg(img, fit: BoxFit.contain)
+                                : Icon(Icons.workspace_premium, color: Colors.amber, size: tile * 0.45),
                       ),
-                      child: (svga != null && svga.isNotEmpty)
-                          ? SvgaPlayer(assetPath: svga, width: 72, height: 72)
-                          : (img != null && img.isNotEmpty)
-                              ? CachedImg(img, fit: BoxFit.contain)
-                              : const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
+                    );
+                  }).toList(),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -1651,7 +1655,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  item['name']?.toString() ?? categoryTitle,
+                  (item['name_ar']?.toString()?.isNotEmpty ?? false)
+                      ? item['name_ar'].toString()
+                      : (item['name']?.toString()?.isNotEmpty ?? false ? item['name'].toString() : categoryTitle),
                   style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 20),

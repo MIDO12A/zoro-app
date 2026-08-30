@@ -975,7 +975,7 @@ class _UserProfileState extends State<UserProfile> {
     String fallbackText = '',
     Color fallbackColor = const Color(0xFF1E5BB5),
   }) {
-    const double badgeSize = 78;
+    const double badgeSize = 100;
     if (svgaUrl.isNotEmpty && detectAssetType(svgaUrl) == AssetType.svga) {
       return SizedBox(
         width: badgeSize,

@@ -16,6 +16,7 @@ import '../../core/auth/auth_service.dart';
 import '../../core/ui/in_app_toast.dart';
 import 'agency_dashboard_screen.dart';
 import 'host_dashboard_screen.dart';
+import 'data/agency_models.dart';
 import 'screens/agency_leaderboard_screen.dart';
 import 'screens/agency_profile_screen.dart';
 import 'screens/agency_supervisor_dashboard_screen.dart';
@@ -399,7 +400,7 @@ debugPrint('[host_agency_screen] error: $e');
           _field(cfg, _phoneCtrl, 'رقم الهاتف (اختياري)', Icons.phone_rounded,
               keyboardType: TextInputType.phone),
           const SizedBox(height: 4),
-          Text('الوكالة تبدأ بدرجة Bronze — ترتفع بأداء الفريق',
+          Text('الوكالة تبدأ بدرجة برونز — ترتفع بأداء الفريق',
             style: TextStyle(color: cfg.agencySubText.withOpacity(0.7), fontSize: 11)),
           const SizedBox(height: 16),
           SizedBox(
@@ -651,7 +652,7 @@ class _AgencyCard extends StatelessWidget {
                           color: color.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Text(tier, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+                        child: Text(AgencyTierX.fromString(tier).label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 8),
                       // Small circular host count badge
