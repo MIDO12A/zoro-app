@@ -11,6 +11,8 @@ import 'cp_tasks_screen.dart';
 import 'cp_settings_screen.dart';
 import 'cp_record_screen.dart';
 import 'cp_ranking_screen.dart';
+import 'cp_display_screen.dart';
+import 'cp_invitation_list_screen.dart';
 
 class CPDetailFullScreen extends StatefulWidget {
   final String? cpId;
@@ -175,7 +177,10 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
               ),
               child: IconButton(
                 icon: const Icon(Icons.more_vert, color: Colors.white),
-                onPressed: () {},
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CcDisplayScreen()),
+                ),
                 padding: EdgeInsets.zero,
               ),
             ),

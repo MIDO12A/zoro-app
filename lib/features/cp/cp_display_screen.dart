@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/cache/encrypted_image_provider.dart';
 import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
+import 'cp_invitation_list_screen.dart';
 
 class CcDisplayScreen extends StatefulWidget {
   const CcDisplayScreen({super.key});
@@ -54,19 +55,25 @@ class _CcDisplayScreenState extends State<CcDisplayScreen> {
           children: [
             Text('العلاقات', style: TextStyle(color: cfg.cpHeaderText, fontSize: 16)),
             const SizedBox(width: 4),
-            Text('(0)', style: TextStyle(color: cfg.cpSubText, fontSize: 14)),
+            Text('(${_couples.length})', style: TextStyle(color: cfg.cpSubText, fontSize: 14)),
           ],
         ),
         centerTitle: true,
         actions: [
-          Container(
-            margin: const EdgeInsetsDirectional.only(end: 12),
-            width: 32, height: 32,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CcInvitationListScreen()),
             ),
-            child: const Icon(Icons.edit, color: Colors.white, size: 18),
+            child: Container(
+              margin: const EdgeInsetsDirectional.only(end: 12),
+              width: 32, height: 32,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.mail_outline, color: Colors.white, size: 18),
+            ),
           ),
         ],
       ),
