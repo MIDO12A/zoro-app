@@ -49,6 +49,9 @@ jobs:
         id: ver
         run: echo "ver=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)" >> "$GITHUB_OUTPUT"
 
+      - name: Analyze code
+        run: flutter analyze
+
       # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
       # strictly increasing and higher than any previously installed APK.
       # 1789000000 is above all existing UNIX timestamps and old numbers in this project.
@@ -56,7 +59,7 @@ jobs:
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000003200 + BUILD_NUM))
+          VERSION_CODE=$((2000003300 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
