@@ -25,9 +25,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Install dependencies
-        run: flutter pub get
-
       - name: Restore release signing keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -49,54 +46,33 @@ jobs:
         id: ver
         run: echo "ver=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)" >> "$GITHUB_OUTPUT"
 
-      - name: Analyze code (non-blocking)
-        run: flutter analyze --no-fatal-infos --no-fatal-warnings || true
-
-      # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
-      # strictly increasing and higher than any previously installed APK.
-      # 2000008600 leaves a safe gap over any previous number (user requested > 2000007181).
       - name: Build release APKs
-        env:
-          BUILD_NUM: ${{ github.run_number }}
-        run: |
-          VERSION_CODE=$((2000008600 + BUILD_NUM))
-          flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
-            echo "::error::Flutter build failed. Showing last 200 lines of build log:"
-            tail -n 200 build_log.txt
-            exit 1
-          }
-          echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
+        run: flutter build apk --release --split-per-abi --build-number=$((2000008700 + ${{ github.run_number }}))
 
       - name: Rename APKs
         run: |
-          cp -f build/app/outputs/flutter-apk/*arm64*.apk zero-app.apk 2>/dev/null || cp -f build/app/outputs/flutter-apk/*.apk zero-app.apk 2>/dev/null || touch zero-app.apk
-          cp -f build/app/outputs/flutter-apk/*armeabi*.apk zero-app-arm32.apk 2>/dev/null || cp -f zero-app.apk zero-app-arm32.apk 2>/dev/null || touch zero-app-arm32.apk
-          cp -f build/app/outputs/flutter-apk/*x86_64*.apk zero-app-x86_64.apk 2>/dev/null || cp -f zero-app.apk zero-app-x86_64.apk 2>/dev/null || touch zero-app-x86_64.apk
-          ls -la zero-app*.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk zero-app.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk zero-app-arm32.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk zero-app-x86_64.apk
 
       - name: Create build info
         env:
           APP_VER: ${{ steps.ver.outputs.ver }}
+          RUN_NUM: ${{ github.run_number }}
           SHA: ${{ github.sha }}
         run: |
-          printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$VERSION_CODE" "$SHA" > build_info.json
+          bn=$((2000008700 + RUN_NUM))
+          printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$bn" "$SHA" > build_info.json
           cat build_info.json
 
       - name: Publish to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APP_VER: ${{ steps.ver.outputs.ver }}
         run: |
-          TAG_NAME="v${APP_VER}+${VERSION_CODE}"
-          RELEASE_TITLE="Release v${APP_VER} (${VERSION_CODE})"
-          NOTES="Auto-build of commit ${GITHUB_SHA} with version ${VERSION_CODE}."
-
-          gh release create "$TAG_NAME" \
-            zero-app.apk \
-            zero-app-arm32.apk \
-            zero-app-x86_64.apk \
-            build_info.json \
-            --title "$RELEASE_TITLE" \
-            --notes "$NOTES" \
-            --latest
+          gh release create v${{ github.run_number }} \
+            "zero-app.apk#zero-app.apk (arm64)" \
+            "zero-app-arm32.apk#zero-app-arm32.apk (arm32)" \
+            "zero-app-x86_64.apk#zero-app-x86_64.apk (x86_64)" \
+            "build_info.json#build_info.json" \
+            --title "Update v${{ github.run_number }}" \
+            --notes "Auto-build of commit ${{ github.sha }}"
