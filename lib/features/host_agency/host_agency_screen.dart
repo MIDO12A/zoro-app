@@ -606,14 +606,16 @@ class _AgencyCard extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: (photoUrl != null && photoUrl.isNotEmpty)
-                ? (photoUrl.startsWith('http')
-                    ? Image.network(photoUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Center(
-                        child: Text(
-                          name.isEmpty ? '?' : name.characters.first,
-                          style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
-                        ),
-                      ))
-                    : Image(image: EncryptedImageProvider(photoUrl), fit: BoxFit.cover))
+                ? Image(
+                    image: EncryptedImageProvider(photoUrl),
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Center(
+                      child: Text(
+                        name.isEmpty ? '?' : name.characters.first,
+                        style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  )
                 : Center(
                     child: Text(
                       name.isEmpty ? '?' : name.characters.first,
