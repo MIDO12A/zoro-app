@@ -129,7 +129,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
     _rtTransactions = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_ledger:$agencyId',
       event: PostgresChangeEvent.insert,
-    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
+      table: 'agency_diamond_ledger',
       filter: PostgresChangeFilter(
         type: PostgresChangeFilterType.eq,
         column: 'agency_id',
