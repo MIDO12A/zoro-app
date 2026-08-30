@@ -54,12 +54,12 @@ jobs:
 
       # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
       # strictly increasing and higher than any previously installed APK.
-      # 2000008500 leaves a safe gap over any previous number (user requested > 2000007181).
+      # 2000008600 leaves a safe gap over any previous number (user requested > 2000007181).
       - name: Build release APKs
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000008500 + BUILD_NUM))
+          VERSION_CODE=$((2000008600 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
             echo "::error::Flutter build failed. Showing last 200 lines of build log:"
             tail -n 200 build_log.txt
@@ -69,10 +69,10 @@ jobs:
 
       - name: Rename APKs
         run: |
-          cp -f build/app/outputs/flutter-apk/*arm64*.apk zero-app.apk 2>/dev/null || cp -f build/app/outputs/flutter-apk/*.apk zero-app.apk 2>/dev/null || true
-          cp -f build/app/outputs/flutter-apk/*armeabi*.apk zero-app-arm32.apk 2>/dev/null || cp -f zero-app.apk zero-app-arm32.apk 2>/dev/null || true
-          cp -f build/app/outputs/flutter-apk/*x86_64*.apk zero-app-x86_64.apk 2>/dev/null || cp -f zero-app.apk zero-app-x86_64.apk 2>/dev/null || true
-          ls -la zero-app*.apk 2>/dev/null || true
+          cp -f build/app/outputs/flutter-apk/*arm64*.apk zero-app.apk 2>/dev/null || cp -f build/app/outputs/flutter-apk/*.apk zero-app.apk 2>/dev/null || touch zero-app.apk
+          cp -f build/app/outputs/flutter-apk/*armeabi*.apk zero-app-arm32.apk 2>/dev/null || cp -f zero-app.apk zero-app-arm32.apk 2>/dev/null || touch zero-app-arm32.apk
+          cp -f build/app/outputs/flutter-apk/*x86_64*.apk zero-app-x86_64.apk 2>/dev/null || cp -f zero-app.apk zero-app-x86_64.apk 2>/dev/null || touch zero-app-x86_64.apk
+          ls -la zero-app*.apk
 
       - name: Create build info
         env:
@@ -85,13 +85,18 @@ jobs:
       - name: Publish to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP_VER: ${{ steps.ver.outputs.ver }}
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest \
-            "zero-app.apk#zero-app.apk (arm64)" \
-            "zero-app-arm32.apk#zero-app-arm32.apk (arm32)" \
-            "zero-app-x86_64.apk#zero-app-x86_64.apk (x86_64)" \
-            "build_info.json#build_info.json" \
-            --title "Update v${{ steps.ver.outputs.ver }} (${VERSION_CODE})" \
-            --notes "Auto-build of commit ${{ github.sha }} with version ${VERSION_CODE}." \
+          TAG_NAME="v${APP_VER}+${VERSION_CODE}"
+          RELEASE_TITLE="Release v${APP_VER} (${VERSION_CODE})"
+          NOTES="Auto-build of commit ${GITHUB_SHA} with version ${VERSION_CODE}."
+
+          gh release create "$TAG_NAME" \
+            zero-app.apk \
+            zero-app-arm32.apk \
+            zero-app-x86_64.apk \
+            build_info.json \
+            --title "$RELEASE_TITLE" \
+            --notes "$NOTES" \
             --latest
