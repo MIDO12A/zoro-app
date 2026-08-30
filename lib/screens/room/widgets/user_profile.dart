@@ -11,6 +11,7 @@ import '../../../core/supabase_compat.dart';
 import '../../../core/widgets/cached_image.dart';
 import '../../../models/gift_model.dart' as gm;
 import '../../user_profile/user_profile_screen.dart';
+import '../../message/message_reply_detail_screen.dart';
 import 'svga_frame.dart';
 import 'svga_player.dart';
 import 'vap_player.dart';
@@ -74,6 +75,7 @@ class UserProfile extends StatefulWidget {
 
 class _UserProfileState extends State<UserProfile> {
   Map<String, dynamic> _extraUserData = {};
+  Map<String, dynamic>? _userAgency;
   bool _dataLoaded = false;
   final Map<String, String> _storeSvgaMap = {}; // itemId -> svgaAsset URL
   
@@ -104,11 +106,31 @@ class _UserProfileState extends State<UserProfile> {
       try {
         final userData = await Supabase.instance.client
             .from('users')
-            .select('custom_id, active_frame, active_cover, profile_bg_url, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces, country, country_code')
+            .select('custom_id, active_frame, active_cover, profile_bg_url, owned_badges, owned_level_badges, wealth_level, recharge_level, gems_level, owned_level_frames, owned_level_badges, owned_items, owned_necklaces, country, country_code, is_host, is_agent, role')
             .eq('uid', uid)
             .maybeSingle();
         if (userData != null) {
           _extraUserData.addAll(userData);
+        }
+      } catch (_) {}
+
+      // Fetch agency membership
+      try {
+        final memberRes = await Supabase.instance.client
+            .from('host_agency_members')
+            .select('agency_id, role, status')
+            .eq('user_id', uid)
+            .maybeSingle();
+        if (memberRes != null && memberRes['agency_id'] != null) {
+          final agencyId = memberRes['agency_id'].toString();
+          final agencyRes = await Supabase.instance.client
+              .from('host_agencies')
+              .select('*')
+              .eq('id', agencyId)
+              .maybeSingle();
+          if (agencyRes != null && mounted) {
+            setState(() => _userAgency = agencyRes);
+          }
         }
       } catch (_) {}
 
@@ -412,58 +434,9 @@ class _UserProfileState extends State<UserProfile> {
                 ],
               ),
 
-              // 3. Host / Role Badge (مضيف)
-              if (isHost) ...[
-                const SizedBox(height: 8),
-                if (config.miniprofileHostBadgeImg.isNotEmpty)
-                  SizedBox(
-                    height: 24,
-                    child: Image(
-                      image: R.cachedImage(config.miniprofileHostBadgeImg),
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: config.miniprofileHostBadgeBg,
-                          gradient: config.miniprofileHostBadgeBg == const Color(0xFF1E5BB5)
-                              ? const LinearGradient(colors: [Color(0xFF1E5BB5), Color(0xFF0F3675)])
-                              : null,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF5C9DFF), width: 0.8),
-                        ),
-                        child: const Text(
-                          'مضيف',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: config.miniprofileHostBadgeBg,
-                      gradient: config.miniprofileHostBadgeBg == const Color(0xFF1E5BB5)
-                          ? const LinearGradient(colors: [Color(0xFF1E5BB5), Color(0xFF0F3675)])
-                          : null,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: const Color(0xFF5C9DFF), width: 0.8),
-                    ),
-                    child: const Text(
-                      'مضيف',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-              ],
-              const SizedBox(height: 14),
+              // 3. Badges, Medals, Host & Agent Medals (الشارات والقلادات التلقائية)
+              _buildBadgesAndMedals(config),
+              const SizedBox(height: 10),
 
               // 4. Received Gifts Gallery Bar (شريط استلام الهدايا)
               GestureDetector(
@@ -640,34 +613,31 @@ class _UserProfileState extends State<UserProfile> {
                           widget.onGift?.call();
                         },
                         child: Container(
-                          height: 44,
+                          height: 48,
                           decoration: BoxDecoration(
-                            color: btnColor,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFE8BD56), Color(0xFFC99427)],
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: btnColor.withOpacity(0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
+                            image: config.miniprofileGiftBtnBg.isNotEmpty
+                                ? DecorationImage(image: R.cachedImage(config.miniprofileGiftBtnBg), fit: BoxFit.fill)
+                                : null,
+                            gradient: config.miniprofileGiftBtnBg.isNotEmpty
+                                ? null
+                                : const LinearGradient(
+                                    colors: [Color(0xFFE8BD56), Color(0xFFC99427)],
+                                  ),
+                            borderRadius: BorderRadius.circular(14),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               if (config.miniprofileGiftIcon.isNotEmpty)
-                                Image(image: R.cachedImage(config.miniprofileGiftIcon), width: 18, height: 18, errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 14)))
+                                Image(image: R.cachedImage(config.miniprofileGiftIcon), width: 22, height: 22, errorBuilder: (_, __, ___) => const Text('🎁', style: TextStyle(fontSize: 16)))
                               else
-                                const Text('🎁', style: TextStyle(fontSize: 14)),
+                                const Text('🎁', style: TextStyle(fontSize: 16)),
                               const SizedBox(width: 6),
                               const Text(
                                 'هدية',
                                 style: TextStyle(
                                   color: Color(0xFF1A1408),
-                                  fontSize: 14,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -680,9 +650,10 @@ class _UserProfileState extends State<UserProfile> {
 
                     // @ Mention Button
                     _buildRoundActionBtn(
+                      customBgImg: config.miniprofileMentionBtnBg,
                       icon: config.miniprofileMentionIcon.isNotEmpty
-                          ? Image(image: R.cachedImage(config.miniprofileMentionIcon), width: 20, height: 20, errorBuilder: (_, __, ___) => const Text('@', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)))
-                          : const Text('@', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ? Image(image: R.cachedImage(config.miniprofileMentionIcon), width: 26, height: 26, errorBuilder: (_, __, ___) => const Text('@', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)))
+                          : const Text('@', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
                       onTap: () {
                         widget.onClose?.call();
                         widget.onMention?.call();
@@ -692,25 +663,29 @@ class _UserProfileState extends State<UserProfile> {
 
                     // Chat/Message Button - Opens direct 1-on-1 private chat
                     _buildRoundActionBtn(
+                      customBgImg: config.miniprofileChatBtnBg,
                       icon: config.miniprofileChatIcon.isNotEmpty
-                          ? Image(image: R.cachedImage(config.miniprofileChatIcon), width: 20, height: 20, errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 18))
-                          : const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 18),
+                          ? Image(image: R.cachedImage(config.miniprofileChatIcon), width: 26, height: 26, errorBuilder: (_, __, ___) => const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 22))
+                          : const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white, size: 22),
                       onTap: () {
                         widget.onClose?.call();
                         if (widget.onChat != null) {
                           widget.onChat!();
                         } else {
-                          final targetUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString();
+                          final myUid = currentUser?.uid ?? '';
+                          final targetUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
                           final targetName = widget.user['name']?.toString() ?? 'User';
-                          final targetPhoto = widget.user['avatar']?.toString() ?? widget.user['photo_url']?.toString() ?? widget.user['photoUrl']?.toString();
-                          if (targetUid != null && targetUid.isNotEmpty) {
+                          final targetPhoto = widget.user['avatar']?.toString() ?? widget.user['photo_url']?.toString() ?? widget.user['photoUrl']?.toString() ?? '';
+                          if (targetUid.isNotEmpty && myUid.isNotEmpty) {
+                            final convId = (myUid.compareTo(targetUid) < 0) ? '${myUid}_$targetUid' : '${targetUid}_$myUid';
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => ChatScreen(
-                                  targetUid: targetUid,
-                                  targetName: targetName,
-                                  targetPhotoUrl: targetPhoto,
+                                builder: (_) => MessageReplyDetailScreen(
+                                  conversationId: convId,
+                                  otherUid: targetUid,
+                                  otherName: targetName,
+                                  otherPhotoUrl: targetPhoto,
                                 ),
                               ),
                             );
@@ -722,12 +697,13 @@ class _UserProfileState extends State<UserProfile> {
 
                     // Follow Button
                     _buildRoundActionBtn(
+                      customBgImg: config.miniprofileFollowBtnBg,
                       icon: config.miniprofileFollowIcon.isNotEmpty && !widget.isFollowed
-                          ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 20, height: 20, errorBuilder: (_, __, ___) => Icon(widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded, color: widget.isFollowed ? Colors.pinkAccent : Colors.white, size: 18))
+                          ? Image(image: R.cachedImage(config.miniprofileFollowIcon), width: 26, height: 26, errorBuilder: (_, __, ___) => Icon(widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded, color: widget.isFollowed ? Colors.pinkAccent : Colors.white, size: 22))
                           : Icon(
                               widget.isFollowed ? Icons.favorite : Icons.favorite_border_rounded,
                               color: widget.isFollowed ? Colors.pinkAccent : Colors.white,
-                              size: 18,
+                              size: 22,
                             ),
                       onTap: widget.onFollow,
                     ),
@@ -861,19 +837,172 @@ class _UserProfileState extends State<UserProfile> {
     );
   }
 
-  Widget _buildRoundActionBtn({required Widget icon, required VoidCallback? onTap}) {
+  Widget _buildRoundActionBtn({
+    required Widget icon,
+    required VoidCallback? onTap,
+    String customBgImg = '',
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 44,
-        height: 44,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
-          color: const Color(0xFF24202B),
+          color: customBgImg.isNotEmpty ? null : Colors.transparent,
+          image: customBgImg.isNotEmpty
+              ? DecorationImage(image: R.cachedImage(customBgImg), fit: BoxFit.contain)
+              : null,
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white12, width: 1),
         ),
         alignment: Alignment.center,
         child: icon,
+      ),
+    );
+  }
+
+  Widget _buildBadgesAndMedals(DynamicConfigService config) {
+    final List<Widget> badgeWidgets = [];
+
+    final isHost = widget.user['is_host'] == true ||
+        widget.user['role'] == 'host' ||
+        widget.user['role'] == 'owner' ||
+        widget.isModerator ||
+        _extraUserData['is_host'] == true ||
+        _userAgency != null;
+
+    final isAgent = widget.user['is_agent'] == true ||
+        widget.user['role'] == 'agent' ||
+        _extraUserData['is_agent'] == true ||
+        (_userAgency != null && _userAgency!['owner_id']?.toString() == (widget.user['uid'] ?? widget.user['id']));
+
+    // 1. Host Medal / Badge (Auto-injected if Host)
+    if (isHost) {
+      final hostImg = config.agencyHostNecklaceImg.isNotEmpty
+          ? config.agencyHostNecklaceImg
+          : (config.miniprofileHostBadgeImg.isNotEmpty ? config.miniprofileHostBadgeImg : '');
+      final hostSvga = config.agencyHostNecklaceSvga;
+
+      badgeWidgets.add(
+        _buildBadgeItem(
+          svgaUrl: hostSvga,
+          imageUrl: hostImg,
+          fallbackText: 'مضيف',
+          fallbackColor: const Color(0xFF1E5BB5),
+        ),
+      );
+    }
+
+    // 2. Agent Medal / Badge (Auto-injected if Agent / Agency Leader)
+    if (isAgent) {
+      final agentImg = config.agencyLeaderNecklaceImg.isNotEmpty
+          ? config.agencyLeaderNecklaceImg
+          : (config.miniprofileAgentBadgeImg.isNotEmpty ? config.miniprofileAgentBadgeImg : '');
+      final agentSvga = config.agencyLeaderNecklaceSvga;
+
+      badgeWidgets.add(
+        _buildBadgeItem(
+          svgaUrl: agentSvga,
+          imageUrl: agentImg,
+          fallbackText: 'وكيل',
+          fallbackColor: const Color(0xFF8E24AA),
+        ),
+      );
+    }
+
+    // 3. Owned Necklaces / Medals
+    final ownedNecklaces = _extraUserData['owned_necklaces'];
+    if (ownedNecklaces is List) {
+      for (final n in ownedNecklaces) {
+        if (n is String && n.isNotEmpty) {
+          final item = _storeSvgaMap[n];
+          if (item != null && item.isNotEmpty) {
+            badgeWidgets.add(_buildBadgeItem(imageUrl: item, svgaUrl: detectAssetType(item) == AssetType.svga ? item : ''));
+          }
+        } else if (n is Map) {
+          final svga = n['svga_url']?.toString() ?? '';
+          final img = n['image_url']?.toString() ?? n['icon_asset']?.toString() ?? '';
+          if (svga.isNotEmpty || img.isNotEmpty) {
+            badgeWidgets.add(_buildBadgeItem(svgaUrl: svga, imageUrl: img));
+          }
+        }
+      }
+    }
+
+    // 4. Owned Level Badges
+    final ownedLevelBadges = _extraUserData['owned_level_badges'];
+    if (ownedLevelBadges is List) {
+      for (final b in ownedLevelBadges) {
+        if (b is String && b.isNotEmpty) {
+          badgeWidgets.add(_buildBadgeItem(imageUrl: b));
+        }
+      }
+    }
+
+    // 5. Owned Badges
+    final ownedBadges = _extraUserData['owned_badges'];
+    if (ownedBadges is List) {
+      for (final b in ownedBadges) {
+        if (b is String && b.isNotEmpty) {
+          final item = _storeSvgaMap[b];
+          if (item != null && item.isNotEmpty) {
+            badgeWidgets.add(_buildBadgeItem(imageUrl: item, svgaUrl: detectAssetType(item) == AssetType.svga ? item : ''));
+          }
+        }
+      }
+    }
+
+    if (badgeWidgets.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 6,
+        runSpacing: 6,
+        children: badgeWidgets,
+      ),
+    );
+  }
+
+  Widget _buildBadgeItem({
+    String svgaUrl = '',
+    String imageUrl = '',
+    String fallbackText = '',
+    Color fallbackColor = const Color(0xFF1E5BB5),
+  }) {
+    if (svgaUrl.isNotEmpty && detectAssetType(svgaUrl) == AssetType.svga) {
+      return SizedBox(
+        width: 38,
+        height: 38,
+        child: SvgaPlayer(assetPath: svgaUrl, fit: BoxFit.contain, loops: true),
+      );
+    }
+    if (imageUrl.isNotEmpty) {
+      return SizedBox(
+        width: 38,
+        height: 38,
+        child: Image(
+          image: R.cachedImage(imageUrl),
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => _buildFallbackBadge(fallbackText, fallbackColor),
+        ),
+      );
+    }
+    return _buildFallbackBadge(fallbackText, fallbackColor);
+  }
+
+  Widget _buildFallbackBadge(String text, Color color) {
+    if (text.isEmpty) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white24, width: 0.8),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
       ),
     );
   }

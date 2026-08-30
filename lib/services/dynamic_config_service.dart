@@ -211,6 +211,8 @@ class DynamicConfigService extends ChangeNotifier {
   Color get miniprofileGiftBarBorder => _screenColor('userProfile', 'giftBarBorder', const Color(0xFF5E4321));
   String get miniprofileHostBadgeImg => _screenStr('userProfile', 'hostBadgeImg', _rawConfig['userProfile']?['hostBadgeImg']?.toString() ?? '');
   Color get miniprofileHostBadgeBg => _screenColor('userProfile', 'hostBadgeBg', const Color(0xFF1E5BB5));
+  String get miniprofileAgentBadgeImg => _screenStr('userProfile', 'agentBadgeImg', _rawConfig['userProfile']?['agentBadgeImg']?.toString() ?? '');
+  Color get miniprofileAgentBadgeBg => _screenColor('userProfile', 'agentBadgeBg', const Color(0xFF8E24AA));
   String get miniprofileIntimateCardBg => _screenStr('userProfile', 'intimateCardBg', _rawConfig['userProfile']?['intimateCardBg']?.toString() ?? '');
   String get miniprofileFamilyCardBg => _screenStr('userProfile', 'familyCardBg', _rawConfig['userProfile']?['familyCardBg']?.toString() ?? '');
   String get miniprofileSupportersBanner => _screenStr('userProfile', 'supportersBanner', _rawConfig['userProfile']?['supportersBanner']?.toString() ?? '');
@@ -222,7 +224,7 @@ class DynamicConfigService extends ChangeNotifier {
   String get miniprofileBadgesTitleImg => _screenStr('userProfile', 'badgesTitleImg', _rawConfig['userProfile']?['badgesTitleImg']?.toString() ?? '');
   String get miniprofileAchievementsTitleImg => _screenStr('userProfile', 'achievementsTitleImg', _rawConfig['userProfile']?['achievementsTitleImg']?.toString() ?? '');
   
-  // Profile Icons
+  // Profile Icons & Button Backgrounds
   String get miniprofileFollowIcon => _screenStr('userProfile', 'profileFollowIcon', _rawConfig['userProfile']?['profileFollowIcon']?.toString() ?? '');
   String get miniprofileChatIcon => _screenStr('userProfile', 'profileChatIcon', _rawConfig['userProfile']?['profileChatIcon']?.toString() ?? '');
   String get miniprofileGiftIcon => _screenStr('userProfile', 'profileGiftIcon', _rawConfig['userProfile']?['profileGiftIcon']?.toString() ?? '');
@@ -230,6 +232,10 @@ class DynamicConfigService extends ChangeNotifier {
   String get miniprofileEditIcon => _screenStr('userProfile', 'profileEditIcon', _rawConfig['userProfile']?['profileEditIcon']?.toString() ?? '');
   String get miniprofileMentionIcon => _screenStr('userProfile', 'profileMentionIcon', _rawConfig['userProfile']?['profileMentionIcon']?.toString() ?? '');
   String get miniprofileMoreIcon => _screenStr('userProfile', 'profileMoreIcon', _rawConfig['userProfile']?['profileMoreIcon']?.toString() ?? '');
+  String get miniprofileGiftBtnBg => _screenStr('userProfile', 'giftBtnBg', _rawConfig['userProfile']?['giftBtnBg']?.toString() ?? '');
+  String get miniprofileMentionBtnBg => _screenStr('userProfile', 'mentionBtnBg', _rawConfig['userProfile']?['mentionBtnBg']?.toString() ?? '');
+  String get miniprofileChatBtnBg => _screenStr('userProfile', 'chatBtnBg', _rawConfig['userProfile']?['chatBtnBg']?.toString() ?? '');
+  String get miniprofileFollowBtnBg => _screenStr('userProfile', 'followBtnBg', _rawConfig['userProfile']?['followBtnBg']?.toString() ?? '');
 
   // Full User Profile Screen Visuals (from Admin Dashboard)
   String get fullProfileBgImage => _screenStr('fullProfile', 'backgroundImage', miniprofileBgImage);
