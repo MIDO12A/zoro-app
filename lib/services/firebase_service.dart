@@ -1241,6 +1241,11 @@ class FirebaseService {
         'visited_at': now,
       }, SetOptions(merge: true));
 
+      final countSnap = await _db
+          .collection('profile_visits')
+          .where('visited_uid', isEqualTo: visitedUid)
+          .count()
+          .get();
       final count = countSnap.count ?? 0;
       await _db.collection('users').doc(visitedUid).update({
         'visitors': count,
