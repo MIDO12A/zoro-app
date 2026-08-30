@@ -256,59 +256,68 @@ class _UserProfileState extends State<UserProfile> {
       clipBehavior: Clip.none,
       alignment: Alignment.topCenter,
       children: [
+        // Full Background User Cover (extends above the avatar and spans whole height)
+        if (hasUserCover)
+          Positioned(
+            top: -45,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (detectAssetType(userCover) == AssetType.svga)
+                    SvgaPlayer(assetPath: userCover, fit: BoxFit.fill, loops: true)
+                  else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
+                    VapPlayer(url: userCover, fit: BoxFit.fill, loops: true)
+                  else
+                    Image(
+                      image: R.cachedImage(userCover),
+                      fit: BoxFit.fill,
+                      errorBuilder: (_, __, ___) => const SizedBox(),
+                    ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.20),
+                          Colors.black.withOpacity(0.60),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
         // Main bottom card
         Container(
           width: double.infinity,
           margin: const EdgeInsets.only(top: 36),
           decoration: BoxDecoration(
-            color: cardBgColor,
+            color: hasUserCover ? Colors.transparent : cardBgColor,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border.all(color: cardBorderColor, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.6),
-                blurRadius: 20,
-                offset: const Offset(0, -4),
-              ),
-            ],
+            border: hasUserCover ? null : Border.all(color: cardBorderColor, width: 1),
+            boxShadow: hasUserCover
+                ? null
+                : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.6),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
           ),
           child: ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             child: Stack(
               children: [
-                // Full Background User Cover (replaces default appearance completely)
-                if (hasUserCover)
-                  Positioned.fill(
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        if (detectAssetType(userCover) == AssetType.svga)
-                          SvgaPlayer(assetPath: userCover, fit: BoxFit.fill, loops: true)
-                        else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
-                          VapPlayer(url: userCover, fit: BoxFit.fill, loops: true)
-                        else
-                          Image(
-                            image: R.cachedImage(userCover),
-                            fit: BoxFit.fill,
-                            errorBuilder: (_, __, ___) => const SizedBox(),
-                          ),
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.black.withOpacity(0.20),
-                                Colors.black.withOpacity(0.45),
-                                Colors.black.withOpacity(0.75),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else if (config.miniprofileBgImage.isNotEmpty)
+                if (!hasUserCover && config.miniprofileBgImage.isNotEmpty)
                   Positioned.fill(
                     child: Image(
                       image: R.cachedImage(config.miniprofileBgImage),
