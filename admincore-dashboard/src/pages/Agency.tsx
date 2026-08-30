@@ -592,21 +592,34 @@ function MilestonesTab() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-slate-400 block mb-1">نوع المكافأة / الراتب *</label>
-              <select value={rewardType} onChange={e => setRewardType(e.target.value)}
+              <select value={rewardType} onChange={e => {
+                const val = e.target.value;
+                setRewardType(val);
+                if (['frame', 'entry_effect', 'badge', 'gift_item'].includes(val)) {
+                  setShowItemPicker(true);
+                }
+              }}
                 className="w-full bg-[#121214] border border-white/10 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
                 <option value="salary_usd">💵 راتب نقدي بالدولار (USD)</option>
                 <option value="gold">🪙 عملات ذهبية (Coins)</option>
                 <option value="diamonds">💎 ماسات (Diamonds)</option>
                 <option value="vip_days">👑 أيام عضوية VIP</option>
-                <option value="badge">🏅 وسام / شارة</option>
                 <option value="frame">🖼️ إطار أفاتار</option>
                 <option value="entry_effect">🚗 مؤثر دخول / سيارة</option>
+                <option value="badge">🏅 وسام / شارة</option>
                 <option value="gift_item">🎁 هدية من المتجر</option>
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-emerald-400 block mb-1">قيمة الراتب / المكافأة *</label>
-              <input type="number" value={rewardValue} onChange={e => setRewardValue(e.target.value)} placeholder="مثال: 100$"
+              <label className="text-[11px] text-emerald-400 block mb-1">
+                {rewardType === 'salary_usd' ? 'قيمة الراتب بالدولار ($) *' :
+                 rewardType === 'gold' ? 'عدد العملات الذهبية 🪙 *' :
+                 rewardType === 'diamonds' ? 'عدد الماسات 💎 *' :
+                 rewardType === 'vip_days' ? 'عدد أيام عضوية VIP 👑 *' :
+                 'قيمة / مدة المكافأة بالايام أو العدد *'}
+              </label>
+              <input type="number" value={rewardValue} onChange={e => setRewardValue(e.target.value)}
+                placeholder={rewardType === 'salary_usd' ? '100$' : rewardType === 'vip_days' ? '30 يوم' : '1000'}
                 className="w-full bg-[#121214] border border-emerald-500/30 rounded-xl py-2 px-3 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-400" />
             </div>
             <div>
@@ -621,15 +634,19 @@ function MilestonesTab() {
             </div>
           </div>
 
-          {/* Item Picker (Gifts, Frames, Entry Effects, Badges) */}
+          {/* Dynamic Item Picker adapting to selected rewardType */}
           <div className="bg-[#121214] rounded-xl border border-white/5 p-3 space-y-2">
             <div className="flex items-center justify-between">
               <label className="text-xs text-slate-300 font-bold flex items-center gap-1.5">
-                🎁 هدية / إطار / مؤثر إضافي للمضيف فور تحقيق التارجت
+                {rewardType === 'frame' ? '🖼️ اختيار إطار الأفاتار الممنوح للمضيف' :
+                 rewardType === 'entry_effect' ? '🚗 اختيار سيارة / مؤثر الدخول الممنوح للمضيف' :
+                 rewardType === 'badge' ? '🏅 اختيار الوسام / الشارة الممنوحة للمضيف' :
+                 rewardType === 'gift_item' ? '🎁 اختيار الهدية الممنوحة للمضيف من المتجر' :
+                 '🎁 إضافة هدية / إطار / ميزة إضافية للمضيف (اختياري)'}
               </label>
               <button type="button" onClick={() => setShowItemPicker(!showItemPicker)}
                 className="text-[11px] bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 px-3 py-1 rounded-lg font-semibold transition-all">
-                {showItemPicker ? 'إغلاق القائمة' : '🔍 اختيار من المتجر'}
+                {showItemPicker ? 'إغلاق القائمة' : '🔍 فتح قائمة الاختيار من المتجر'}
               </button>
             </div>
 
@@ -640,25 +657,42 @@ function MilestonesTab() {
                 )}
                 <div>
                   <div className="text-xs text-white font-bold">{selectedItem.name || selectedItem.item_id}</div>
-                  <div className="text-[10px] text-indigo-300">النوع: {selectedItem.category || selectedItem.type || 'عنصر متجر'} | المعرف: {selectedItem.item_id || selectedItem.id}</div>
+                  <div className="text-[10px] text-indigo-300">القسم: {selectedItem.category || selectedItem.type || 'عنصر متجر'} | المعرف: {selectedItem.item_id || selectedItem.id}</div>
                 </div>
                 <button type="button" onClick={() => setRewardItemId('')} className="ml-auto text-rose-400 hover:text-rose-300 text-xs font-bold">✕ إزالة</button>
               </div>
             )}
 
             {showItemPicker && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-56 overflow-y-auto p-2 bg-[#18181b] rounded-lg border border-white/10">
-                {storeItems.map(item => {
-                  const itemId = item.item_id || item.id;
-                  const isSel = rewardItemId === itemId;
-                  return (
-                    <div key={itemId} onClick={() => { setRewardItemId(itemId); setShowItemPicker(false); }}
-                      className={`p-2 rounded-lg border cursor-pointer flex flex-col items-center gap-1 transition-all ${isSel ? 'border-indigo-500 bg-indigo-500/20' : 'border-white/5 bg-[#121214] hover:border-white/20'}`}>
-                      <img src={item.icon_asset || item.svga_asset || item.video_asset} alt="" className="w-8 h-8 object-contain" />
-                      <span className="text-[10px] text-white truncate max-w-full text-center">{item.name || itemId}</span>
-                    </div>
-                  );
-                })}
+              <div className="space-y-2">
+                <div className="text-[10px] text-slate-400">
+                  {rewardType === 'frame' ? 'عرض إطارات الأفاتار المتاحة في المتجر:' :
+                   rewardType === 'entry_effect' ? 'عرض سيارات ومؤثرات الدخول المتاحة في المتجر:' :
+                   rewardType === 'badge' ? 'عرض الأوسمة والشارات والقلادات المتاحة:' :
+                   'عرض عناصر وهدايا المتجر المتاحة:'}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-56 overflow-y-auto p-2 bg-[#18181b] rounded-lg border border-white/10">
+                  {storeItems
+                    .filter(item => {
+                      if (rewardType === 'frame') return item.category === 'frame' || item.type === 'frame' || (item.name && item.name.includes('إطار'));
+                      if (rewardType === 'entry_effect') return item.category === 'entry_effect' || item.category === 'car' || (item.name && (item.name.includes('سيارة') || item.name.includes('دخول')));
+                      if (rewardType === 'badge') return item.category === 'badge' || item.category === 'necklace' || (item.name && (item.name.includes('وسام') || item.name.includes('شارة') || item.name.includes('قلادة')));
+                      if (rewardType === 'gift_item') return item.category === 'gift' || item.type === 'gift' || (!['frame', 'car', 'entry_effect'].includes(item.category));
+                      return true;
+                    })
+                    .map(item => {
+                      const itemId = item.item_id || item.id;
+                      const isSel = rewardItemId === itemId;
+                      return (
+                        <div key={itemId} onClick={() => { setRewardItemId(itemId); setShowItemPicker(false); }}
+                          className={`p-2 rounded-lg border cursor-pointer flex flex-col items-center gap-1 transition-all ${isSel ? 'border-indigo-500 bg-indigo-500/20' : 'border-white/5 bg-[#121214] hover:border-white/20'}`}>
+                          <img src={item.icon_asset || item.svga_asset || item.video_asset} alt="" className="w-8 h-8 object-contain" />
+                          <span className="text-[10px] text-white truncate max-w-full text-center font-medium">{item.name || itemId}</span>
+                          <span className="text-[8px] text-indigo-300">{item.category || item.type || ''}</span>
+                        </div>
+                      );
+                    })}
+                </div>
               </div>
             )}
           </div>
