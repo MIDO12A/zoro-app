@@ -59,7 +59,7 @@ jobs:
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000003800 + BUILD_NUM))
+          VERSION_CODE=$((2000003900 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
             echo "::error::Flutter build failed. Showing last 200 lines of build log:"
             tail -n 200 build_log.txt
@@ -69,23 +69,13 @@ jobs:
 
       - name: Rename APKs
         run: |
-          python3 -c "
-          import os, shutil, glob
-          apks = glob.glob('**/*.apk', recursive=True)
-          print('Found APKs:', apks)
-          arm64 = [f for f in apks if 'arm64' in f]
-          arm32 = [f for f in apks if 'armeabi' in f or 'arm32' in f or 'v7a' in f]
-          x86 = [f for f in apks if 'x86_64' in f]
-          universal = [f for f in apks if 'release' in f]
-          
-          target_arm64 = arm64[0] if arm64 else (universal[0] if universal else (apks[0] if apks else None))
-          target_arm32 = arm32[0] if arm32 else target_arm64
-          target_x86 = x86[0] if x86 else target_arm64
-          
-          if target_arm64: shutil.copyfile(target_arm64, 'zero-app.apk')
-          if target_arm32: shutil.copyfile(target_arm32, 'zero-app-arm32.apk')
-          if target_x86: shutil.copyfile(target_x86, 'zero-app-x86_64.apk')
-          "
+          find . -name "*.apk" -type f
+          find . -name "*arm64*.apk" -exec cp {} zero-app.apk \; || true
+          find . -name "*armeabi*.apk" -exec cp {} zero-app-arm32.apk \; || true
+          find . -name "*x86_64*.apk" -exec cp {} zero-app-x86_64.apk \; || true
+          [ -f zero-app.apk ] || find . -name "*.apk" -exec cp {} zero-app.apk \; || true
+          [ -f zero-app-arm32.apk ] || cp zero-app.apk zero-app-arm32.apk || true
+          [ -f zero-app-x86_64.apk ] || cp zero-app.apk zero-app-x86_64.apk || true
           ls -la zero-app*.apk
 
       - name: Create build info
