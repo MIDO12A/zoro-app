@@ -596,26 +596,33 @@ class _AgencyCard extends StatelessWidget {
                 style: TextStyle(fontSize: 18, color: cfg.agencyTextColor)),
             ),
             const SizedBox(width: 10),
-            // Logo
+            // Logo / Agency Photo from Agent device
             Container(
-              width: 44, height: 44,
+              width: 48, height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: color.withOpacity(0.15),
-                border: Border.all(color: color.withOpacity(0.4)),
+                border: Border.all(color: color.withOpacity(0.4), width: 1.5),
               ),
               clipBehavior: Clip.antiAlias,
-              child: photoUrl != null
-                ? Image(image: EncryptedImageProvider(photoUrl), fit: BoxFit.cover)
+              child: (photoUrl != null && photoUrl.isNotEmpty)
+                ? (photoUrl.startsWith('http')
+                    ? Image.network(photoUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Center(
+                        child: Text(
+                          name.isEmpty ? '?' : name.characters.first,
+                          style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
+                        ),
+                      ))
+                    : Image(image: EncryptedImageProvider(photoUrl), fit: BoxFit.cover))
                 : Center(
                     child: Text(
                       name.isEmpty ? '?' : name.characters.first,
-                      style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
                     ),
                   ),
             ),
             const SizedBox(width: 12),
-            // Info
+            // Info: Name & Host Count circular badge
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,7 +632,7 @@ class _AgencyCard extends StatelessWidget {
                       Flexible(
                         child: Text(name,
                           maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w600, fontSize: 14)),
+                          style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w700, fontSize: 15)),
                       ),
                       if (isHOF) ...[
                         const SizedBox(width: 4),
@@ -633,7 +640,7 @@ class _AgencyCard extends StatelessWidget {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 5),
                   Row(
                     children: [
                       Container(
@@ -645,9 +652,23 @@ class _AgencyCard extends StatelessWidget {
                         child: Text(tier, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
                       ),
                       const SizedBox(width: 8),
-                      Icon(Icons.people_rounded, color: cfg.agencySubText, size: 13),
-                      const SizedBox(width: 3),
-                      Text('$members', style: TextStyle(color: cfg.agencySubText, fontSize: 12)),
+                      // Small circular host count badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.blueAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.blueAccent.withOpacity(0.3), width: 0.8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.people_alt_rounded, color: Colors.lightBlueAccent, size: 12),
+                            const SizedBox(width: 4),
+                            Text('$members مضيف', style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ],

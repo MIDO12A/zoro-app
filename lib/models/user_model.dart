@@ -40,6 +40,10 @@ class UserModel {
   final List<String> ownedLevelFrames;
   final List<String> ownedLevelBadges;
   final List<String> ownedNecklaces;
+  final bool isRechargeAgent;
+  final String? rechargeAgencyName;
+  final String? rechargeAgencyLogo;
+  final String? whatsappNumber;
 
   UserModel({
     required this.uid,
@@ -83,6 +87,10 @@ class UserModel {
     this.ownedLevelFrames = const [],
     this.ownedLevelBadges = const [],
     this.ownedNecklaces = const [],
+    this.isRechargeAgent = false,
+    this.rechargeAgencyName,
+    this.rechargeAgencyLogo,
+    this.whatsappNumber,
   });
 
   UserModel copyWith({
@@ -215,6 +223,10 @@ class UserModel {
       ownedLevelFrames: (map['owned_level_frames'] as List?)?.map((e) => e.toString()).toList() ?? [],
       ownedLevelBadges: (map['owned_level_badges'] as List?)?.map((e) => e.toString()).toList() ?? [],
       ownedNecklaces: (map['owned_necklaces'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      isRechargeAgent: map['is_recharge_agent'] == true || map['isRechargeAgent'] == true,
+      rechargeAgencyName: map['recharge_agency_name']?.toString(),
+      rechargeAgencyLogo: map['recharge_agency_logo']?.toString(),
+      whatsappNumber: map['whatsapp_number']?.toString() ?? map['phone']?.toString(),
     );
   }
 
@@ -260,5 +272,9 @@ class UserModel {
         'owned_level_frames': ownedLevelFrames,
         'owned_level_badges': ownedLevelBadges,
         'owned_necklaces': ownedNecklaces,
+        'is_recharge_agent': isRechargeAgent,
+        'recharge_agency_name': rechargeAgencyName,
+        'recharge_agency_logo': rechargeAgencyLogo,
+        'whatsapp_number': whatsappNumber,
       };
 }

@@ -543,18 +543,20 @@ class ProfileScreen extends StatelessWidget {
               );
             },
           ),
-          _buildDivider(),
-          _buildMenuItem(
-            R.mineUnionIc,
-            'وكيل الشحن',
-            null,
-            () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AgentRechargePortalScreen()),
-              );
-            },
-          ),
+          if (user?.isRechargeAgent == true) ...[
+            _buildDivider(),
+            _buildMenuItem(
+              R.mineUnionIc,
+              'وكالة الشحن والرواتب',
+              null,
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AgentRechargePortalScreen()),
+                );
+              },
+            ),
+          ],
           _buildDivider(),
           _buildMenuItem(
             R.mineLevelIc,
