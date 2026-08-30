@@ -59,7 +59,7 @@ jobs:
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000003900 + BUILD_NUM))
+          VERSION_CODE=$((2000004000 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
             echo "::error::Flutter build failed. Showing last 200 lines of build log:"
             tail -n 200 build_log.txt
@@ -69,14 +69,19 @@ jobs:
 
       - name: Rename APKs
         run: |
-          find . -name "*.apk" -type f
-          find . -name "*arm64*.apk" -exec cp {} zero-app.apk \; || true
-          find . -name "*armeabi*.apk" -exec cp {} zero-app-arm32.apk \; || true
-          find . -name "*x86_64*.apk" -exec cp {} zero-app-x86_64.apk \; || true
-          [ -f zero-app.apk ] || find . -name "*.apk" -exec cp {} zero-app.apk \; || true
-          [ -f zero-app-arm32.apk ] || cp zero-app.apk zero-app-arm32.apk || true
-          [ -f zero-app-x86_64.apk ] || cp zero-app.apk zero-app-x86_64.apk || true
-          ls -la zero-app*.apk
+          echo "=== Searching generated APKs in build/ ==="
+          find build -type f -name "*.apk"
+          
+          ARM64_FILE=$(find build -type f -name "*arm64*.apk" | head -n 1)
+          ARM32_FILE=$(find build -type f -name "*armeabi*.apk" | head -n 1)
+          X86_FILE=$(find build -type f -name "*x86_64*.apk" | head -n 1)
+          ANY_APK=$(find build -type f -name "*.apk" | head -n 1)
+
+          if [ -n "$ARM64_FILE" ]; then cp -v "$ARM64_FILE" zero-app.apk; else cp -v "$ANY_APK" zero-app.apk; fi
+          if [ -n "$ARM32_FILE" ]; then cp -v "$ARM32_FILE" zero-app-arm32.apk; else cp -v zero-app.apk zero-app-arm32.apk; fi
+          if [ -n "$X86_FILE" ]; then cp -v "$X86_FILE" zero-app-x86_64.apk; else cp -v zero-app.apk zero-app-x86_64.apk; fi
+
+          ls -lh zero-app*.apk
 
       - name: Create build info
         env:
