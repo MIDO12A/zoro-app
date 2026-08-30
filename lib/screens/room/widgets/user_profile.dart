@@ -455,9 +455,8 @@ class _UserProfileState extends State<UserProfile> {
                     children: [
                       const Icon(Icons.chevron_left, color: Colors.white54, size: 20),
                       const SizedBox(width: 4),
-                      // Top received gifts list
                       Expanded(
-                        child: _receivedGifts.isEmpty
+                        child: _getAggregatedReceivedGifts().isEmpty
                             ? const Align(
                                 alignment: Alignment.centerLeft,
                                 child: Text(
@@ -465,52 +464,58 @@ class _UserProfileState extends State<UserProfile> {
                                   style: TextStyle(color: Colors.white38, fontSize: 11),
                                 ),
                               )
-                            : ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: _receivedGifts.length.clamp(0, 6),
-                                itemBuilder: (ctx, i) {
-                                  final g = _receivedGifts[i];
-                                  final giftDef = _giftsCatalog[g.giftId];
-                                  final icon = giftDef?.iconAsset ?? '';
-                                  final isSvga = icon.isNotEmpty && detectAssetType(icon) == AssetType.svga;
+                            : Builder(
+                                builder: (ctx) {
+                                  final aggGifts = _getAggregatedReceivedGifts();
+                                  return ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: aggGifts.length.clamp(0, 6),
+                                    itemBuilder: (ctx, i) {
+                                      final g = aggGifts[i];
+                                      final giftDef = _giftsCatalog[g['giftId']];
+                                      final icon = giftDef?.iconAsset ?? '';
+                                      final isSvga = icon.isNotEmpty && detectAssetType(icon) == AssetType.svga;
+                                      final count = g['count'] as int? ?? 1;
 
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      clipBehavior: Clip.none,
-                                      children: [
-                                        Container(
-                                          width: 38,
-                                          height: 38,
-                                          decoration: BoxDecoration(
-                                            color: Colors.white.withOpacity(0.05),
-                                            borderRadius: BorderRadius.circular(8),
-                                          ),
-                                          child: icon.isNotEmpty
-                                              ? (isSvga
-                                                  ? SvgaPlayer(assetPath: icon, width: 36, height: 36)
-                                                  : CachedImg(icon, width: 36, height: 36, fit: BoxFit.contain))
-                                              : const Icon(Icons.card_giftcard, color: Colors.amber, size: 24),
-                                        ),
-                                        Positioned(
-                                          bottom: -2,
-                                          right: -2,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF4A3419),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: Colors.amber.withOpacity(0.5), width: 0.5),
+                                      return Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                        child: Stack(
+                                          alignment: Alignment.center,
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            Container(
+                                              width: 38,
+                                              height: 38,
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withOpacity(0.05),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: icon.isNotEmpty
+                                                  ? (isSvga
+                                                      ? SvgaPlayer(assetPath: icon, width: 36, height: 36)
+                                                      : CachedImg(icon, width: 36, height: 36, fit: BoxFit.contain))
+                                                  : const Icon(Icons.card_giftcard, color: Colors.amber, size: 24),
                                             ),
-                                            child: Text(
-                                              'x${g.count}',
-                                              style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
+                                            Positioned(
+                                              bottom: -2,
+                                              right: -2,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF4A3419),
+                                                  borderRadius: BorderRadius.circular(4),
+                                                  border: Border.all(color: Colors.amber.withOpacity(0.5), width: 0.5),
+                                                ),
+                                                child: Text(
+                                                  'x$count',
+                                                  style: const TextStyle(fontSize: 8, color: Colors.white, fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
                                             ),
-                                          ),
+                                          ],
                                         ),
-                                      ],
-                                    ),
+                                      );
+                                    },
                                   );
                                 },
                               ),
@@ -523,15 +528,17 @@ class _UserProfileState extends State<UserProfile> {
                         children: [
                           Row(
                             mainAxisSize: MainAxisSize.min,
-                            children: const [
-                              Text('استلام', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                              SizedBox(width: 3),
-                              Text('🎁', style: TextStyle(fontSize: 12)),
+                            children: [
+                              Text(
+                                '$_totalReceivedGiftCount',
+                                style: const TextStyle(color: Color(0xFFFFD700), fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(width: 2),
+                              const Text(
+                                'استلام',
+                                style: TextStyle(color: Colors.white70, fontSize: 11),
+                              ),
                             ],
-                          ),
-                          Text(
-                            _formatCount(_totalReceivedGiftCount),
-                            style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -554,34 +561,36 @@ class _UserProfileState extends State<UserProfile> {
               ),
               const SizedBox(height: 16),
 
-              // 6. Mic Controls (if active on seat)
-              if (widget.showMicControls) ...[
+              // 6. Mic Controls (Strictly for Room Owner / Room Moderator or user on their own mic)
+              if (widget.showMicControls && (widget.isModerator || widget.isRoomOwner || widget.isCurrentUser)) ...[
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    GestureDetector(
-                      onTap: widget.onMicDown,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          shape: BoxShape.circle,
+                    if (widget.isModerator || widget.isRoomOwner || widget.isCurrentUser)
+                      GestureDetector(
+                        onTap: widget.onMicDown,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.mic_off, color: Colors.white70, size: 22),
                         ),
-                        child: const Icon(Icons.mic_off, color: Colors.white70, size: 22),
                       ),
-                    ),
                     const SizedBox(width: 24),
-                    GestureDetector(
-                      onTap: widget.onMicMute,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          shape: BoxShape.circle,
+                    if (widget.isModerator || widget.isRoomOwner || widget.isCurrentUser)
+                      GestureDetector(
+                        onTap: widget.onMicMute,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.volume_off, color: Colors.white70, size: 22),
                         ),
-                        child: const Icon(Icons.volume_off, color: Colors.white70, size: 22),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -932,6 +941,23 @@ class _UserProfileState extends State<UserProfile> {
     );
   }
 
+  List<Map<String, dynamic>> _getAggregatedReceivedGifts() {
+    final Map<String, Map<String, dynamic>> map = {};
+    for (final g in _receivedGifts) {
+      final key = g.giftId.isNotEmpty ? g.giftId : (g.giftName.isNotEmpty ? g.giftName : 'gift');
+      if (map.containsKey(key)) {
+        map[key]!['count'] = (map[key]!['count'] as int) + g.count;
+      } else {
+        map[key] = {
+          'giftId': g.giftId,
+          'giftName': g.giftName,
+          'count': g.count,
+        };
+      }
+    }
+    return map.values.toList();
+  }
+
   Widget _buildBadgeItem({
     String svgaUrl = '',
     String imageUrl = '',
@@ -940,15 +966,15 @@ class _UserProfileState extends State<UserProfile> {
   }) {
     if (svgaUrl.isNotEmpty && detectAssetType(svgaUrl) == AssetType.svga) {
       return SizedBox(
-        width: 38,
-        height: 38,
+        width: 44,
+        height: 44,
         child: SvgaPlayer(assetPath: svgaUrl, fit: BoxFit.contain, loops: true),
       );
     }
     if (imageUrl.isNotEmpty) {
       return SizedBox(
-        width: 38,
-        height: 38,
+        width: 44,
+        height: 44,
         child: Image(
           image: R.cachedImage(imageUrl),
           fit: BoxFit.contain,

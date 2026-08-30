@@ -1646,7 +1646,8 @@ class _RoomScreenState extends State<RoomScreen> {
                 user: _selectedUser!.toMap(),
                 showMicControls:
                     _selectedSeatIdx != null &&
-                    _seats[_selectedSeatIdx!].isOccupied,
+                    _seats[_selectedSeatIdx!].isOccupied &&
+                    (_isOwnerOrModerator || _selectedUser?.id == _currentUserId),
                 isCurrentUser: _selectedUser?.id == _currentUserId,
                 isFollowed: _selectedUser?.id != null && _followedUsers.contains(_selectedUser!.id!),
                 isModerator: _isOwnerOrModerator,
