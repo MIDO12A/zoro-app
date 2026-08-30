@@ -244,16 +244,11 @@ class _UserProfileState extends State<UserProfile> {
     final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
     final isMe = widget.isCurrentUser || (currentUser != null && (widget.user['uid'] == currentUser.uid || widget.user['id'] == currentUser.uid));
 
-    final rawUserCover = (isMe && currentUser?.profileBgUrl != null && currentUser!.profileBgUrl!.isNotEmpty)
-        ? currentUser.profileBgUrl!
-        : (isMe && currentUser?.activeCover != null && currentUser!.activeCover!.isNotEmpty)
-            ? currentUser.activeCover!
-            : _extraUserData['profile_bg_url']?.toString() ??
-                _extraUserData['active_cover']?.toString() ??
-                widget.user['profile_bg_url']?.toString() ??
-                widget.user['active_cover']?.toString() ??
-                widget.user['cover']?.toString() ??
-                '';
+    final rawUserCover = (isMe && currentUser?.activeCover != null && currentUser!.activeCover!.isNotEmpty)
+        ? currentUser.activeCover!
+        : _extraUserData['active_cover']?.toString() ??
+            widget.user['active_cover']?.toString() ??
+            '';
     final userCover = _resolveSvga(rawUserCover);
     final hasUserCover = userCover.isNotEmpty;
 

@@ -904,33 +904,6 @@ class FirebaseService {
         break;
       case 'cover':
         updateMap['active_cover'] = itemId;
-        final storeItem = getStoreItemSync(itemId);
-        String directUrl = '';
-        if (storeItem != null) {
-          directUrl = (storeItem.videoAsset != null && storeItem.videoAsset!.isNotEmpty)
-              ? storeItem.videoAsset!
-              : (storeItem.svgaAsset != null && storeItem.svgaAsset!.isNotEmpty)
-                  ? storeItem.svgaAsset!
-                  : storeItem.iconAsset;
-        }
-        if (directUrl.isEmpty) {
-          try {
-            final snap = await _db.collection('store_items').where('item_id', isEqualTo: itemId).get();
-            if (snap.docs.isNotEmpty) {
-              final d = snap.docs.first.data();
-              directUrl = d['video_asset']?.toString() ?? d['svga_asset']?.toString() ?? d['icon_asset']?.toString() ?? d['icon']?.toString() ?? '';
-            } else {
-              final docSnap = await _db.collection('store_items').doc(itemId).get();
-              if (docSnap.exists) {
-                final d = docSnap.data() ?? {};
-                directUrl = d['video_asset']?.toString() ?? d['svga_asset']?.toString() ?? d['icon_asset']?.toString() ?? d['icon']?.toString() ?? '';
-              }
-            }
-          } catch (_) {}
-        }
-        if (directUrl.isNotEmpty) {
-          updateMap['profile_bg_url'] = directUrl;
-        }
         break;
     }
     await _db.collection('users').doc(uid).update(updateMap);
@@ -956,7 +929,6 @@ class FirebaseService {
         break;
       case 'cover':
         updateMap['active_cover'] = null;
-        updateMap['profile_bg_url'] = null;
         break;
     }
     await _db.collection('users').doc(uid).set(_stripNulls(updateMap), SetOptions(merge: true));

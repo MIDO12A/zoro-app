@@ -245,7 +245,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             _allOwnedFrames = allOwnedFList;
             _currentRoomId = roomId;
             _giftsCatalog = giftsCat;
-            _profileBgUrl = extraUserData?['profile_bg_url']?.toString() ?? targetUser?.profileBgUrl ?? targetUser?.activeCover;
+            _profileBgUrl = extraUserData?['profile_bg_url']?.toString() ?? targetUser?.profileBgUrl;
             _activeFrame = resolvedFrame;
             _ownedLevelFrames = resolvedFrames;
             _userAgency = userAgency;
@@ -596,16 +596,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget _buildNewProfileHeader(DynamicConfigService config, UserModel? user) {
     final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
     final isOwnProfile = widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid);
-    final coverRaw = (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
+    final coverUrl = (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
         ? _profileBgUrl!
         : (user?.profileBgUrl != null && user!.profileBgUrl!.isNotEmpty)
             ? user!.profileBgUrl!
-            : (user?.activeCover != null && user!.activeCover!.isNotEmpty)
-                ? user!.activeCover!
-                : '';
-    final coverUrl = _resolveSvga(coverRaw);
+            : '';
     final hasCover = coverUrl.isNotEmpty;
-    final coverType = hasCover ? detectAssetType(coverUrl) : AssetType.other;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -624,33 +620,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               SizedBox(
                 height: 200,
                 width: double.infinity,
-                child: coverType == AssetType.svga
-                    ? SvgaPlayer(
-                        assetPath: coverUrl,
+                child: hasCover
+                    ? Image(
+                        image: NetworkImage(coverUrl),
                         fit: BoxFit.cover,
-                        loops: true,
+                        errorBuilder: (_, __, ___) => Container(color: const Color(0xFF22202A)),
                       )
-                    : (coverType == AssetType.vap || coverType == AssetType.mp4)
-                        ? VapPlayer(
-                            url: coverUrl,
-                            fit: BoxFit.cover,
-                            loops: true,
-                          )
-                        : hasCover
-                            ? Image(
-                                image: NetworkImage(coverUrl),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => Container(color: const Color(0xFF22202A)),
-                              )
-                            : Container(
-                                decoration: const BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [Color(0xFF2A1A3A), Color(0xFF16151A)],
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                  ),
-                                ),
-                              ),
+                    : Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF2A1A3A), Color(0xFF16151A)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                      ),
               ),
               if (isOwnProfile)
                 Positioned(
