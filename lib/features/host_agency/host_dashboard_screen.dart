@@ -1,11 +1,11 @@
 // lib/features/host_agency/host_dashboard_screen.dart
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Glassmorphic 2035 Host Dashboard
-// â€¢ Real-time diamond earnings (today / week / month)
-// â€¢ Neon progress bars for monthly milestones
-// â€¢ Agency membership card
-// â€¢ Auto-refresh via StreamBuilder + periodic timer
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// • Real-time diamond earnings (today / week / month)
+// • Neon progress bars for monthly milestones
+// • Agency membership card
+// • Auto-refresh via StreamBuilder + periodic timer
+// ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -27,7 +27,7 @@ import '../../core/cache/encrypted_image_provider.dart';
 import 'package:provider/provider.dart';
 import '../../services/dynamic_config_service.dart';
 
-// â”€â”€ palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── palette ──────────────────────────────────────────────────────────────────
 const Color _bgDeep     = Color(0xFF03030A);
 const Color _bgCard     = Color(0x800A0820);
 const Color _border     = Color(0x2D9C6BFF);
@@ -38,7 +38,7 @@ const Color _red        = Color(0xFFFF4D6D);
 const Color _textMain   = Color(0xFFE8E6FF);
 const Color _textMuted  = Color(0xFF8A88AA);
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 class HostDashboardScreen extends StatefulWidget {
   const HostDashboardScreen({super.key});
 
@@ -56,7 +56,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
   bool _loading = true;
   String? _error;
 
-  // â”€â”€ v3 engine data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── v3 engine data ─────────────────────────────────────────────────────────
   bool _engineV3Enabled = false;
   Map<String, dynamic>? _v3Data; // from get_host_dashboard_v3
   Timer? _countdownTimer;
@@ -65,14 +65,14 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
   late final AnimationController _pulseCtrl;
   late final AnimationController _shimmerCtrl;
 
-  // Realtime â€” ÙŠØ­Ù„ Ù…Ø­Ù„ Timer.periodic
+  // Realtime بديل Timer.periodic
   RealtimeSubscription? _rtDiamonds;
   RealtimeSubscription? _rtMilestones;
   RealtimeSubscription? _rtProgress;   // v3: monthly progress
   RealtimeSubscription? _rtV2Diamonds; // v2: host_agency_members diamonds_available
   Timer? _debounce;
   bool   _reloading = false;
-  int    _prevMonthDiamonds = 0; // Ù„ÙƒØ´Ù Ø§Ù„ØªØºÙŠÙŠØ± ÙˆØ§Ù„Ø¥Ø´Ø¹Ø§Ø±
+  int    _prevMonthDiamonds = 0; // لكشف التغيير والإشعار
 
   @override
   void initState() {
@@ -104,7 +104,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     super.dispose();
   }
 
-  // â”€â”€ debounced reload â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── debounced reload ──────────────────────────────────────────────────────
   void _scheduleReload() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 800), () {
@@ -112,17 +112,17 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     });
   }
 
-  // â”€â”€ subscribe realtime Ø¨Ø¹Ø¯ Ù…Ø¹Ø±ÙØ© uid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── subscribe realtime ────────────────────────────────────
   void _bindRealtime(String uid) {
     _rtDiamonds?.dispose();
     _rtMilestones?.dispose();
     _rtV2Diamonds?.dispose();
 
-    // âœ… Ø§Ø´ØªØ±Ø§Ùƒ Ø¨Ø¯ÙØªØ± Ø§Ù„Ø£Ù„Ù…Ø§Ø³ (Ø§Ù„Ù…Ø­Ø±Ùƒ Ø§Ù„Ù‚Ø¯ÙŠÙ…)
+    // ✅ اشتراك بدفتر الألماس (المحرك القديم)
     _rtDiamonds = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_ledger:$uid',
       event: PostgresChangeEvent.insert,
-      table: 'agency_diamond_ledger',
+    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
       filter: PostgresChangeFilter(
         type: PostgresChangeFilterType.eq,
         column: 'user_id',
@@ -132,13 +132,13 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
         final amount    = (payload.newRecord['amount'] as num?)?.toInt() ?? 0;
         final direction = (payload.newRecord['direction'] as num?)?.toInt() ?? 1;
         if (amount > 0 && direction == 1) {
-          KayanInAppToast.diamond('Ø­ØµÙ„Øª Ø¹Ù„Ù‰ ${_fmtN(amount)} ðŸ’Ž Ø¬Ø¯ÙŠØ¯!');
+          KayanInAppToast.diamond('حصلت على ${_fmtN(amount)} 💎 جديد!');
         }
         _scheduleReload();
       },
     );
 
-    // âœ… Ø§Ø´ØªØ±Ø§Ùƒ Ø¨Ù€ host_agency_members (Ø§Ù„Ù…Ø­Ø±Ùƒ v2 â€” ÙŠÙƒØªØ¨ diamonds_available Ù‡Ù†Ø§)
+    // ✅ اشتراك بـ host_agency_members
     _rtV2Diamonds = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_member_v2:$uid',
       event: PostgresChangeEvent.update,
@@ -153,14 +153,14 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
         final oldDiamonds = (payload.oldRecord['diamonds_available'] as num?)?.toInt();
         if (newDiamonds != null && oldDiamonds != null && newDiamonds > oldDiamonds) {
           final diff = newDiamonds - oldDiamonds;
-          KayanInAppToast.diamond('ÙÙØªØ­ Ù…Ø³ØªÙˆÙ‰ Ø¬Ø¯ÙŠØ¯! +${_fmtN(diff)} ðŸ’Ž');
+          KayanInAppToast.diamond('فُتح مستوى جديد! +${_fmtN(diff)} 💎');
         }
         _scheduleReload();
         _loadV3Data(uid);
       },
     );
 
-    // âœ… Ø§Ø´ØªØ±Ø§Ùƒ Ø¨ØªØºÙŠÙŠØ±Ø§Øª Ø§Ù„Ø¥Ù†Ø¬Ø§Ø²Ø§Øª (Ø§Ù„Ø¬Ø¯ÙˆÙ„ Ø§Ù„ØµØ­ÙŠØ­: agency_achieved_targets)
+    // اشتراك بالإنجازات
     _rtMilestones = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_achieved:$uid',
       event: PostgresChangeEvent.insert,
@@ -174,7 +174,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     );
   }
 
-  // â”€â”€ v3 countdown ticker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── v3 countdown ticker ──────────────────────────────────────────────────
   void _startCountdown() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -182,7 +182,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     });
   }
 
-  // â”€â”€ v3 data load â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── v3 data load ─────────────────────────────────────────────────────────
   Future<void> _loadV3Data(String uid) async {
     try {
       final res = await _sb.rpc('get_host_dashboard_v3', params: {'p_user_id': uid});
@@ -222,25 +222,25 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
       final uid = _sb.auth.currentUser?.id;
       if (uid == null) throw Exception('not_authenticated');
 
-      // Ø§Ø¨Ø¯Ø£ Ø§Ù„Ù€ Realtime Ø£ÙˆÙ„ Ù…Ø±Ø© ÙÙ‚Ø·
+      // ابدأ Realtime فور معرفة agencyId
       if (_rtDiamonds == null) _bindRealtime(uid);
 
-      // ØªØ­Ù…ÙŠÙ„ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø­Ø±Ùƒ v3 Ø¨Ø§Ù„ØªÙˆØ§Ø²ÙŠ
+      // تحميل بيانات المحرك بالتوازي
       _loadV3Data(uid);
 
-      // âœ… Ø§Ø³ØªØ®Ø¯Ø§Ù… get_host_dashboard_v2 (Ø§Ù„Ù…ØµØ¯Ø± Ø§Ù„ÙˆØ­ÙŠØ¯ Ø§Ù„Ù…ÙˆØ­Ø¯)
+      // استخدام get_host_dashboard_v2
       final results = await Future.wait<dynamic>([
         AgencyRepository.getHostStats(),
         _sb.from('profiles')
             .select('display_name, avatar_url, level, coins')
             .eq('id', uid)
             .maybeSingle(),
-        _sb.from('agency_diamond_ledger')
+    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
             .select('amount, direction, created_at')
             .eq('user_id', uid)
             .eq('direction', 1)
             .gte('created_at', DateTime.now().toUtc().subtract(const Duration(hours: 24)).toIso8601String()),
-        _sb.from('agency_diamond_ledger')
+    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
             .select('amount, direction, created_at')
             .eq('user_id', uid)
             .eq('direction', 1)
@@ -256,10 +256,10 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
       final weekD  = weekRows.fold<int>(0,  (sum, r) => sum + ((r['amount'] as num?)?.toInt() ?? 0));
       final monthD = agencyStats?.member.diamondsEarnedMonthly ?? 0;
 
-      // Ø¨Ù†Ø§Ø¡ Ø®Ø±ÙŠØ·Ø© _data Ø§Ù„Ù…ÙˆØ­Ø¯Ø© Ù…Ù† Ø§Ù„Ù…ØµØ§Ø¯Ø± Ø§Ù„Ø¬Ø¯ÙŠØ¯Ø©
+      // بناء بيانات لوحة التحكم
       final built = <String, dynamic>{
         'profile': {
-          'display_name': profileRow?['display_name'] ?? 'â€”',
+          'display_name': profileRow?['display_name'] ?? '—',
           'level':        profileRow?['level']        ?? 1,
           'avatar_url':   profileRow?['avatar_url'],
           'is_vip':       false,
@@ -271,7 +271,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
         } : null,
         'milestones': (agencyStats?.targets ?? []).map((t) => <String, dynamic>{
           'id':           t.id,
-          'title_ar':     t.title ?? 'â€”',
+          'title_ar':     t.title ?? '—',
           'target':       t.targetDiamonds,
           'reward_type':  'coins',
           'reward_value': t.rewardCoins,
@@ -286,11 +286,11 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
         'today_diamonds': todayD,
       };
 
-      // ÙƒØ´Ù ØªØºÙŠÙŠØ± Ù…Ø§Ø³Ø§Øª Ø§Ù„Ø´Ù‡Ø± ÙˆØ¥Ø¸Ù‡Ø§Ø± toast
+      // كشف تغيير ماسات الشهر وإظهار toast
       final newMonthD = monthD;
       if (_prevMonthDiamonds > 0 && newMonthD > _prevMonthDiamonds) {
         final diff = newMonthD - _prevMonthDiamonds;
-        KayanInAppToast.diamond('Ø£Ø±Ø¨Ø§Ø­Ùƒ Ø§Ù„Ø´Ù‡Ø±ÙŠØ©: +$diff ðŸ’Ž');
+          KayanInAppToast.diamond('فُتح مستوى جديد! +${_fmtN(diff)} 💎');
       }
       _prevMonthDiamonds = newMonthD;
 
@@ -309,21 +309,21 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     }
   }
 
-  // â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── helpers ─────────────────────────────────────────────────────────────
   String _fmt(dynamic v) {
     final n = (v is num ? v : num.tryParse(v.toString()) ?? 0).toInt();
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}Ù…';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}Ùƒ';
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}م';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}ك';
     return n.toString();
   }
 
   static String _fmtN(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}Ù…';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}Ùƒ';
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}م';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}ك';
     return n.toString();
   }
 
-  // â”€â”€ build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── build ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     context.watch<DynamicConfigService>();
@@ -342,7 +342,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     );
   }
 
-  // â”€â”€ skeleton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── skeleton ─────────────────────────────────────────────────────────────
   Widget _buildSkeleton() {
     return const Center(
       child: Column(
@@ -350,7 +350,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
         children: [
           _NeonSpinner(),
           SizedBox(height: 16),
-          Text('Ø¬Ø§Ø±Ù ØªØ­Ù…ÙŠÙ„ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øªâ€¦',
+          Text('جارٍ تحميل البيانات...',
               style: TextStyle(color: _textMuted, fontFamily: 'IBM Plex Sans Arabic')),
         ],
       ),
@@ -364,11 +364,11 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
         children: [
           Icon(Icons.error_outline, color: _red, size: 48),
           const SizedBox(height: 12),
-          Text(_error ?? 'Ø®Ø·Ø£ ØºÙŠØ± Ù…Ø¹Ø±ÙˆÙ',
+          Text(_error ?? 'خطأ غير معروف',
               style: TextStyle(color: _red, fontFamily: 'IBM Plex Sans Arabic')),
           const SizedBox(height: 16),
           _GlassButton(
-            label: 'Ø¥Ø¹Ø§Ø¯Ø© Ø§Ù„Ù…Ø­Ø§ÙˆÙ„Ø©',
+            label: 'إعادة المحاولة',
             color: _purple,
             onTap: () { setState(() { _loading = true; _error = null; }); _loadData(); },
           ),
@@ -377,7 +377,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     );
   }
 
-  // â”€â”€ main body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── main body ────────────────────────────────────────────────────────────
   Widget _buildBody() {
     final d          = _data!;
     final profile    = d['profile']  as Map? ?? {};
@@ -395,7 +395,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
       child: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
-          // â”€ app bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ─ app bar ──────────────────────────────────────────────────────
           SliverAppBar(
             expandedHeight: 180,
             backgroundColor: Colors.transparent,
@@ -411,42 +411,42 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
               delegate: SliverChildListDelegate([
                 const SizedBox(height: 20),
 
-                // â”€ stat row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                // v2 engine: Ø¹Ø±Ø¶ ÙƒÙˆÙŠÙ†Ø² Ø§Ù„Ø´Ù‡Ø± + Ø£Ù„Ù…Ø§Ø³ Ù…ØªØ§Ø­ + Ø§Ù„Ù…Ø³ØªÙˆÙ‰
+                // ─ stat row ──────────────────────────────────────────────
+                // v2 engine: عرض كوينز الشهر + ألماس متاح + المستوى
                 if (_engineV3Enabled && _v3Data != null) ...[
                   Row(children: [
                     Expanded(child: _StatCard(
-                      label: 'ÙƒÙˆÙŠÙ†Ø² Ø§Ù„Ø´Ù‡Ø±',
+                      label: 'كوينز الشهر',
                       value: _fmt(_v3Data!['received_coins_monthly'] ?? 0),
-                      icon: 'ðŸª™', color: _cyan, pulse: _pulseCtrl,
+                      icon: '🪙', color: _cyan, pulse: _pulseCtrl,
                     )),
                     const SizedBox(width: 10),
                     Expanded(child: _StatCard(
-                      label: 'Ø£Ù„Ù…Ø§Ø³ Ù…ØªØ§Ø­',
+                      label: 'ألماس متاح',
                       value: _fmt(_v3Data!['diamonds_available'] ?? 0),
-                      icon: 'ðŸ’Ž', color: _purple, pulse: _pulseCtrl,
+                      icon: '💎', color: _purple, pulse: _pulseCtrl,
                     )),
                     const SizedBox(width: 10),
                     Expanded(child: _StatCard(
-                      label: 'Ø§Ù„Ù…Ø³ØªÙˆÙ‰',
+                      label: 'المستوى',
                       value: (_v3Data!['current_level_number'] ?? 0).toString(),
                       icon: 'ðŸ†', color: _gold, pulse: _pulseCtrl,
                     )),
                   ]),
                 ] else ...[
-                  // v1 engine: Ø¹Ø±Ø¶ Ø§Ù„Ø£Ù„Ù…Ø§Ø³ Ù…Ù† Ø¯ÙØªØ± Ø§Ù„ÙˆÙƒØ§Ù„Ø©
+                  // v1 engine: عرض الألماس من دفتر الوكالة
                   Row(children: [
-                    Expanded(child: _StatCard(label: 'Ø§Ù„ÙŠÙˆÙ…',   value: _fmt(todayD), icon: 'ðŸ’Ž', color: _cyan,   pulse: _pulseCtrl)),
+                    Expanded(child: _StatCard(label: 'اليوم',   value: _fmt(todayD), icon: '💎', color: _cyan,   pulse: _pulseCtrl)),
                     const SizedBox(width: 10),
-                    Expanded(child: _StatCard(label: 'Ø§Ù„Ø£Ø³Ø¨ÙˆØ¹', value: _fmt(weekD),  icon: 'âš¡', color: _purple, pulse: _pulseCtrl)),
+                    Expanded(child: _StatCard(label: 'الأسبوع', value: _fmt(weekD),  icon: '⚡', color: _purple, pulse: _pulseCtrl)),
                     const SizedBox(width: 10),
-                    Expanded(child: _StatCard(label: 'Ø§Ù„Ø´Ù‡Ø±',   value: _fmt(monthD), icon: 'ðŸ†', color: _gold,   pulse: _pulseCtrl)),
+                    Expanded(child: _StatCard(label: 'الشهر',   value: _fmt(monthD), icon: 'ðŸ†', color: _gold,   pulse: _pulseCtrl)),
                   ]),
                 ],
 
                 const SizedBox(height: 24),
 
-                // â”€ v3 engine cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ─ v3 engine cards ────────────────────────────────────────
                 if (_engineV3Enabled && _v3Data != null) ...[
                   _EngineV3Banner(v3: _v3Data!),
                   const SizedBox(height: 16),
@@ -458,15 +458,15 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
                   const SizedBox(height: 24),
                 ],
 
-                // â”€ agency card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ─ agency card ───────────────────────────────────────────
                 if (agency != null) ...[
                   _AgencyCard(agency: agency),
                   const SizedBox(height: 24),
                 ],
 
-                // â”€ milestones â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ─ milestones ────────────────────────────────────────────
                 if (milestones.isNotEmpty) ...[
-                  _SectionHeader(label: 'Ø£Ù‡Ø¯Ø§Ù Ø§Ù„Ø´Ù‡Ø±', icon: 'ðŸŽ¯'),
+                  _SectionHeader(label: 'أهداف الشهر', icon: '🎯'),
                   const SizedBox(height: 12),
                   ...milestones.map((m) => _MilestoneCard(
                     milestone: m,
@@ -475,7 +475,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
                   const SizedBox(height: 24),
                 ],
 
-                // â”€ agency wallet & targets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                // ─ agency wallet & targets ────────────────────────────────
                 if (_agencyStats != null) ...[
                   _AgencyWalletCard(
                     stats: _agencyStats!,
@@ -500,9 +500,9 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
     );
   }
 
-  // â”€â”€ header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── header ───────────────────────────────────────────────────────────────
   Widget _buildHeader(Map profile, Map? agency) {
-    final name     = profile['display_name'] ?? 'Ù…Ø¶ÙŠÙ';
+    final name     = profile['display_name'] ?? 'مضيف';
     final level    = profile['level']         ?? 1;
     final avatar   = profile['avatar_url'];
     final isVip    = profile['is_vip'] == true;
@@ -560,7 +560,7 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
                   ],
                 ]),
                 const SizedBox(height: 4),
-                Text('Ø§Ù„Ù…Ø³ØªÙˆÙ‰ $level',
+                Text('المستوى $level',
                     style: TextStyle(color: _textMuted, fontSize: 13,
                         fontFamily: 'IBM Plex Sans Arabic')),
               ],
@@ -578,9 +578,9 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-widgets
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _StatCard extends StatelessWidget {
   const _StatCard({
@@ -640,7 +640,7 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 class _AgencyCard extends StatelessWidget {
   const _AgencyCard({required this.agency});
   final Map agency;
@@ -648,7 +648,7 @@ class _AgencyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     context.watch<DynamicConfigService>();
-    final name    = agency['name']            ?? 'ÙˆÙƒØ§Ù„Ø©';
+    final name    = agency['name']            ?? 'وكالة';
     final spec    = agency['specialty']       ?? '';
     final rate    = agency['commission_rate'] ?? 0.05;
     final members = agency['member_count']    ?? 0;
@@ -689,7 +689,7 @@ class _AgencyCard extends StatelessWidget {
           Text('${(rate * 100).toStringAsFixed(0)}%',
               style: TextStyle(color: _gold, fontSize: 18,
                   fontWeight: FontWeight.bold, fontFamily: 'Space Grotesk')),
-          Text('$members Ø¹Ø¶Ùˆ',
+          Text('$members عضو',
               style: TextStyle(color: _textMuted, fontSize: 11,
                   fontFamily: 'IBM Plex Sans Arabic')),
         ]),
@@ -698,7 +698,7 @@ class _AgencyCard extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 class _MilestoneCard extends StatelessWidget {
   const _MilestoneCard({required this.milestone, required this.shimmer});
   final Map milestone;
@@ -747,7 +747,7 @@ class _MilestoneCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: _gold.withOpacity(.4)),
               ),
-              child: const Text('âœ… Ù…ÙƒØªÙ…Ù„',
+              child: const Text('✅ مكتمل',
                   style: TextStyle(color: _gold, fontSize: 11,
                       fontFamily: 'IBM Plex Sans Arabic')),
             ),
@@ -803,7 +803,7 @@ class _MilestoneCard extends StatelessWidget {
             Text('${(pct * 100).toStringAsFixed(0)}%',
                 style: TextStyle(color: barColor, fontSize: 12,
                     fontFamily: 'Space Grotesk', fontWeight: FontWeight.bold)),
-            Text('${_fmt(current)} / ${_fmt(target)} ðŸ’Ž',
+            Text('${_fmt(current)} / ${_fmt(target)} 💎',
                 style: TextStyle(color: _textMuted, fontSize: 11,
                     fontFamily: 'Space Grotesk')),
             if (rewardVal != null)
@@ -818,24 +818,24 @@ class _MilestoneCard extends StatelessWidget {
 
   String _rewardEmoji(String type) {
     switch (type) {
-      case 'gold':     return 'ðŸª™';
-      case 'diamonds': return 'ðŸ’Ž';
-      case 'vip_days': return 'ðŸ‘‘';
+      case 'gold':     return '🪙';
+      case 'diamonds': return '💎';
+      case 'vip_days': return '👑';
       case 'badge':    return 'ðŸ…';
       default:         return 'ðŸŽ';
     }
   }
 
   String _fmt(double n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}Ù…';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}Ùƒ';
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}م';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}ك';
     return n.toStringAsFixed(0);
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 // Shared micro-widgets
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({required this.label, required this.icon});
@@ -943,9 +943,9 @@ class _NeonSpinnerState extends State<_NeonSpinner>
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Agency Wallet & Target Progress Card (HA7 â€” injected into HostDashboardScreen)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────────────────────
+// Agency Wallet & Target Progress Card (HA7 — injected into HostDashboardScreen)
+// ─────────────────────────────────────────────────────────────────────────────
 class _AgencyWalletCard extends StatelessWidget {
   final HostAgencyStats stats;
   final VoidCallback onExchange;
@@ -998,7 +998,7 @@ class _AgencyWalletCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: Row(children: [
-              Text('â™¦ Ù…Ø­ÙØ¸Ø© Ø§Ù„ÙˆÙƒØ§Ù„Ø©', style: TextStyle(color: tierColor, fontWeight: FontWeight.bold, fontSize: 15)),
+              Text('♦ محفظة الوكالة', style: TextStyle(color: tierColor, fontWeight: FontWeight.bold, fontSize: 15)),
               const Spacer(),
               GestureDetector(
                 onTap: onLeaderboard,
@@ -1008,7 +1008,7 @@ class _AgencyWalletCard extends StatelessWidget {
                     color: tierColor.withOpacity(0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Text('ðŸ† Ø§Ù„ØªØµÙ†ÙŠÙ', style: TextStyle(color: tierColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                  child: Text('🏆 التصنيف', style: TextStyle(color: tierColor, fontSize: 11, fontWeight: FontWeight.w600)),
                 ),
               ),
             ]),
@@ -1022,19 +1022,19 @@ class _AgencyWalletCard extends StatelessWidget {
               Expanded(child: Text(a.name,
                 style: TextStyle(color: _textMain, fontWeight: FontWeight.w600, fontSize: 14))),
               if (a.rank != null)
-                Text('#${a.rank} Ø¹Ø§Ù„Ù…ÙŠØ§Ù‹', style: TextStyle(color: tierColor.withOpacity(0.7), fontSize: 12)),
+                Text('#${a.rank} عالمياً', style: TextStyle(color: tierColor.withOpacity(0.7), fontSize: 12)),
             ]),
           ),
 
           const SizedBox(height: 14),
 
-          // Diamond wallet stats (âœ… ÙŠØ¹Ø±Ø¶ Ø§Ù„Ø±ØµÙŠØ¯ Ø§Ù„Ù…ØªØ§Ø­ Ø¨Ø¹Ø¯ Ø®ØµÙ… Ø§Ù„Ù…Ø¬Ù…Ù‘Ø¯)
+          // Diamond wallet stats (✅ يعرض الرصيد المتاح بعد خصم المجمد)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(children: [
-              _WalletStat(label: 'â™¦ Ø§Ù„Ø´Ù‡Ø±',    value: _fmtK(m.diamondsEarnedMonthly),  color: _purple),
-              _WalletStat(label: 'â™¦ Ø§Ù„Ù…ØªØ§Ø­',   value: _fmtK(m.diamondsAvailable),       color: _cyan),
-              _WalletStat(label: 'â™¦ Ø§Ù„ØªØ±Ø§ÙƒÙ…ÙŠ', value: _fmtK(m.diamondsEarnedCumulative),color: _gold),
+              _WalletStat(label: '♦ الشهر',    value: _fmtK(m.diamondsEarnedMonthly),  color: _purple),
+              _WalletStat(label: '♦ المتاح',   value: _fmtK(m.diamondsAvailable),       color: _cyan),
+              _WalletStat(label: '♦ التراكمي', value: _fmtK(m.diamondsEarnedCumulative),color: _gold),
             ]),
           ),
           if (m.diamondsPendingWithdrawal > 0)
@@ -1043,7 +1043,7 @@ class _AgencyWalletCard extends StatelessWidget {
               child: Row(children: [
                 const Icon(Icons.lock_rounded, color: Color(0xFFFF9800), size: 12),
                 const SizedBox(width: 4),
-                Text('${_fmtK(m.diamondsPendingWithdrawal)} â™¦ Ù…Ø¬Ù…Ù‘Ø¯',
+                Text('${_fmtK(m.diamondsPendingWithdrawal)} ♦ مجمد',
                     style: const TextStyle(color: Color(0xFFFF9800), fontSize: 11)),
               ]),
             ),
@@ -1059,8 +1059,8 @@ class _AgencyWalletCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Text('ðŸŽ¯ Ø§Ù„Ù‡Ø¯Ù Ø§Ù„ØªØ§Ù„ÙŠ: ', style: TextStyle(color: _textMuted, fontSize: 12)),
-                    Text('${_fmtK(nextTarget.targetDiamonds)} â™¦', style: TextStyle(color: tierColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                    Text('🎯 الهدف التالي: ', style: TextStyle(color: _textMuted, fontSize: 12)),
+              Text('♦ محفظة الوكالة', style: TextStyle(color: tierColor, fontWeight: FontWeight.bold, fontSize: 15)),
                     const Spacer(),
                     Text('${(progress * 100).toStringAsFixed(0)}%', style: TextStyle(color: tierColor, fontSize: 12, fontWeight: FontWeight.bold)),
                   ]),
@@ -1075,7 +1075,7 @@ class _AgencyWalletCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text('Ø§Ù„Ù…ÙƒØ§ÙØ£Ø©: ${nextTarget.rewardSummary}',
+                  Text('المكافأة: ${nextTarget.rewardSummary}',
                     style: TextStyle(color: _textMuted, fontSize: 11)),
                 ],
               ),
@@ -1087,11 +1087,11 @@ class _AgencyWalletCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 14),
             child: Row(children: [
-              Expanded(child: _WalletBtn(label: 'ðŸ’± ØªØ¨Ø§Ø¯Ù„', color: _cyan, onTap: onExchange)),
+              Expanded(child: _WalletBtn(label: '🪙 تبادل', color: _cyan, onTap: onExchange)),
               const SizedBox(width: 8),
-              Expanded(child: _WalletBtn(label: 'ðŸ’¸ Ø³Ø­Ø¨', color: _gold, onTap: onWithdraw)),
+              Expanded(child: _WalletBtn(label: '💸 سحب', color: _gold, onTap: onWithdraw)),
               const SizedBox(width: 8),
-              Expanded(child: _WalletBtn(label: 'ðŸšª Ø®Ø±ÙˆØ¬', color: _red, onTap: onExit)),
+              Expanded(child: _WalletBtn(label: '🚪 خروج', color: _red, onTap: onExit)),
             ]),
           ),
 
@@ -1099,7 +1099,7 @@ class _AgencyWalletCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(left: 16, right: 16, bottom: 14),
             child: Text(
-              'ØªØ±ØªÙŠØ¨Ùƒ ÙÙŠ Ø§Ù„ÙˆÙƒØ§Ù„Ø©: #${stats.rankInAgency} Ù…Ù† ${stats.totalMembersInAgency}',
+              'ترتيبك في الوكالة: #${stats.rankInAgency} من ${stats.totalMembersInAgency}',
               style: TextStyle(color: _textMuted, fontSize: 12),
             ),
           ),
@@ -1163,10 +1163,10 @@ class _WalletBtn extends StatelessWidget {
 }
 
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-//  WIDGETS â€” Ø§Ù„Ù…Ø­Ø±Ùƒ Ø§Ù„Ø§Ù‚ØªØµØ§Ø¯ÙŠ v3
+//  WIDGETS — المحرك الاقتصادي v3
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-// â”€ Ø¨Ø§Ù†Ø±: Ø§Ù„Ù…Ø­Ø±Ùƒ v3 Ù…ÙÙØ¹ÙŽÙ‘Ù„ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─ بانر: المحرك v3 مُفعَّل ──────────────────────────────────────────────────
 class _EngineV3Banner extends StatelessWidget {
   final Map<String, dynamic> v3;
   const _EngineV3Banner({required this.v3});
@@ -1195,8 +1195,8 @@ class _EngineV3Banner extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              dryRun ? 'Ø§Ù„Ù…Ø­Ø±Ùƒ v2 â€” ÙˆØ¶Ø¹ Ø§Ù„Ø§Ø®ØªØ¨Ø§Ø± (Ù„Ø§ Ù…Ø¯ÙÙˆØ¹Ø§Øª Ø­Ù‚ÙŠÙ‚ÙŠØ©)'
-                     : 'Ø§Ù„Ù…Ø­Ø±Ùƒ Ø§Ù„Ø§Ù‚ØªØµØ§Ø¯ÙŠ v2 Ù…ÙÙØ¹ÙŽÙ‘Ù„ â€” ÙƒÙˆÙŠÙ†Ø² + Ù…Ø³ØªÙˆÙŠØ§Øª + USD',
+              dryRun ? 'المحرك v2 — وضع الاختبار (لا مدفوعات حقيقية)'
+                     : 'المحرك الاقتصادي v2 مُفعَّل — كوينز + مستويات + USD',
               style: TextStyle(
                 color: dryRun ? const Color(0xFFF59E0B) : const Color(0xFF22C55E),
                 fontSize: 12,
@@ -1210,15 +1210,15 @@ class _EngineV3Banner extends StatelessWidget {
   }
 }
 
-// â”€ Ø¨Ø·Ø§Ù‚Ø©: ØªÙ‚Ø¯Ù… Ø§Ù„ÙƒÙˆÙŠÙ†Ø² Ù†Ø­Ùˆ Ø§Ù„Ù…Ø³ØªÙˆÙ‰ Ø§Ù„ØªØ§Ù„ÙŠ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─ بطاقة: تقدم الكوينز نحو المستوى التالي ───────────────────────────────────
 class _CoinsProgressCard extends StatelessWidget {
   final Map<String, dynamic> v3;
   final AnimationController shimmer;
   const _CoinsProgressCard({required this.v3, required this.shimmer});
 
   String _fmt(num n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}Ù…';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}Ùƒ';
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}م';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}ك';
     return n.toInt().toString();
   }
 
@@ -1242,10 +1242,10 @@ class _CoinsProgressCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('ðŸª™', style: TextStyle(fontSize: 20)),
+              const Text('🪙', style: TextStyle(fontSize: 20)),
               const SizedBox(width: 8),
               const Text(
-                'ØªÙ‚Ø¯Ù… Ø§Ù„ÙƒÙˆÙŠÙ†Ø² Ø§Ù„Ø´Ù‡Ø±ÙŠ',
+                'تقدم الكوينز الشهري',
                 style: TextStyle(
                   color: Color(0xFFE8E6FF),
                   fontWeight: FontWeight.bold,
@@ -1262,7 +1262,7 @@ class _CoinsProgressCard extends StatelessWidget {
                     border: Border.all(color: const Color(0x66F6C453)),
                   ),
                   child: Text(
-                    'Ø§Ù„Ù…Ø³ØªÙˆÙ‰ $curLevel ðŸ†',
+                    'المستوى $curLevel ðŸ†',
                     style: const TextStyle(color: Color(0xFFF6C453), fontSize: 11, fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -1283,7 +1283,7 @@ class _CoinsProgressCard extends StatelessWidget {
                 ),
               ),
               const Text(
-                ' ÙƒÙˆÙŠÙ†Ø² Ù‡Ø°Ø§ Ø§Ù„Ø´Ù‡Ø±',
+                ' كوينز هذا الشهر',
                 style: TextStyle(color: Color(0xFF8A88AA), fontSize: 13),
               ),
             ],
@@ -1296,11 +1296,11 @@ class _CoinsProgressCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  nextLevel['level_name'] ?? 'Ø§Ù„Ù…Ø³ØªÙˆÙ‰ Ø§Ù„ØªØ§Ù„ÙŠ',
+                  nextLevel['level_name'] ?? 'المستوى التالي',
                   style: const TextStyle(color: Color(0xFFF6C453), fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  '${_fmt((nextLevel['remaining_coins'] as num?) ?? 0)} Ù…ØªØ¨Ù‚ÙŠ',
+                  '${_fmt((nextLevel['remaining_coins'] as num?) ?? 0)} متبقي',
                   style: const TextStyle(color: Color(0xFF8A88AA), fontSize: 11),
                 ),
               ],
@@ -1324,7 +1324,7 @@ class _CoinsProgressCard extends StatelessWidget {
                   style: const TextStyle(color: Color(0xFFF6C453), fontSize: 11, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  'Ù…ÙƒØ§ÙØ£Ø©: \$${nextLevel['host_cash_usd'] ?? 0} + ðŸ’Ž${_fmt((nextLevel['host_diamond_usd'] as num?) ?? 0)}',
+                  'مكافأة: \$${nextLevel["host_cash_usd"] ?? 0} + 💎${_fmt((nextLevel["host_diamond_usd"] as num?) ?? 0)}',
                   style: const TextStyle(color: Color(0xFF22C55E), fontSize: 11),
                 ),
               ],
@@ -1336,7 +1336,7 @@ class _CoinsProgressCard extends StatelessWidget {
                 Icon(Icons.check_circle, color: Color(0xFF22C55E), size: 18),
                 SizedBox(width: 6),
                 Text(
-                  'Ø£Ù†Ø¬Ø²Øª Ø¬Ù…ÙŠØ¹ Ø§Ù„Ù…Ø³ØªÙˆÙŠØ§Øª Ù‡Ø°Ø§ Ø§Ù„Ø´Ù‡Ø±! ðŸŽ‰',
+                  'أنجزت جميع المستويات هذا الشهر! 🎉',
                   style: TextStyle(color: Color(0xFF22C55E), fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -1356,7 +1356,7 @@ class _CoinsProgressCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: const Color(0xFF22C55E)),
                 ),
-                child: Text('âœ… Ù…Ø³ØªÙˆÙ‰ $lvl Ù…ÙƒØªÙ…Ù„',
+                child: Text('✅ مستوى $lvl مكتمل',
                   style: const TextStyle(color: Color(0xFF22C55E), fontSize: 11, fontWeight: FontWeight.w600)),
               )).toList(),
             ),
@@ -1367,7 +1367,7 @@ class _CoinsProgressCard extends StatelessWidget {
   }
 }
 
-// â”€ Ø¨Ø·Ø§Ù‚Ø©: Ù…Ø­ÙØ¸Ø© USD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─ بطاقة: محفظة USD ──────────────────────────────────────────────────────────
 class _UsdWalletCard extends StatelessWidget {
   final Map<String, dynamic> v3;
   const _UsdWalletCard({required this.v3});
@@ -1405,7 +1405,7 @@ class _UsdWalletCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Ù…Ø­ÙØ¸Ø© Ø§Ù„Ø¯ÙˆÙ„Ø§Ø±', style: TextStyle(color: Color(0xFF8A88AA), fontSize: 12)),
+                const Text('محفظة الدولار', style: TextStyle(color: Color(0xFF8A88AA), fontSize: 12)),
                 Text(
                   '\$${usdBalance.toStringAsFixed(2)}',
                   style: const TextStyle(
@@ -1415,7 +1415,7 @@ class _UsdWalletCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ù…ÙƒØªØ³ÙŽØ¨: \$${totalEarned.toStringAsFixed(2)}',
+                  'إجمالي المكتسَب: \$${totalEarned.toStringAsFixed(2)}',
                   style: const TextStyle(color: Color(0xFF6B7280), fontSize: 11),
                 ),
               ],
@@ -1431,7 +1431,7 @@ class _UsdWalletCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0x6622C55E)),
                 ),
-                child: const Text('Ø³Ø­Ø¨ â†’', style: TextStyle(color: Color(0xFF22C55E), fontSize: 12, fontWeight: FontWeight.w700)),
+                child: const Text('سحب →', style: TextStyle(color: Color(0xFF22C55E), fontSize: 12, fontWeight: FontWeight.w700)),
               ),
             ),
         ],
@@ -1440,7 +1440,7 @@ class _UsdWalletCard extends StatelessWidget {
   }
 }
 
-// â”€ Ø¨Ø·Ø§Ù‚Ø©: Ø¹Ø¯Ø§Ø¯ ØªÙ†Ø§Ø²Ù„ÙŠ Ù„Ù†Ù‡Ø§ÙŠØ© Ø§Ù„Ø´Ù‡Ø± â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─ بطاقة: عداد تنازلي لنهاية الشهر ──────────────────────────────────────────
 class _MonthCountdownCard extends StatelessWidget {
   final Map<String, dynamic> v3;
   const _MonthCountdownCard({required this.v3});
@@ -1468,10 +1468,10 @@ class _MonthCountdownCard extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Ù…ØªØ¨Ù‚ÙŠ Ø­ØªÙ‰ Ø¥ØºÙ„Ø§Ù‚ Ø§Ù„Ø´Ù‡Ø±', style: TextStyle(color: Color(0xFF8A88AA), fontSize: 11)),
+              const Text('متبقي حتى إغلاق الشهر', style: TextStyle(color: Color(0xFF8A88AA), fontSize: 11)),
               const SizedBox(height: 4),
               Text(
-                '$days ÙŠÙˆÙ…  $hours:${mins.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}',
+                '$days يوم  $hours:${mins.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}',
                 style: const TextStyle(
                   color: Color(0xFF9C6BFF),
                   fontSize: 18,

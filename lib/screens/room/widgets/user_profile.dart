@@ -934,13 +934,20 @@ class _UserProfileState extends State<UserProfile> {
 
     if (badgeWidgets.isEmpty) return const SizedBox.shrink();
 
+    // Show up to 3 necklaces side by side
+    final displayBadges = badgeWidgets.take(3).toList();
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 6,
-        runSpacing: 6,
-        children: badgeWidgets,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int i = 0; i < displayBadges.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            displayBadges[i],
+          ],
+        ],
       ),
     );
   }
@@ -968,17 +975,18 @@ class _UserProfileState extends State<UserProfile> {
     String fallbackText = '',
     Color fallbackColor = const Color(0xFF1E5BB5),
   }) {
+    const double badgeSize = 78;
     if (svgaUrl.isNotEmpty && detectAssetType(svgaUrl) == AssetType.svga) {
       return SizedBox(
-        width: 66,
-        height: 66,
+        width: badgeSize,
+        height: badgeSize,
         child: SvgaPlayer(assetPath: svgaUrl, fit: BoxFit.contain, loops: true),
       );
     }
     if (imageUrl.isNotEmpty) {
       return SizedBox(
-        width: 66,
-        height: 66,
+        width: badgeSize,
+        height: badgeSize,
         child: Image(
           image: R.cachedImage(imageUrl),
           fit: BoxFit.contain,

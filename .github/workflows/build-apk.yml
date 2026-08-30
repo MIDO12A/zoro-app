@@ -55,12 +55,12 @@ jobs:
       # Build number uses (large_offset + run_number) to guarantee it is ALWAYS
       # strictly increasing and higher than any previously installed APK.
       # Base must stay above the latest deployed build (1.0.46+2000004180).
-      # 2000005000 leaves a safe gap over any previous number.
+      # 2000008000 leaves a safe gap over any previous number (user requested > 2000007181).
       - name: Build release APKs
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000005000 + BUILD_NUM))
+          VERSION_CODE=$((2000008000 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE 2>&1 | tee build_log.txt || {
             echo "::error::Flutter build failed. Showing last 200 lines of build log:"
             tail -n 200 build_log.txt
