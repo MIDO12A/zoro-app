@@ -22,13 +22,14 @@ import ImageUpload from '../components/ImageUpload';
 import { Handshake, Users, UserPlus, Wallet, Target, Settings, Sparkles, Save, CheckCircle2, RefreshCw } from 'lucide-react';
 
 const tabs = [
-  { key: 'agencies', labelKey: 'agency.agencies', icon: Handshake },
-  { key: 'members', labelKey: 'agency.members', icon: Users },
-  { key: 'necklaces', labelKey: 'agency.necklaces', icon: Sparkles },
-  { key: 'join_requests', labelKey: 'agency.joinRequests', icon: UserPlus },
-  { key: 'financial', labelKey: 'agency.financial', icon: Wallet },
-  { key: 'milestones', labelKey: 'agency.milestones', icon: Target },
-  { key: 'commission', labelKey: 'agency.commission', icon: Settings },
+  { key: 'agencies', label: 'الوكالات', labelKey: 'agency.agencies', icon: Handshake },
+  { key: 'recharge_agencies', label: 'وكالات الشحن والرواتب', labelKey: 'agency.rechargeAgencies', icon: Wallet },
+  { key: 'milestones', label: 'المراحل والتارجت والرواتب', labelKey: 'agency.milestones', icon: Target },
+  { key: 'members', label: 'أعضاء الوكالات', labelKey: 'agency.members', icon: Users },
+  { key: 'necklaces', label: 'قلادات الوكالة SVGA', labelKey: 'agency.necklaces', icon: Sparkles },
+  { key: 'join_requests', label: 'طلبات الانضمام', labelKey: 'agency.joinRequests', icon: UserPlus },
+  { key: 'financial', label: 'السجلات المالية', labelKey: 'agency.financial', icon: Wallet },
+  { key: 'commission', label: 'نسب العمولات العامة', labelKey: 'agency.commission', icon: Settings },
 ] as const;
 type Tab = typeof tabs[number]['key'];
 
@@ -47,16 +48,17 @@ export default function AgencyPage() {
           <button key={tabItem.key} onClick={() => setTab(tabItem.key)}
             className={`flex items-center gap-1.5 px-4 py-2 text-xs rounded-lg font-semibold transition-colors ${tab === tabItem.key ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-400 hover:text-white'}`}>
             <tabItem.icon className="w-3.5 h-3.5" />
-            {t(tabItem.labelKey)}
+            {tabItem.label || t(tabItem.labelKey)}
           </button>
         ))}
       </div>
       {tab === 'agencies' && <AgenciesTab />}
+      {tab === 'recharge_agencies' && <RechargeAgenciesTab />}
+      {tab === 'milestones' && <MilestonesTab />}
       {tab === 'members' && <MembersTab />}
       {tab === 'necklaces' && <AgencyNecklacesTab />}
       {tab === 'join_requests' && <JoinRequestsTab />}
       {tab === 'financial' && <FinancialTab />}
-      {tab === 'milestones' && <MilestonesTab />}
       {tab === 'commission' && <CommissionTab />}
     </div>
   );
@@ -462,106 +464,240 @@ function FinancialTab() {
 }
 
 /* =============================================================
-   5. MILESTONES TAB
+   5. MILESTONES TAB (المراحل وتحديد الرواتب والمكافآت والعمولات)
    ============================================================= */
 function MilestonesTab() {
   const { t } = useContext(I18nContext);
   const [milestones, setMilestones] = useState<HostMilestoneModel[]>([]);
+  const [storeItems, setStoreItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+
   const [title, setTitle] = useState('');
-  const [targetDiamonds, setTargetDiamonds] = useState('1000');
-  const [rewardType, setRewardType] = useState('gold');
+  const [targetDiamonds, setTargetDiamonds] = useState('1000000');
+  const [rewardType, setRewardType] = useState('salary_usd');
   const [rewardValue, setRewardValue] = useState('100');
   const [rewardItemId, setRewardItemId] = useState('');
+  const [agentCommissionRate, setAgentCommissionRate] = useState('10');
   const [periodType, setPeriodType] = useState('monthly');
   const [sortOrder, setSortOrder] = useState('0');
+  const [isActive, setIsActive] = useState(true);
+  const [showItemPicker, setShowItemPicker] = useState(false);
 
-  const load = () => { setLoading(true); getHostMilestones().then(d => { setMilestones(d); setLoading(false); }); };
+  const load = () => {
+    setLoading(true);
+    getHostMilestones().then(d => { setMilestones(d); setLoading(false); });
+    supabase.from('store_items').select('*').then(({ data }) => {
+      if (data) setStoreItems(data);
+    });
+  };
+
   useEffect(() => { load(); }, []);
 
   const resetForm = () => {
-    setTitle(''); setTargetDiamonds('1000'); setRewardType('gold');
-    setRewardValue('100'); setRewardItemId(''); setPeriodType('monthly'); setSortOrder('0');
+    setTitle(''); setTargetDiamonds('1000000'); setRewardType('salary_usd');
+    setRewardValue('100'); setRewardItemId(''); setAgentCommissionRate('10');
+    setPeriodType('monthly'); setSortOrder('0'); setIsActive(true);
+    setEditId(null); setShowItemPicker(false);
   };
 
-  const handleCreate = async () => {
-    if (!title.trim()) return;
-    await createHostMilestone({
-      title: title.trim(), target_diamonds: parseInt(targetDiamonds),
-      reward_type: rewardType as HostMilestoneModel['reward_type'],
-      reward_value: parseInt(rewardValue), reward_item_id: rewardItemId.trim() || null,
-      period_type: periodType as HostMilestoneModel['period_type'],
-      is_active: true, sort_order: parseInt(sortOrder),
-    });
-    resetForm(); setShowForm(false); load();
+  const openEdit = (m: any) => {
+    setEditId(m.id);
+    setTitle(m.title ?? '');
+    setTargetDiamonds(String(m.target_diamonds ?? 1000000));
+    setRewardType(m.reward_type ?? 'salary_usd');
+    setRewardValue(String(m.reward_value ?? 100));
+    setRewardItemId(m.reward_item_id ?? '');
+    setAgentCommissionRate(String((m.agent_commission_rate ?? 0.1) * 100));
+    setPeriodType(m.period_type ?? 'monthly');
+    setSortOrder(String(m.sort_order ?? 0));
+    setIsActive(m.is_active !== false);
+    setShowForm(true);
   };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) return;
+    const payload = {
+      title: title.trim(),
+      target_diamonds: parseInt(targetDiamonds) || 0,
+      reward_type: rewardType as any,
+      reward_value: parseFloat(rewardValue) || 0,
+      reward_item_id: rewardItemId.trim() || null,
+      agent_commission_rate: (parseFloat(agentCommissionRate) || 0) / 100,
+      period_type: periodType as any,
+      is_active: isActive,
+      sort_order: parseInt(sortOrder) || 0,
+    };
+
+    if (editId) {
+      await updateHostMilestone(editId, payload);
+    } else {
+      await createHostMilestone(payload as any);
+    }
+    resetForm();
+    setShowForm(false);
+    load();
+  };
+
+  const selectedItem = storeItems.find(i => i.item_id === rewardItemId || i.id === rewardItemId);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-slate-500 text-xs">{milestones.length} {t('agency.milestones')}</p>
-        <button onClick={() => { resetForm(); setShowForm(!showForm); }}
-          className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors">
-          {showForm ? t('cancel') : t('agency.newMilestone')}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-white text-sm font-bold">🎯 مراحل وتارجت المضيفين والرواتب والعمولات</h3>
+          <p className="text-slate-400 text-xs mt-0.5">حدد الهدف بالماسات والراتب الفعلي ونسبة عمولة الوكيل والجوائز التلقائية فور تحقيق الهدف</p>
+        </div>
+        <button onClick={() => { if (showForm) resetForm(); setShowForm(!showForm); }}
+          className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl font-bold transition-all shadow-lg shadow-indigo-600/30 flex items-center gap-1.5">
+          {showForm ? t('cancel') : '➕ إضافة مرحلة / تارجت جديد'}
         </button>
       </div>
+
       {showForm && (
-        <div className="bg-[#141417] rounded-2xl border border-white/5 p-4 mb-4 space-y-3">
-          <div className="grid grid-cols-3 gap-3">
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder={t('agency.milestone.title')}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
-            <input type="number" value={targetDiamonds} onChange={e => setTargetDiamonds(e.target.value)} placeholder={t('agency.milestone.target')}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
-            <input type="number" value={rewardValue} onChange={e => setRewardValue(e.target.value)} placeholder={t('agency.milestone.rewardValue')}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
+        <div className="bg-[#18181b] rounded-2xl border border-indigo-500/30 p-5 space-y-4 shadow-xl">
+          <div className="flex items-center justify-between border-b border-white/5 pb-3">
+            <span className="text-white font-bold text-xs">{editId ? '✏️ تعديل المرحلة والتارجت' : '✨ إضافة مرحلة جديدة'}</span>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-300">مفعلة ونشطة:</label>
+              <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="w-4 h-4 accent-indigo-500 cursor-pointer" />
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <select value={rewardType} onChange={e => setRewardType(e.target.value)}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
-              <option value="gold">Gold</option><option value="diamonds">Diamonds</option>
-              <option value="vip_days">VIP Days</option><option value="badge">Badge</option>
-              <option value="gift_item">Gift Item</option>
-            </select>
-            <select value={periodType} onChange={e => setPeriodType(e.target.value)}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
-              <option value="monthly">Monthly</option><option value="weekly">Weekly</option>
-              <option value="all_time">All Time</option>
-            </select>
-            <input type="number" value={sortOrder} onChange={e => setSortOrder(e.target.value)} placeholder={t('agency.milestone.sortOrder')}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1">اسم المرحلة / التارجت *</label>
+              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="مثال: الهدف الفضي (1M)"
+                className="w-full bg-[#121214] border border-white/10 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+              <label className="text-[11px] text-cyan-400 block mb-1">الهدف المطلوب بالماسات 💎 *</label>
+              <input type="number" value={targetDiamonds} onChange={e => setTargetDiamonds(e.target.value)} placeholder="1000000"
+                className="w-full bg-[#121214] border border-cyan-500/30 rounded-xl py-2 px-3 text-xs text-cyan-300 font-bold focus:outline-none focus:border-cyan-400" />
+            </div>
+            <div>
+              <label className="text-[11px] text-amber-400 block mb-1">عمولة الوكيل من أرباح المضيف (%) *</label>
+              <div className="flex items-center gap-1.5">
+                <input type="number" step="0.5" value={agentCommissionRate} onChange={e => setAgentCommissionRate(e.target.value)} placeholder="10"
+                  className="w-full bg-[#121214] border border-amber-500/30 rounded-xl py-2 px-3 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400" />
+                <span className="text-xs text-amber-400 font-bold">%</span>
+                <button type="button" onClick={() => setAgentCommissionRate('5')} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded text-[10px]">5%</button>
+                <button type="button" onClick={() => setAgentCommissionRate('10')} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded text-[10px]">10%</button>
+                <button type="button" onClick={() => setAgentCommissionRate('20')} className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded text-[10px]">20%</button>
+              </div>
+            </div>
           </div>
-          <input value={rewardItemId} onChange={e => setRewardItemId(e.target.value)} placeholder={t('agency.milestone.rewardItemId')}
-            className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
-          <button onClick={handleCreate}
-            className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold transition-colors">
-            {t('agency.createMilestone')}
-          </button>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1">نوع المكافأة / الراتب *</label>
+              <select value={rewardType} onChange={e => setRewardType(e.target.value)}
+                className="w-full bg-[#121214] border border-white/10 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="salary_usd">💵 راتب نقدي بالدولار (USD)</option>
+                <option value="gold">🪙 عملات ذهبية (Coins)</option>
+                <option value="diamonds">💎 ماسات (Diamonds)</option>
+                <option value="vip_days">👑 أيام عضوية VIP</option>
+                <option value="badge">🏅 وسام / شارة</option>
+                <option value="frame">🖼️ إطار أفاتار</option>
+                <option value="entry_effect">🚗 مؤثر دخول / سيارة</option>
+                <option value="gift_item">🎁 هدية من المتجر</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[11px] text-emerald-400 block mb-1">قيمة الراتب / المكافأة *</label>
+              <input type="number" value={rewardValue} onChange={e => setRewardValue(e.target.value)} placeholder="مثال: 100$"
+                className="w-full bg-[#121214] border border-emerald-500/30 rounded-xl py-2 px-3 text-xs text-emerald-300 font-bold focus:outline-none focus:border-emerald-400" />
+            </div>
+            <div>
+              <label className="text-[11px] text-slate-400 block mb-1">الفترة الزمنية للهدف</label>
+              <select value={periodType} onChange={e => setPeriodType(e.target.value)}
+                className="w-full bg-[#121214] border border-white/10 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="monthly">شهري (Monthly)</option>
+                <option value="weekly">أسبوعي (Weekly)</option>
+                <option value="daily">يومي (Daily)</option>
+                <option value="all_time">تراكمي دائم (All Time)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Item Picker (Gifts, Frames, Entry Effects, Badges) */}
+          <div className="bg-[#121214] rounded-xl border border-white/5 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-slate-300 font-bold flex items-center gap-1.5">
+                🎁 هدية / إطار / مؤثر إضافي للمضيف فور تحقيق التارجت
+              </label>
+              <button type="button" onClick={() => setShowItemPicker(!showItemPicker)}
+                className="text-[11px] bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 px-3 py-1 rounded-lg font-semibold transition-all">
+                {showItemPicker ? 'إغلاق القائمة' : '🔍 اختيار من المتجر'}
+              </button>
+            </div>
+
+            {selectedItem && (
+              <div className="flex items-center gap-3 p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg">
+                {selectedItem.icon_asset && (
+                  <img src={selectedItem.icon_asset} alt="" className="w-10 h-10 object-contain rounded" />
+                )}
+                <div>
+                  <div className="text-xs text-white font-bold">{selectedItem.name || selectedItem.item_id}</div>
+                  <div className="text-[10px] text-indigo-300">النوع: {selectedItem.category || selectedItem.type || 'عنصر متجر'} | المعرف: {selectedItem.item_id || selectedItem.id}</div>
+                </div>
+                <button type="button" onClick={() => setRewardItemId('')} className="ml-auto text-rose-400 hover:text-rose-300 text-xs font-bold">✕ إزالة</button>
+              </div>
+            )}
+
+            {showItemPicker && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-56 overflow-y-auto p-2 bg-[#18181b] rounded-lg border border-white/10">
+                {storeItems.map(item => {
+                  const itemId = item.item_id || item.id;
+                  const isSel = rewardItemId === itemId;
+                  return (
+                    <div key={itemId} onClick={() => { setRewardItemId(itemId); setShowItemPicker(false); }}
+                      className={`p-2 rounded-lg border cursor-pointer flex flex-col items-center gap-1 transition-all ${isSel ? 'border-indigo-500 bg-indigo-500/20' : 'border-white/5 bg-[#121214] hover:border-white/20'}`}>
+                      <img src={item.icon_asset || item.svga_asset || item.video_asset} alt="" className="w-8 h-8 object-contain" />
+                      <span className="text-[10px] text-white truncate max-w-full text-center">{item.name || itemId}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+            <button type="button" onClick={() => { resetForm(); setShowForm(false); }}
+              className="text-xs text-slate-400 hover:text-white px-4 py-2 rounded-xl transition-all">
+              إلغاء
+            </button>
+            <button type="button" onClick={handleSubmit}
+              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-2 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4" /> {editId ? 'حفظ التعديلات' : 'إنشاء المرحلة الآن'}
+            </button>
+          </div>
         </div>
       )}
+
       <DataTable
         loading={loading}
         columns={[
-          { key: 'title', label: t('agency.col.name'), sortable: true },
-          { key: 'target_diamonds', label: t('agency.milestone.target'), sortable: true, render: m => <span className="text-cyan-400">{(m as HostMilestoneModel).target_diamonds?.toLocaleString() ?? '0'}</span> },
-          { key: 'reward_type', label: t('agency.col.rewardType'), sortable: true, render: m => <span className="text-amber-400">{(m as HostMilestoneModel).reward_type}</span> },
-          { key: 'reward_value', label: t('agency.col.rewardValue'), sortable: true },
-          { key: 'period_type', label: t('agency.col.period'), sortable: true, render: m => <span className="text-slate-400">{(m as HostMilestoneModel).period_type}</span> },
-          { key: 'sort_order', label: t('agency.col.order'), sortable: true },
-          { key: 'is_active', label: t('agency.col.active'), sortable: true, render: m => {
-            const active = (m as HostMilestoneModel).is_active;
-            return <span className={active ? 'text-emerald-400' : 'text-rose-400'}>{active ? t('agency.yes') : t('agency.no')}</span>;
+          { key: 'title', label: 'المرحلة / التارجت', sortable: true, render: m => <span className="font-bold text-white">{(m as any).title}</span> },
+          { key: 'target_diamonds', label: 'الهدف 💎', sortable: true, render: m => <span className="text-cyan-400 font-bold">{(m as any).target_diamonds?.toLocaleString() ?? '0'} 💎</span> },
+          { key: 'reward_type', label: 'نوع المكافأة', sortable: true, render: m => {
+            const rt = (m as any).reward_type;
+            return <span className="text-amber-400 font-semibold">{rt === 'salary_usd' ? '💵 راتب USD' : rt === 'gold' ? '🪙 عملات' : rt}</span>;
+          }},
+          { key: 'reward_value', label: 'قيمة الراتب / المكافأة', sortable: true, render: m => <span className="text-emerald-400 font-bold">{(m as any).reward_value} {(m as any).reward_type === 'salary_usd' ? '$' : ''}</span> },
+          { key: 'agent_commission_rate', label: 'عمولة الوكيل (%)', sortable: true, render: m => <span className="text-amber-400 font-bold">{(((m as any).agent_commission_rate ?? 0.1) * 100).toFixed(0)}%</span> },
+          { key: 'period_type', label: 'الفترة', sortable: true, render: m => <span className="text-slate-400">{(m as any).period_type}</span> },
+          { key: 'is_active', label: 'نشط', sortable: true, render: m => {
+            const active = (m as any).is_active !== false;
+            return <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{active ? 'نعم' : 'لا'}</span>;
           }},
         ]}
         data={milestones}
         searchKeys={['title', 'reward_type', 'period_type']}
-        onEdit={async m => {
-          const mi = m as HostMilestoneModel;
-          await updateHostMilestone(mi.id, { is_active: !mi.is_active });
-          load();
-        }}
+        onEdit={m => openEdit(m)}
         onDelete={async m => {
-          if (confirm(t('agency.deleteMilestoneConfirm'))) { await deleteHostMilestone((m as HostMilestoneModel).id); load(); }
+          if (confirm('هل أنت متأكد من حذف هذه المرحلة؟')) { await deleteHostMilestone((m as any).id); load(); }
         }}
       />
     </div>
@@ -569,7 +705,285 @@ function MilestonesTab() {
 }
 
 /* =============================================================
-   6. COMMISSION TAB
+   6. RECHARGE AGENCIES TAB (وكالات الشحن وإدارة الرواتب والتحويلات)
+   ============================================================= */
+function RechargeAgenciesTab() {
+  const { t } = useContext(I18nContext);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  // New Agent Form
+  const [targetUid, setTargetUid] = useState('');
+  const [agencyName, setAgencyName] = useState('');
+  const [agencyLogo, setAgencyLogo] = useState('');
+  const [whatsappPhone, setWhatsappPhone] = useState('');
+  const [initialCoins, setInitialCoins] = useState('0');
+
+  // Recharge User Form
+  const [rechargeUserUid, setRechargeUserUid] = useState('');
+  const [rechargeCoinsAmount, setRechargeCoinsAmount] = useState('1000');
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+
+  // Transfer Proof Modal
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<any | null>(null);
+  const [proofUrl, setProofUrl] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch Recharge Agents
+      const { data: usersData } = await supabase.from('users').select('*').eq('is_recharge_agent', true);
+      setAgents(usersData || []);
+
+      // 2. Fetch Withdrawals
+      const { data: wData } = await supabase.from('agency_withdrawal_requests').select('*').order('created_at', { ascending: false });
+      setWithdrawals(wData || []);
+    } catch (_) {}
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const handleCreateRechargeAgent = async () => {
+    if (!targetUid.trim()) { alert('يرجى كتابة UID المستخدم'); return; }
+    await supabase.from('users').update({
+      is_recharge_agent: true,
+      recharge_agency_name: agencyName.trim() || 'وكالة الشحن المعتمدة',
+      recharge_agency_logo: agencyLogo.trim(),
+      whatsapp_number: whatsappPhone.trim(),
+      coins: (parseInt(initialCoins) || 0),
+    }).eq('id', targetUid.trim());
+
+    setShowAddModal(false);
+    setTargetUid(''); setAgencyName(''); setAgencyLogo(''); setWhatsappPhone(''); setInitialCoins('0');
+    load();
+  };
+
+  const handleRechargeUser = async () => {
+    if (!rechargeUserUid.trim() || !rechargeCoinsAmount) return;
+    const amount = parseInt(rechargeCoinsAmount) || 0;
+    if (amount <= 0) return;
+
+    // Increment user coins
+    const { data: u } = await supabase.from('users').select('coins').eq('id', rechargeUserUid.trim()).maybeSingle();
+    const currentCoins = Number(u?.coins || 0);
+    await supabase.from('users').update({ coins: currentCoins + amount }).eq('id', rechargeUserUid.trim());
+
+    alert(`تم شحن ${amount} عملة للمستخدم بنجاح!`);
+    setShowRechargeModal(false);
+    setRechargeUserUid('');
+    load();
+  };
+
+  const handleConfirmCoinsReceipt = async (wId: string) => {
+    await supabase.from('agency_withdrawal_requests').update({
+      status: 'coins_received',
+      coins_received_at: new Date().toISOString(),
+    }).eq('id', wId);
+    load();
+  };
+
+  const handleCompleteTransferWithProof = async () => {
+    if (!selectedWithdrawal || !proofUrl.trim()) {
+      alert('يرجى رفع إثبات / سكرين التحويل أولاً لحماية المستخدم');
+      return;
+    }
+    await supabase.from('agency_withdrawal_requests').update({
+      status: 'completed',
+      transfer_screenshot_url: proofUrl.trim(),
+      completed_at: new Date().toISOString(),
+    }).eq('id', selectedWithdrawal.id);
+
+    setSelectedWithdrawal(null);
+    setProofUrl('');
+    load();
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header with actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-white text-sm font-bold">⚡ إدارة وكالات الشحن وتحويلات الرواتب</h3>
+          <p className="text-slate-400 text-xs mt-0.5">فتح وكالات الشحن للمستخدمين، شحن الرصيد بالـ ID، واستقبال وإتمام طلبات سحب الرواتب مع إثبات التحويل</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowRechargeModal(true)}
+            className="text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-3.5 py-2 rounded-xl transition-all shadow-lg shadow-amber-600/20">
+            🪙 شحن رصيد مستخدم بالـ ID
+          </button>
+          <button onClick={() => setShowAddModal(true)}
+            className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-2 rounded-xl transition-all shadow-lg shadow-indigo-600/20">
+            ➕ فتح وكالة شحن جديدة
+          </button>
+        </div>
+      </div>
+
+      {/* Recharge Agents Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {agents.map(ag => (
+          <div key={ag.id} className="bg-[#18181b] border border-white/5 rounded-2xl p-4 space-y-3 relative overflow-hidden">
+            <div className="flex items-center gap-3">
+              <img src={ag.recharge_agency_logo || ag.photo_url || ag.avatar || 'https://via.placeholder.com/80'} alt="" className="w-12 h-12 rounded-xl object-cover border border-amber-500/30" />
+              <div>
+                <div className="text-white text-xs font-bold">{ag.recharge_agency_name || ag.name}</div>
+                <div className="text-[11px] text-slate-400 font-mono">UID: {ag.custom_id || ag.id}</div>
+                {ag.whatsapp_number && <div className="text-[10px] text-emerald-400">📱 واتساب: {ag.whatsapp_number}</div>}
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <span className="text-xs text-slate-400">رصيد الوكالة:</span>
+              <span className="text-sm text-amber-400 font-bold">{Number(ag.coins || 0).toLocaleString()} 🪙</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Withdrawal & Transfer Requests Table */}
+      <div className="space-y-3">
+        <h4 className="text-white text-xs font-bold">📋 طلبات سحب الرواتب وتحويل العملات</h4>
+        <DataTable
+          loading={loading}
+          columns={[
+            { key: 'id', label: 'المعرف', render: r => <span className="font-mono text-[10px] text-slate-400">{(r as any).id?.slice(0, 8)}</span> },
+            { key: 'user_id', label: 'المضيف', render: r => <span className="text-xs text-white font-bold">{(r as any).user_name || (r as any).user_id}</span> },
+            { key: 'amount', label: 'المبلغ / العملات', render: r => <span className="text-xs text-amber-400 font-bold">{(r as any).amount?.toLocaleString()} 🪙 / {(r as any).usd_amount ?? (r as any).amount / 100}$</span> },
+            { key: 'payment_method', label: 'طريقة الاستلام', render: r => <span className="text-xs text-slate-300">{(r as any).payment_method || 'تحويل مباشر'}</span> },
+            { key: 'status', label: 'الحالة', render: r => {
+              const st = (r as any).status;
+              return <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${st === 'completed' ? 'bg-emerald-500/20 text-emerald-400' : st === 'coins_received' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                {st === 'completed' ? '✅ تم التحويل' : st === 'coins_received' ? '📥 استلمت العملات' : '⏳ معلق'}
+              </span>;
+            }},
+            { key: 'actions', label: 'الإجراءات', render: r => {
+              const req = r as any;
+              return (
+                <div className="flex items-center gap-1.5">
+                  {req.status === 'pending' && (
+                    <button onClick={() => handleConfirmCoinsReceipt(req.id)}
+                      className="text-[10px] bg-cyan-600 hover:bg-cyan-700 text-white font-bold px-2 py-1 rounded transition-all">
+                      📥 تأكيد استلام العملات
+                    </button>
+                  )}
+                  {req.status !== 'completed' && (
+                    <button onClick={() => { setSelectedWithdrawal(req); setProofUrl(req.transfer_screenshot_url || ''); }}
+                      className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1 rounded transition-all">
+                      💵 إتمام تحويل الراتب مع السكرين
+                    </button>
+                  )}
+                  {req.transfer_screenshot_url && (
+                    <a href={req.transfer_screenshot_url} target="_blank" rel="noreferrer"
+                      className="text-[10px] text-indigo-400 underline font-semibold">
+                      👁️ إثبات التحويل
+                    </a>
+                  )}
+                </div>
+              );
+            }},
+          ]}
+          data={withdrawals}
+          searchKeys={['user_id', 'status', 'payment_method']}
+        />
+      </div>
+
+      {/* Add Recharge Agency Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4">
+            <h4 className="text-white font-bold text-sm">✨ تعيين وكيل شحن معتمد جديد</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم *</label>
+                <input value={targetUid} onChange={e => setTargetUid(e.target.value)} placeholder="اكتب UID المستخدم"
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">اسم وكالة الشحن</label>
+                <input value={agencyName} onChange={e => setAgencyName(e.target.value)} placeholder="مثال: وكالة الأهرام للشحن"
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">رقم الواتساب للتواصل</label>
+                <input value={whatsappPhone} onChange={e => setWhatsappPhone(e.target.value)} placeholder="+2010..."
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">شعار / صورة الوكالة (URL)</label>
+                <input value={agencyLogo} onChange={e => setAgencyLogo(e.target.value)} placeholder="https://..."
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-amber-400 block mb-1">الرصيد الافتتاحي للوكالة (عملات)</label>
+                <input type="number" value={initialCoins} onChange={e => setInitialCoins(e.target.value)} placeholder="100000"
+                  className="w-full bg-[#121214] border border-amber-500/30 rounded-xl p-2 text-xs text-amber-300 font-bold" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-xs text-slate-400">إلغاء</button>
+              <button onClick={handleCreateRechargeAgent} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold">تأكيد التعيين</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recharge User Modal */}
+      {showRechargeModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4">
+            <h4 className="text-white font-bold text-sm">🪙 شحن رصيد عملات لمستخدم</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم *</label>
+                <input value={rechargeUserUid} onChange={e => setRechargeUserUid(e.target.value)} placeholder="اكتب UID المستخدم"
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-amber-400 block mb-1">عدد العملات للشحن 🪙 *</label>
+                <input type="number" value={rechargeCoinsAmount} onChange={e => setRechargeCoinsAmount(e.target.value)} placeholder="1000"
+                  className="w-full bg-[#121214] border border-amber-500/30 rounded-xl p-2 text-xs text-amber-300 font-bold" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowRechargeModal(false)} className="px-4 py-2 text-xs text-slate-400">إلغاء</button>
+              <button onClick={handleRechargeUser} className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold">تأكيد الشحن فوراً</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Proof Screenshot Upload Modal */}
+      {selectedWithdrawal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-emerald-500/30 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h4 className="text-white font-bold text-sm">🛡️ إتمام تحويل الراتب وإرفاق إثبات التحويل</h4>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
+              لحماية حقوق المستخدم والمضيف، يرجى إرفاق رابط أو صورة سكرين شوت تثبت تحويل الراتب بنجاح:
+            </p>
+            <div>
+              <label className="text-[11px] text-emerald-400 block mb-1">رابط صورة إثبات التحويل (Screenshot URL) *</label>
+              <input value={proofUrl} onChange={e => setProofUrl(e.target.value)} placeholder="https://... أو رفع صورة"
+                className="w-full bg-[#121214] border border-emerald-500/30 rounded-xl p-2 text-xs text-white" />
+            </div>
+            {proofUrl && (
+              <div className="flex justify-center p-2 bg-black/40 rounded-lg">
+                <img src={proofUrl} alt="Proof" className="max-h-40 rounded object-contain" />
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setSelectedWithdrawal(null)} className="px-4 py-2 text-xs text-slate-400">إلغاء</button>
+              <button onClick={handleCompleteTransferWithProof} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">تأكيد اكتمال التحويل</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =============================================================
+   7. COMMISSION TAB
    ============================================================= */
 function CommissionTab() {
   const { t } = useContext(I18nContext);

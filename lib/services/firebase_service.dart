@@ -1241,13 +1241,9 @@ class FirebaseService {
         'visited_at': now,
       }, SetOptions(merge: true));
 
-      final countSnap = await _db
-          .collection('profile_visits')
-          .where('visited_uid', isEqualTo: visitedUid)
-          .count()
-          .get();
+      final count = countSnap.count ?? 0;
       await _db.collection('users').doc(visitedUid).update({
-        'visitors': countSnap.count,
+        'visitors': count,
       });
     } catch (e) {
       debugPrint('recordProfileVisit error: $e');
@@ -1261,7 +1257,7 @@ class FirebaseService {
           .where('visited_uid', isEqualTo: uid)
           .count()
           .get();
-      final count = countSnap.count;
+      final count = countSnap.count ?? 0;
       await _db.collection('users').doc(uid).update({'visitors': count});
       return count;
     } catch (e) {
