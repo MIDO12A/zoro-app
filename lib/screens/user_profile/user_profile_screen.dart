@@ -1232,15 +1232,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     onTap: () => _showNecklaceDetail(n),
                     child: Container(
                       margin: const EdgeInsets.only(left: 8),
-                      width: 48,
-                      height: 48,
+                      width: 72,
+                      height: 72,
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: Colors.white10),
                       ),
                       child: (svga != null && svga.isNotEmpty)
-                          ? SvgaPlayer(assetPath: svga, width: 48, height: 48)
+                          ? SvgaPlayer(assetPath: svga, width: 72, height: 72)
                           : (img != null && img.isNotEmpty)
                               ? CachedImg(img, fit: BoxFit.contain)
                               : const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
@@ -1360,6 +1360,40 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
+  // تجميع الهدايا المستلمة حسب معرف الهدية: صورة واحدة لكل هدية + العدد الإجمالي
+  // (بدل تكرار نفس الهدية في كل مرة أُرسلت فيها).
+  List<Map<String, dynamic>> _getAggregatedReceivedGifts() {
+    final Map<String, Map<String, dynamic>> map = {};
+    for (final g in _receivedGifts) {
+      final key = g.giftId.isNotEmpty ? g.giftId : (g.giftName.isNotEmpty ? g.giftName : 'gift');
+      if (map.containsKey(key)) {
+        map[key]!['count'] = (map[key]!['count'] as int) + g.count;
+      } else {
+        map[key] = {
+          'giftId': g.giftId,
+          'giftName': g.giftName,
+          'count': g.count,
+        };
+      }
+    }
+    return map.values.toList();
+  }
+
+  /// Converts an aggregated gift map back into a SentGiftModel for display.
+  gm.SentGiftModel _giftMapToModel(Map<String, dynamic> m) => gm.SentGiftModel(
+        id: m['giftId']?.toString() ?? '',
+        giftId: m['giftId']?.toString() ?? '',
+        giftName: m['giftName']?.toString() ?? '',
+        senderId: '',
+        senderName: '',
+        receiverId: '',
+        receiverName: '',
+        roomId: '',
+        value: 0,
+        count: (m['count'] as num?)?.toInt() ?? 1,
+        timestamp: DateTime.now(),
+      );
+
   Widget _buildNewAchievementsSection(
       DynamicConfigService config, UserModel? user) {
     // 1. Vehicle / Entrance
@@ -1375,8 +1409,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final frameImg = topFrame?['image_url']?.toString();
 
     // 3. Top Received Gift for preview
-    final topGift = _receivedGifts.isNotEmpty ? _receivedGifts.first : null;
-    final topGiftDef = topGift != null ? _giftsCatalog[topGift.giftId] : null;
+    final aggGifts = _getAggregatedReceivedGifts();
+    final topGift = aggGifts.isNotEmpty ? aggGifts.first : null;
+    final topGiftDef = topGift != null
+        ? _giftsCatalog[topGift['giftId'] as String?]
+        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1468,7 +1505,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
-                                      '${_receivedGifts.length}',
+                                      '${aggGifts.length}',
                                       style: const TextStyle(
                                           color: Colors.pinkAccent,
                                           fontSize: 10,
@@ -1507,7 +1544,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                             border: Border.all(color: Colors.amber, width: 0.5),
                                           ),
                                           child: Text(
-                                            'x${topGift!.count}',
+                                            'x${topGift!['count']}',
                                             style: const TextStyle(
                                                 color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
                                           ),
@@ -1643,6 +1680,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   }
 
   void _showFrostedGiftWall(BuildContext context) {
+    final aggGifts = _getAggregatedReceivedGifts();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1680,7 +1718,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         onPressed: () => Navigator.pop(ctx),
                       ),
                       Text(
-                        'جدار الهدايا (${_receivedGifts.length})',
+                        'جدار الهدايا (${aggGifts.length})',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 17,
@@ -1707,17 +1745,17 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             mainAxisSpacing: 16,
                             childAspectRatio: 0.75,
                           ),
-                          itemCount: _receivedGifts.length,
+                          itemCount: aggGifts.length,
                           itemBuilder: (context, index) {
-                            final g = _receivedGifts[index];
-                            final giftDef = _giftsCatalog[g.giftId];
+                            final g = aggGifts[index];
+                            final giftDef = _giftsCatalog[g['giftId'] as String?];
                             final isSvga = giftDef?.iconAsset != null &&
                                 detectAssetType(giftDef!.iconAsset) == AssetType.svga;
 
                             return GestureDetector(
                               onTap: () {
                                 Navigator.pop(ctx);
-                                setState(() => _selectedGift = g);
+                                setState(() => _selectedGift = _giftMapToModel(g));
                               },
                               child: Container(
                                 decoration: BoxDecoration(
@@ -1773,7 +1811,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                                 ],
                                               ),
                                               child: Text(
-                                                'x${g.count}',
+                                                'x${g['count']}',
                                                 style: const TextStyle(
                                                   color: Colors.white,
                                                   fontSize: 9,
@@ -1787,7 +1825,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                     ),
                                     const SizedBox(height: 6),
                                     Text(
-                                      g.giftName,
+                                      g['giftName'] ?? '',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
@@ -1894,6 +1932,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final currentUser = userProvider.currentUser;
     final isOwnProfile = widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid);
     final hasCp = _cpCouple != null;
+    final svgaBg = config.profileBgSvga;
     return SizedBox(
       width: double.infinity,
       child: Stack(
@@ -1903,63 +1942,80 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             onTap: isOwnProfile ? _pickCoverImage : null,
             child: AspectRatio(
               aspectRatio: 1.11,
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: (_profileBgUrl == null || _profileBgUrl!.isEmpty) && config.profileBgType == 'solid'
-                      ? config.profileSolidColor
-                      : null,
-                  gradient: (_profileBgUrl == null || _profileBgUrl!.isEmpty) && config.profileBgType == 'gradient'
-                      ? LinearGradient(
-                          colors: config.profileGradientColors,
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                        )
-                      : null,
-                  image: (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
-                      ? DecorationImage(
-                          image: cachedImgProvider(_profileBgUrl!),
+              child: ClipRect(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // SVGA animated background (replaces blurry image)
+                    if (svgaBg.isNotEmpty)
+                      Positioned.fill(
+                        child: SvgaPlayer(
+                          assetPath: svgaBg,
+                          width: double.infinity,
+                          height: double.infinity,
                           fit: BoxFit.cover,
-                        )
-                      : ((config.profileBgType == 'image' && config.customProfileBgImage.isNotEmpty)
-                          ? DecorationImage(
-                              image: cachedImgProvider(config.customProfileBgImage),
-                              fit: BoxFit.cover,
-                            )
-                          : null),
-                ),
-                child: isOwnProfile
-                    ? Stack(
-                        children: [
-                          Container(
-                            alignment: Alignment.bottomRight,
-                            padding: const EdgeInsets.all(12),
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.white54,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                            ),
-                          ),
-                          Positioned(
-                            top: 12, left: 12,
-                            child: GestureDetector(
-                              onTap: () => _showCoverMenu(context),
-                              child: Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.white54,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       )
-                    : null,
+                    else
+                      Container(
+                        decoration: BoxDecoration(
+                          color: (_profileBgUrl == null || _profileBgUrl!.isEmpty) && config.profileBgType == 'solid'
+                              ? config.profileSolidColor
+                              : null,
+                          gradient: (_profileBgUrl == null || _profileBgUrl!.isEmpty) && config.profileBgType == 'gradient'
+                              ? LinearGradient(
+                                  colors: config.profileGradientColors,
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                )
+                              : null,
+                          image: (_profileBgUrl != null && _profileBgUrl!.isNotEmpty)
+                              ? DecorationImage(
+                                  image: cachedImgProvider(_profileBgUrl!),
+                                  fit: BoxFit.cover,
+                                )
+                              : ((config.profileBgType == 'image' && config.customProfileBgImage.isNotEmpty)
+                                  ? DecorationImage(
+                                      image: cachedImgProvider(config.customProfileBgImage),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null),
+                        ),
+                      ),
+                    if (isOwnProfile) ...[
+                      // Camera badge
+                      Positioned(
+                        bottom: 12, right: 12,
+                        child: GestureDetector(
+                          onTap: _pickCoverImage,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.white54,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                          ),
+                        ),
+                      ),
+                      // Cover menu
+                      Positioned(
+                        top: 12, left: 12,
+                        child: GestureDetector(
+                          onTap: () => _showCoverMenu(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.white54,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(Icons.more_horiz, color: Colors.white, size: 22),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

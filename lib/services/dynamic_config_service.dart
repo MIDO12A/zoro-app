@@ -1074,6 +1074,7 @@ class DynamicConfigService extends ChangeNotifier {
     return [const Color(0xFF1E1E2C), const Color(0xFF03030A)];
   }
   String get customProfileBgImage => _rawConfig['profileBackgroundImage'] as String? ?? '';
+  String get profileBgSvga => _rawConfig['profileBgSvga'] as String? ?? '';
   String get profileSettingsIcon => _rawConfig['profileSettingsIcon'] as String? ?? '';
   String get profileEditIcon => _rawConfig['profileEditIcon'] as String? ?? '';
   String get profileShareIcon => _rawConfig['profileShareIcon'] as String? ?? '';

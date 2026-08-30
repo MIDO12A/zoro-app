@@ -966,15 +966,15 @@ class _UserProfileState extends State<UserProfile> {
   }) {
     if (svgaUrl.isNotEmpty && detectAssetType(svgaUrl) == AssetType.svga) {
       return SizedBox(
-        width: 44,
-        height: 44,
+        width: 66,
+        height: 66,
         child: SvgaPlayer(assetPath: svgaUrl, fit: BoxFit.contain, loops: true),
       );
     }
     if (imageUrl.isNotEmpty) {
       return SizedBox(
-        width: 44,
-        height: 44,
+        width: 66,
+        height: 66,
         child: Image(
           image: R.cachedImage(imageUrl),
           fit: BoxFit.contain,

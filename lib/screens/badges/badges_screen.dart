@@ -423,9 +423,9 @@ class _BadgesScreenState extends State<BadgesScreen>
                         alignment: Alignment.center,
                         children: [
                           if (nSvg.isNotEmpty)
-                            SizedBox(width: 40, height: 40, child: SvgaPlayer(assetPath: nSvg, width: 40, height: 40))
+                            SizedBox(width: 56, height: 56, child: SvgaPlayer(assetPath: nSvg, width: 56, height: 56))
                           else if (n.imageUrl.isNotEmpty)
-                            R.loadAsset(n.imageUrl, width: 40, height: 40),
+                            R.loadAsset(n.imageUrl, width: 56, height: 56),
                           if (!n.owned)
                             R.loadAsset(config.necklacesLockImage.isNotEmpty ? config.necklacesLockImage : 'assets/mipmap-xxhdpi/room_gift_ic.webp', width: 20, height: 20),
                         ],
