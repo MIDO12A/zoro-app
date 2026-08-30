@@ -75,10 +75,11 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           mkdir -p release_assets
-          # Copy non-empty generated APKs only (size > 100KB)
-          find build/app/outputs/flutter-apk -type f -name "*.apk" -size +100k -exec cp -v {} release_assets/ \;
-          # Ensure build_info.json is also created
+          # Find and copy all generated APKs anywhere in build/
+          find build -type f -name "*.apk" -size +100k -exec cp -v {} release_assets/ \; || true
+          # Create build_info.json
           printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$VERSION_CODE" "$SHA" > release_assets/build_info.json
+          echo "=== Prepared Release Assets ==="
           ls -lh release_assets/
 
       - name: Upload APKs to Workflow Artifacts
