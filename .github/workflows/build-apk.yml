@@ -23,8 +23,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.47.1
           cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
 
       - name: Restore release signing keystore
         env:
@@ -54,7 +56,7 @@ jobs:
         env:
           BUILD_NUM: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((2000003100 + BUILD_NUM))
+          VERSION_CODE=$((2000003200 + BUILD_NUM))
           flutter build apk --release --split-per-abi --build-number=$VERSION_CODE
           echo "VERSION_CODE=$VERSION_CODE" >> $GITHUB_ENV
 
