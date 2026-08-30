@@ -628,6 +628,9 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   void _clearMessages() {
+    // Persist a chat_cleared_at stamp so every user's stream filter hides old messages
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _firebaseService.updateRoom(widget.roomId, {'chat_cleared_at': now});
     setState(() {
       _chatMessages.clear();
     });
@@ -2943,20 +2946,12 @@ class _RoomScreenState extends State<RoomScreen> {
             .delete()
             .eq('room_id', widget.roomId)
             .eq('uid', _currentUserId!);
-        // Log exit message
+        // Log exit message on Firestore so ALL users in the room see it
         if (name != null && name.isNotEmpty) {
-          final msg = MessageModel(
-            msgId: const Uuid().v4(),
-            roomId: widget.roomId,
-            senderUid: _currentUserId!,
-            senderName: name,
-            text: '$name left',
-            type: 'exit',
-            timestamp: DateTime.now().millisecondsSinceEpoch,
-          );
-          await Supabase.instance.client.from('room_messages').insert(msg.toMap());
+          await _firebaseService.logExit(widget.roomId, name);
         }
-        // Remove from room members
+        // Remove from room members (Firestore — same DB the stream listens to)
+        await _firebaseService.leaveRoom(widget.roomId, _currentUserId!);
         await Supabase.instance.client
             .from('room_members')
             .delete()

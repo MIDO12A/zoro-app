@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
+import '../../config/r.dart';
 import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
 
-class CcRecordScreen extends StatefulWidget {
-  const CcRecordScreen({super.key});
+/// Relationship Record screen — matches act_relationship_record.xml
+/// Tabs: الكل / المرسلة / المستلمة + achievements grid.
+class CpRecordScreen extends StatefulWidget {
+  const CpRecordScreen({super.key});
 
   @override
-  State<CcRecordScreen> createState() => _CcRecordScreenState();
+  State<CpRecordScreen> createState() => _CpRecordScreenState();
 }
 
-class _CcRecordScreenState extends State<CcRecordScreen>
+class _CpRecordScreenState extends State<CpRecordScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   List<Map<String, dynamic>> _allRecords = [];
+  List<Map<String, dynamic>> _achievements = [];
   bool _isLoading = true;
   String? _error;
 
@@ -20,7 +24,7 @@ class _CcRecordScreenState extends State<CcRecordScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _loadHistory();
+    _loadData();
   }
 
   @override
@@ -29,16 +33,20 @@ class _CcRecordScreenState extends State<CcRecordScreen>
     super.dispose();
   }
 
-  Future<void> _loadHistory() async {
+  Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
       _error = null;
     });
     try {
-      final records = await CpService.getCpHistory(limit: 100);
+      final results = await Future.wait([
+        CpService.getCpHistory(limit: 100),
+        CpService.getCpAchievements(),
+      ]);
       if (mounted) {
         setState(() {
-          _allRecords = records;
+          _allRecords = results[0];
+          _achievements = results[1];
           _isLoading = false;
         });
       }
@@ -57,7 +65,7 @@ class _CcRecordScreenState extends State<CcRecordScreen>
     final cfg = DynamicConfigService();
 
     return Scaffold(
-      backgroundColor: cfg.cpHeaderBg,
+      backgroundColor: const Color(0xFF1a0a0e),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -68,23 +76,23 @@ class _CcRecordScreenState extends State<CcRecordScreen>
         title: const Text('سجل العلاقات',
             style: TextStyle(color: Colors.white, fontSize: 18)),
         centerTitle: true,
-          bottom: TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            indicator: const BoxDecoration(),
-            indicatorSize: TabBarIndicatorSize.label,
-            labelColor: cfg.cpGold,
-            unselectedLabelColor: Colors.white54,
-            labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            unselectedLabelStyle: const TextStyle(fontSize: 16),
-            splashFactory: NoSplash.splashFactory,
-            dividerColor: Colors.transparent,
-            tabs: const [
-              Tab(text: 'الكل'),
-              Tab(text: 'المرسلة'),
-              Tab(text: 'المستلمة'),
-            ],
-          ),
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          indicator: const BoxDecoration(),
+          indicatorSize: TabBarIndicatorSize.label,
+          labelColor: const Color(0xFFffb565),
+          unselectedLabelColor: Colors.white54,
+          labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          unselectedLabelStyle: const TextStyle(fontSize: 16),
+          splashFactory: NoSplash.splashFactory,
+          dividerColor: Colors.transparent,
+          tabs: const [
+            Tab(text: 'الكل'),
+            Tab(text: 'المرسلة'),
+            Tab(text: 'المستلمة'),
+          ],
+        ),
       ),
       body: _buildBody(cfg),
     );
@@ -92,9 +100,7 @@ class _CcRecordScreenState extends State<CcRecordScreen>
 
   Widget _buildBody(DynamicConfigService cfg) {
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(color: cfg.cpGold),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
 
     if (_error != null) {
@@ -104,15 +110,11 @@ class _CcRecordScreenState extends State<CcRecordScreen>
           children: [
             const Icon(Icons.error_outline, size: 48, color: Colors.white54),
             const SizedBox(height: 16),
-            const Text('حدث خطأ في تحميل السجل',
-                style: TextStyle(color: Colors.white)),
+            const Text('حدث خطأ في تحميل السجل', style: TextStyle(color: Colors.white)),
             const SizedBox(height: 8),
             ElevatedButton(
-              onPressed: _loadHistory,
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: cfg.cpGold),
-              child: const Text('إعادة المحاولة',
-                  style: TextStyle(color: Colors.white)),
+              onPressed: _loadData,
+              child: const Text('إعادة المحاولة'),
             ),
           ],
         ),
@@ -137,17 +139,66 @@ class _CcRecordScreenState extends State<CcRecordScreen>
           children: [
             Icon(Icons.inbox_outlined, size: 64, color: Colors.white.withValues(alpha: 0.2)),
             const SizedBox(height: 12),
-            const Text('لا توجد سجلات',
-                style: TextStyle(color: Colors.white54, fontSize: 16)),
+            const Text('لا توجد سجلات', style: TextStyle(color: Colors.white54, fontSize: 16)),
           ],
         ),
       );
     }
 
-    return ListView.builder(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-      itemCount: records.length,
-      itemBuilder: (context, index) => _buildRecordItem(cfg, records[index]),
+      children: [
+        // Achievements summary
+        if (_achievements.isNotEmpty) ...[
+          _buildAchievementsSummary(cfg),
+          const SizedBox(height: 16),
+        ],
+        // Records list
+        ...records.map((item) => _buildRecordItem(cfg, item)),
+      ],
+    );
+  }
+
+  Widget _buildAchievementsSummary(DynamicConfigService cfg) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [const Color(0xFF4a1020), const Color(0xFF2e0d15)],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFa31b44).withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('الإنجازات',
+              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 12),
+          Row(
+            children: _achievements.take(4).map((a) {
+              final icon = switch (a['icon']?.toString()) {
+                'favorite' => Icons.favorite,
+                'card_giftcard' => Icons.card_giftcard,
+                'stars' => Icons.stars,
+                _ => Icons.star,
+              };
+              return Expanded(
+                child: Column(
+                  children: [
+                    Icon(icon, color: const Color(0xFFffb565), size: 24),
+                    const SizedBox(height: 4),
+                    Text(a['title']?.toString() ?? '',
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    Text(a['subtitle']?.toString() ?? '',
+                        style: const TextStyle(color: Colors.white60, fontSize: 10)),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -161,9 +212,9 @@ class _CcRecordScreenState extends State<CcRecordScreen>
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: cfg.cpCardBg.withValues(alpha: 0.3),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: cfg.cpCardBorder, width: 1),
+        border: Border.all(color: const Color(0xFF770d1e).withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [
@@ -171,14 +222,10 @@ class _CcRecordScreenState extends State<CcRecordScreen>
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: cfg.cpGold.withValues(alpha: 0.1),
+              color: const Color(0xFFffb565).withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(
-              Icons.card_giftcard,
-              color: cfg.cpGold,
-              size: 22,
-            ),
+            child: const Icon(Icons.card_giftcard, color: Color(0xFFffb565), size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -186,21 +233,15 @@ class _CcRecordScreenState extends State<CcRecordScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (giftName.isNotEmpty)
-                  Text('$giftName 🎁',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white)),
-                Text(userName,
-                    style: TextStyle(
-                        color: cfg.cpSubText, fontSize: 12)),
+                  Text(giftName,
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(userName, style: const TextStyle(color: Colors.white60, fontSize: 12)),
                 if (giftValue > 0)
                   Text('$giftValue نقطة',
-                      style: TextStyle(
-                          color: cfg.cpGold, fontSize: 11)),
+                      style: const TextStyle(color: Color(0xFFffb565), fontSize: 11)),
                 if (timestamp.isNotEmpty)
                   Text(_formatTime(timestamp),
-                      style: TextStyle(
-                          color: cfg.cpSubText, fontSize: 10)),
+                      style: const TextStyle(color: Colors.white38, fontSize: 10)),
               ],
             ),
           ),

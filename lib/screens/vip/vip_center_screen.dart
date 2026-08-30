@@ -7,6 +7,7 @@ import '../room/widgets/vap_player.dart';
 import '../../config/r.dart';
 import '../../providers/user_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/firebase_service.dart';
 import '../../services/dynamic_config_service.dart';
 import '../wallet/wallet_main_screen.dart';
 
@@ -707,10 +708,10 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
     final user = userProvider.currentUser;
     if (user == null) return;
 
+    // Quick client-side check for immediate feedback (real check happens in the transaction)
     if (user.coins < priceInt) {
-      setState(() => _purchasing = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Not enough coins! Redirecting to recharge...')),
+        const SnackBar(content: Text('الرصيد غير كافي! جارٍ تحويلك إلى الشحن...')),
       );
       await Future.delayed(const Duration(milliseconds: 500));
       if (mounted) {
@@ -718,7 +719,6 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
           builder: (_) => const WalletMainScreen(),
         ));
       }
-      setState(() => _purchasing = false);
       return;
     }
 
@@ -727,9 +727,6 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
       final uid = user.uid;
 
       final ownedItems = List<String>.from(user.ownedItems);
-      final updates = <String, dynamic>{
-        'coins': user.coins - priceInt,
-      };
 
       String dbKey(String field, String fallback) {
         final k = t['${field}_key']?.toString();
@@ -739,7 +736,6 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
       void processAcc(String? url, String key) {
         if (url != null && url.isNotEmpty && !ownedItems.contains(url)) {
           ownedItems.add(url);
-          updates[key] = url;
         }
       }
 
@@ -769,11 +765,8 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
         for (final f in additional) {
           final fm = f as Map<String, dynamic>;
           final url = fm['url']?.toString();
-          final key = fm['key']?.toString();
-          if (url != null && url.isNotEmpty && key != null && key.isNotEmpty) {
-            processAcc(url, key);
-          } else if (url != null && url.isNotEmpty) {
-            if (!ownedItems.contains(url)) ownedItems.add(url);
+          if (url != null && url.isNotEmpty) {
+            processImg(url);
           }
         }
       }
@@ -783,11 +776,8 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
         for (final item in items) {
           final m = item as Map<String, dynamic>;
           final url = m['svgaUrl']?.toString() ?? m['img']?.toString();
-          final key = m['key']?.toString();
-          if (url != null && url.isNotEmpty && key != null && key.isNotEmpty) {
-            processAcc(url, key);
-          } else if (url != null && url.isNotEmpty) {
-            if (!ownedItems.contains(url)) ownedItems.add(url);
+          if (url != null && url.isNotEmpty) {
+            processImg(url);
           }
         }
       }
@@ -796,35 +786,61 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
       if (newUrls.isNotEmpty) {
         final storeRes = await _supabase.from('store_items').select('item_id, icon_asset, svga_asset');
         for (final s in storeRes) {
-            final icon = s['icon_asset']?.toString();
-            final svga = s['svga_asset']?.toString();
-            if ((icon != null && newUrls.contains(icon)) || (svga != null && newUrls.contains(svga))) {
-              final id = s['item_id']?.toString();
-              if (id != null && !ownedItems.contains(id)) {
-                ownedItems.add(id);
-              }
+          final icon = s['icon_asset']?.toString();
+          final svga = s['svga_asset']?.toString();
+          if ((icon != null && newUrls.contains(icon)) || (svga != null && newUrls.contains(svga))) {
+            final id = s['item_id']?.toString();
+            if (id != null && !ownedItems.contains(id)) {
+              ownedItems.add(id);
             }
           }
+        }
       }
 
-      updates['owned_items'] = ownedItems;
+      // ✅ Transactional coin deduction — real balance check on Firestore
+      final deducted = await FirebaseService().deductCoins(uid, priceInt, 'vip_purchase');
+      if (!deducted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('الرصيد غير كافي! جارٍ تحويلك إلى الشحن...')),
+          );
+          await Future.delayed(const Duration(milliseconds: 500));
+          Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const WalletMainScreen(),
+          ));
+        }
+        return;
+      }
+
+      final updates = <String, dynamic>{
+        'owned_items': ownedItems,
+        'active_headwear': t['headwear_url']?.toString() ?? user.activeHeadwear,
+        'active_bubble': t['bubble_url']?.toString() ?? user.activeBubble,
+        'active_entrance': t['entrance_url']?.toString() ?? user.activeEntrance,
+        'active_necklace': t['necklace_url']?.toString() ?? user.activeNecklace,
+        'active_car': t['car_url']?.toString() ?? user.activeCar,
+        'active_cover': t['cover_url']?.toString() ?? user.activeCover,
+      };
+      updates.removeWhere((k, v) => v == null || v.toString().isEmpty);
 
       await _supabase.from('users').update(updates).eq('uid', uid);
+      // Reload the user so the backpack and balance update immediately
       await userProvider.loadUser(uid);
+      if (mounted) await _loadUserVip();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('VIP purchased successfully! Accessories equipped.')),
+          const SnackBar(content: Text('تم شراء VIP بنجاح! تم تجهيز الإكسسوارات وإضافتها إلى الحقيبة.')),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Purchase failed: $e')),
+          SnackBar(content: Text('فشل الشراء: $e')),
         );
       }
     }
-    setState(() => _purchasing = false);
+    if (mounted) setState(() => _purchasing = false);
   }
 
   void _showPreview(String url, String name, bool isSvga, Color color, String fallbackImg, String type) {

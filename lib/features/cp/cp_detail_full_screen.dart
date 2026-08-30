@@ -6,6 +6,11 @@ import '../../services/dynamic_config_service.dart';
 import '../../screens/room/widgets/svga_frame.dart';
 import 'cp_service.dart';
 import 'cp_rewards_screen.dart';
+import 'cp_space_screen.dart';
+import 'cp_tasks_screen.dart';
+import 'cp_settings_screen.dart';
+import 'cp_record_screen.dart';
+import 'cp_ranking_screen.dart';
 
 class CPDetailFullScreen extends StatefulWidget {
   final String? cpId;
@@ -609,11 +614,15 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
   Widget _buildTopIcons() {
     return Stack(
       children: [
+        // Left: Tasks
         Positioned(
           top: MediaQuery.of(context).padding.top + 60,
           left: 12,
           child: GestureDetector(
-            onTap: _showRulesDialog,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CpTasksScreen()),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -622,6 +631,37 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
                   width: 48,
                   height: 48,
                   fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'المهام',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Center-right: Rules
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 60,
+          right: 68,
+          child: GestureDetector(
+            onTap: _showRulesDialog,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.rule, color: Colors.white, size: 24),
                 ),
                 const SizedBox(height: 4),
                 const Text(
@@ -636,6 +676,7 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
             ),
           ),
         ),
+        // Right: Rewards
         Positioned(
           top: MediaQuery.of(context).padding.top + 60,
           right: 12,
@@ -697,19 +738,25 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        backgroundImage: avatarUrl.isNotEmpty
-                            ? EncryptedImageProvider(avatarUrl) as ImageProvider
-                            : const AssetImage('assets/cp/ic_cp_ranking_default_header.webp'),
-                      ),
-                      if (_userFrameSvg.isNotEmpty)
-                        SvgaFrame(svgaPath: _userFrameSvg, size: 72),
-                    ],
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CpSpaceScreen()),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 36,
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          backgroundImage: avatarUrl.isNotEmpty
+                              ? EncryptedImageProvider(avatarUrl) as ImageProvider
+                              : const AssetImage('assets/cp/ic_cp_ranking_default_header.webp'),
+                        ),
+                        if (_userFrameSvg.isNotEmpty)
+                          SvgaFrame(svgaPath: _userFrameSvg, size: 72),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -746,19 +793,25 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.white.withValues(alpha: 0.1),
-                        backgroundImage: partnerAvatar.isNotEmpty
-                            ? EncryptedImageProvider(partnerAvatar) as ImageProvider
-                            : const AssetImage('assets/cp/ic_cp_ranking_default_header.webp'),
-                      ),
-                      if (_partnerFrameSvg.isNotEmpty)
-                        SvgaFrame(svgaPath: _partnerFrameSvg, size: 72),
-                    ],
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CpSettingsScreen()),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 36,
+                          backgroundColor: Colors.white.withValues(alpha: 0.1),
+                          backgroundImage: partnerAvatar.isNotEmpty
+                              ? EncryptedImageProvider(partnerAvatar) as ImageProvider
+                              : const AssetImage('assets/cp/ic_cp_ranking_default_header.webp'),
+                        ),
+                        if (_partnerFrameSvg.isNotEmpty)
+                          SvgaFrame(svgaPath: _partnerFrameSvg, size: 72),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(

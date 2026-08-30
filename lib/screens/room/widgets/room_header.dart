@@ -65,7 +65,7 @@ class RoomHeader extends StatelessWidget {
                   child: GestureDetector(
                     onTap: onInfoTap,
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(isAr ? 0 : 14, 5, isAr ? 14 : 0, 5),
+                      padding: EdgeInsets.fromLTRB(isAr ? 0 : 14, 0, isAr ? 14 : 0, 5),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
