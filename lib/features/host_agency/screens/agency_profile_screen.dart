@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import '../data/agency_models.dart';
 import '../data/agency_repository.dart';
@@ -28,18 +29,29 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
     _load();
   }
 
+  String? _error;
+
   Future<void> _load() async {
-    setState(() => _loading = true);
-    final agency = await AgencyRepository.getProfile(widget.agencyId);
-    final members = agency != null
-        ? await AgencyRepository.getMembers(widget.agencyId, limit: 20)
-        : <Map<String, dynamic>>[];
-    if (!mounted) return;
-    setState(() {
-      _agency  = agency;
-      _members = members;
-      _loading = false;
-    });
+    setState(() { _loading = true; _error = null; });
+    try {
+      final agency = await AgencyRepository.getProfile(widget.agencyId);
+      final members = agency != null
+          ? await AgencyRepository.getMembers(widget.agencyId, limit: 20)
+          : <Map<String, dynamic>>[];
+      if (!mounted) return;
+      setState(() {
+        _agency  = agency;
+        _members = members;
+        _loading = false;
+      });
+    } catch (e) {
+      debugPrint('[agency_profile] error: $e');
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _join() async {
@@ -67,9 +79,30 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
       backgroundColor: const Color(0xFF0D0D1A),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
-          : _agency == null
-              ? Center(child: Text('لم يتم العثور على الوكالة', style: TextStyle(color: Colors.white.withOpacity(0.5))))
-              : _buildContent(),
+          : _error != null
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, color: Colors.white38, size: 48),
+                      const SizedBox(height: 12),
+                      Text('تعذر تحميل بيانات الوكالة', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15)),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: _load,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('إعادة المحاولة'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFD4AF37),
+                          foregroundColor: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : _agency == null
+                  ? Center(child: Text('لم يتم العثور على الوكالة', style: TextStyle(color: Colors.white.withOpacity(0.5))))
+                  : _buildContent(),
     );
   }
 
@@ -214,6 +247,21 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                       ),
                     ),
+                  )
+                else if (a.hasPendingRequest)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 18),
+                      SizedBox(width: 8),
+                      Text('تم إرسال طلب الانضمام — في انتظار الموافقة', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
+                    ]),
                   )
                 else if (a.isMember)
                   Container(

@@ -490,20 +490,29 @@ debugPrint('[host_agency_screen] error: $e');
         )),
       );
     }
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, i) {
-          final agency = _topAgencies[i];
-          return _AgencyCard(agency: agency, rank: i + 1, onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AgencyProfileScreen(agencyId: agency['id'] as String),
-              ),
-            );
-          });
-        },
-        childCount: _topAgencies.length,
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: 0.85,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            final agency = _topAgencies[i];
+            return _AgencyGridCard(agency: agency, rank: i + 1, onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AgencyProfileScreen(agencyId: agency['id'] as String),
+                ),
+              );
+            });
+          },
+          childCount: _topAgencies.length,
+        ),
       ),
     );
   }
@@ -685,6 +694,137 @@ class _AgencyCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(_fmt(diamonds),
                   style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _fmt(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
+    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(1)}K';
+    return '$n';
+  }
+}
+
+// ── agency grid card (2-column layout) ─────────────────────────────────────────
+class _AgencyGridCard extends StatelessWidget {
+  final Map<String, dynamic> agency;
+  final int rank;
+  final VoidCallback onTap;
+
+  const _AgencyGridCard({required this.agency, required this.rank, required this.onTap});
+
+  static const _tierColors = {
+    'bronze':   Color(0xFFCD7F32),
+    'silver':   Color(0xFFC0C0C0),
+    'gold':     Color(0xFFD4AF37),
+    'platinum': Color(0xFF6ADBF5),
+    'diamond':  Color(0xFFB39DDB),
+  };
+
+  static const _rankEmoji = {1: '🥇', 2: '🥈', 3: '🥉'};
+
+  @override
+  Widget build(BuildContext context) {
+    final cfg = context.watch<DynamicConfigService>();
+    final name         = agency['name']                    as String? ?? '—';
+    final tier         = agency['tier']                    as String? ?? 'bronze';
+    final photoUrl     = agency['photo_url']               as String?;
+    final diamonds     = (agency['total_diamonds_monthly'] as num?)?.toInt() ?? 0;
+    final members      = (agency['member_count']           as num?)?.toInt() ?? 0;
+    final isHOF        = agency['is_hall_of_fame']         as bool? ?? false;
+    final color        = _tierColors[tier] ?? const Color(0xFFD4AF37);
+    final rankLabel    = _rankEmoji[rank] ?? '#$rank';
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: cfg.agencyCardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.25)),
+        ),
+        child: Column(
+          children: [
+            // Rank badge top-right
+            Align(
+              alignment: AlignmentDirectional.topEnd,
+              child: Text(rankLabel, style: TextStyle(fontSize: 14, color: cfg.agencyTextColor)),
+            ),
+            const SizedBox(height: 4),
+            // Logo
+            Container(
+              width: 52, height: 52,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withOpacity(0.15),
+                border: Border.all(color: color.withOpacity(0.4), width: 1.5),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: (photoUrl != null && photoUrl.isNotEmpty)
+                  ? Image(
+                      image: EncryptedImageProvider(photoUrl),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Text(name.isEmpty ? '?' : name.characters.first,
+                            style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  : Center(
+                      child: Text(name.isEmpty ? '?' : name.characters.first,
+                          style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+                    ),
+            ),
+            const SizedBox(height: 8),
+            // Name
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(name,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w700, fontSize: 13)),
+                ),
+                if (isHOF) ...[const SizedBox(width: 2), const Text('🏆', style: TextStyle(fontSize: 10))],
+              ],
+            ),
+            const SizedBox(height: 6),
+            // Tier badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(AgencyTierX.fromString(tier).label,
+                  style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 8),
+            // Members + Diamonds row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.people_alt_rounded, color: Colors.lightBlueAccent, size: 11),
+                    const SizedBox(width: 3),
+                    Text('$members', style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('♦', style: TextStyle(color: cfg.agencyTabInactive, fontSize: 11)),
+                    const SizedBox(width: 3),
+                    Text(_fmt(diamonds),
+                        style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.bold, fontSize: 10)),
+                  ],
+                ),
               ],
             ),
           ],

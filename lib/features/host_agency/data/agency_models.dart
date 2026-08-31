@@ -109,6 +109,7 @@ class AgencyCard {
   final String status;
   final bool isMember;
   final bool canJoin;
+  final bool hasPendingRequest;
   final String? ownerName;
   final String? ownerAvatarUrl;
 
@@ -128,6 +129,7 @@ class AgencyCard {
     required this.status,
     this.isMember = false,
     this.canJoin = false,
+    this.hasPendingRequest = false,
     this.ownerName,
     this.ownerAvatarUrl,
   });
@@ -149,6 +151,7 @@ class AgencyCard {
       status:                   m['status'] as String? ?? 'active',
       isMember:                 m['is_member'] as bool? ?? false,
       canJoin:                  m['can_join'] as bool? ?? false,
+      hasPendingRequest:        m['has_pending_request'] as bool? ?? false,
       ownerName:                m['owner_name'] as String?
                                   ?? (m['owner'] as Map<String, dynamic>?)?['display_name'] as String?,
       ownerAvatarUrl:           m['owner_avatar'] as String?

@@ -44,11 +44,60 @@ abstract final class AgencyRepository {
 
   // ─── ملف الوكالة العام ──────────────────────────────────────────
   static Future<AgencyCard?> getProfile(String agencyId) async {
-    final resp = await _sb.rpc('agency_get_profile', params: {
-      'p_agency_id': agencyId,
+    // Try RPC first (if it exists)
+    try {
+      final resp = await _sb.rpc('agency_get_profile', params: {
+        'p_agency_id': agencyId,
+      });
+      if (resp != null) {
+        return AgencyCard.fromMap(Map<String, dynamic>.from(resp as Map));
+      }
+    } catch (_) {
+      // RPC doesn't exist — fallback to direct query
+    }
+
+    // Fallback: query host_agencies directly
+    final row = await _sb
+        .from('host_agencies')
+        .select('id, agency_public_id, name, description, photo_url, country, tier, total_diamonds_monthly, total_diamonds_cumulative, member_count, is_hall_of_fame, status')
+        .eq('id', agencyId)
+        .maybeSingle();
+    if (row == null) return null;
+
+    // Check if current user is a member or has pending request
+    final uid = _sb.auth.currentUser?.id;
+    bool isMember = false;
+    bool canJoin = false;
+    bool hasPendingRequest = false;
+    if (uid != null) {
+      final memberRow = await _sb
+          .from('host_agency_members')
+          .select('status')
+          .eq('agency_id', agencyId)
+          .eq('user_id', uid)
+          .maybeSingle();
+      if (memberRow != null) {
+        final status = memberRow['status'] as String? ?? '';
+        if (status == 'active') {
+          isMember = true;
+          canJoin = false;
+        } else if (status == 'pending') {
+          hasPendingRequest = true;
+          canJoin = false;
+        } else {
+          canJoin = true;
+        }
+      } else {
+        canJoin = true;
+      }
+    }
+
+    return AgencyCard.fromMap({
+      ...Map<String, dynamic>.from(row as Map),
+      'is_member': isMember,
+      'can_join': canJoin,
+      'has_pending_request': hasPendingRequest,
     });
-    if (resp == null) return null;
-    return AgencyCard.fromMap(Map<String, dynamic>.from(resp as Map));
   }
 
   // ─── إنشاء وكالة ────────────────────────────────────────────────
@@ -71,7 +120,19 @@ abstract final class AgencyRepository {
 
   // ─── طلب انضمام ─────────────────────────────────────────────────
   static Future<void> requestJoin(String agencyId) async {
-    await _sb.rpc('agency_request_join', params: {'p_agency_id': agencyId});
+    try {
+      await _sb.rpc('agency_request_join', params: {'p_agency_id': agencyId});
+    } catch (_) {
+      // Fallback: insert directly into host_agency_members
+      final uid = _sb.auth.currentUser?.id;
+      if (uid == null) throw Exception('يجب تسجيل الدخول أولاً');
+      await _sb.from('host_agency_members').insert({
+        'agency_id': agencyId,
+        'user_id': uid,
+        'role': 'host',
+        'status': 'pending',
+      });
+    }
   }
 
   // ─── لوحة المضيف الموحدة (v2) ───────────────────────────────────
