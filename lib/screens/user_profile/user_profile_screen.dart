@@ -537,7 +537,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           child: Column(
                             children: [
                               _buildNewProfileHeader(config, user),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 12),
+                              _buildActionButtons(config, user),
+                              const SizedBox(height: 12),
                               _buildNewStatsRow(config),
                               const SizedBox(height: 24),
                               _buildNewCardsRow(config),
@@ -3214,10 +3216,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
     // Own profile -> show Edit button
     if (widget.targetUid == null || (currentUser != null && widget.targetUid == currentUser.uid)) {
-      return Container(
-        width: double.infinity,
-        color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: GestureDetector(
           onTap: () {
             Navigator.push(
@@ -3251,10 +3251,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     }
 
     // Other user -> Show Follow + Message buttons
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
           // Follow button
@@ -3264,22 +3262,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: _isFollowing ? const Color(0xFFE8F5E9) : const Color(0xFFE3F2FD),
+                  color: _isFollowing ? const Color(0xFFE53935).withOpacity(0.15) : const Color(0xFF6de5ff).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(25),
+                  border: Border.all(
+                    color: _isFollowing ? const Color(0xFFE53935) : const Color(0xFF6de5ff),
+                    width: 1.5,
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
                       _isFollowing ? Icons.favorite : Icons.favorite_border,
-                      size: 24,
+                      size: 22,
                       color: _isFollowing ? const Color(0xFFE53935) : const Color(0xFF6de5ff),
                     ),
                     const SizedBox(width: 8),
                     Text(
                       _isFollowing ? 'متابع' : 'متابعة',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: _isFollowing ? const Color(0xFFE53935) : const Color(0xFF6de5ff),
                       ),
@@ -3308,31 +3310,36 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: _isFollowing ? const Color(0xFFE3F2FD) : const Color(0xFFF5F5F5),
+                  color: _isFollowing ? const Color(0xFF6de5ff).withOpacity(0.15) : Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(25),
+                  border: Border.all(
+                    color: _isFollowing ? const Color(0xFF6de5ff) : Colors.white24,
+                    width: 1.5,
+                  ),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.chat_bubble,
-                      size: 22,
-                      color: _isFollowing ? const Color(0xFF6de5ff) : Colors.grey,
+                      Icons.chat_bubble_outline,
+                      size: 20,
+                      color: _isFollowing ? const Color(0xFF6de5ff) : Colors.white38,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       'رسالة',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: _isFollowing ? const Color(0xFF6de5ff) : Colors.grey,
+                        color: _isFollowing ? const Color(0xFF6de5ff) : Colors.white38,
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          ),        ],
+          ),
+        ],
       ),
     );
   }
