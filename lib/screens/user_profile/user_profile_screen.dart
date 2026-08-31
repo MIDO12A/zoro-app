@@ -3263,21 +3263,26 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               onTap: _toggleFollow,
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _isFollowing ? const Color(0xFFE8F5E9) : const Color(0xFFE3F2FD),
+                  borderRadius: BorderRadius.circular(25),
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (config.miniProfileFollowIcon.isNotEmpty)
-                      Image(image: cachedImgProvider(config.miniProfileFollowIcon), width: 32, height: 32)
-                    else
-                      Icon(
-                        _isFollowing ? Icons.check : Icons.person_add,
-                        size: 24,
-                        color: const Color(0xFF6de5ff),
-                      ),
+                    Icon(
+                      _isFollowing ? Icons.favorite : Icons.favorite_border,
+                      size: 24,
+                      color: _isFollowing ? const Color(0xFFE53935) : const Color(0xFF6de5ff),
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       _isFollowing ? 'متابع' : 'متابعة',
-                      style: const TextStyle(fontSize: 16, color: Color(0xFF6de5ff)),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _isFollowing ? const Color(0xFFE53935) : const Color(0xFF6de5ff),
+                      ),
                     ),
                   ],
                 ),
@@ -3288,20 +3293,40 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           // Message button
           Expanded(
             child: GestureDetector(
-              onTap: _navigateToChat,
+              onTap: () {
+                if (!_isFollowing) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('يجب متابعة المستخدم أولاً لإرسال رسالة'),
+                      backgroundColor: Color(0xFFE53935),
+                    ),
+                  );
+                  return;
+                }
+                _navigateToChat();
+              },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: _isFollowing ? const Color(0xFFE3F2FD) : const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(25),
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    if (config.miniProfileMessageIcon.isNotEmpty)
-                      Image(image: cachedImgProvider(config.miniProfileMessageIcon), width: 32, height: 32)
-                    else
-                      const Icon(Icons.chat, size: 24, color: Color(0xFF6de5ff)),
+                    Icon(
+                      Icons.chat_bubble,
+                      size: 22,
+                      color: _isFollowing ? const Color(0xFF6de5ff) : Colors.grey,
+                    ),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'رسالة',
-                      style: TextStyle(fontSize: 16, color: Color(0xFF6de5ff)),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _isFollowing ? const Color(0xFF6de5ff) : Colors.grey,
+                      ),
                     ),
                   ],
                 ),
