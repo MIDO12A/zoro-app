@@ -86,7 +86,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     try {
       final signIn = GoogleSignIn.instance;
-      await signIn.initialize();
+      await signIn.initialize(
+        clientId: '95008435096-u3l8hcm3833j0vf29jntk2450duir63e.apps.googleusercontent.com',
+      );
       
       // Sign out first to clear any stale cached tokens
       try {
