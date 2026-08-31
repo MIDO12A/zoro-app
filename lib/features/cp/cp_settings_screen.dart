@@ -316,7 +316,7 @@ class _CpSettingsScreenState extends State<CpSettingsScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.breakout_room, color: Colors.white.withValues(alpha: 0.7), size: 16),
+            Icon(Icons.heart_broken, color: Colors.white.withValues(alpha: 0.7), size: 16),
             const SizedBox(width: 8),
             Text(
               _dissolving ? 'جارٍ الحل...' : 'حل العلاقة',

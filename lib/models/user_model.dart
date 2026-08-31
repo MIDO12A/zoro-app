@@ -13,6 +13,7 @@ class UserModel {
   final String? activeEntrance;
   final String? activeCar;
   final String? activeCover;
+  final String? activeNecklace;
   final String? profileBgUrl;
   final List<String> ownedItems;
   final String? hostedRoomId;
@@ -60,6 +61,7 @@ class UserModel {
     this.activeEntrance,
     this.activeCar,
     this.activeCover,
+    this.activeNecklace,
     this.profileBgUrl,
     this.ownedItems = const [],
     this.ownedBadges = const [],
@@ -107,6 +109,7 @@ class UserModel {
     String? activeEntrance,
     String? activeCar,
     String? activeCover,
+    String? activeNecklace,
     String? profileBgUrl,
     List<String>? ownedItems,
     String? hostedRoomId,
@@ -154,6 +157,7 @@ class UserModel {
       activeEntrance: activeEntrance ?? this.activeEntrance,
       activeCar: activeCar ?? this.activeCar,
       activeCover: activeCover ?? this.activeCover,
+      activeNecklace: activeNecklace ?? this.activeNecklace,
       profileBgUrl: profileBgUrl ?? this.profileBgUrl,
       ownedItems: ownedItems ?? this.ownedItems,
       hostedRoomId: hostedRoomId ?? this.hostedRoomId,
@@ -204,6 +208,7 @@ class UserModel {
       activeEntrance: map['active_entrance']?.toString(),
       activeCar: map['active_car']?.toString(),
       activeCover: map['active_cover']?.toString(),
+      activeNecklace: map['active_necklace']?.toString(),
       profileBgUrl: map['profile_bg_url']?.toString() ?? map['profileBgUrl']?.toString(),
       ownedItems: (map['owned_items'] as List?)?.map((e) => e.toString()).toList() ?? [],
       ownedBadges: (map['owned_badges'] as List?)?.map((e) => e.toString()).toList() ?? [],
@@ -253,6 +258,7 @@ class UserModel {
         'active_entrance': activeEntrance,
         'active_car': activeCar,
         'active_cover': activeCover,
+        'active_necklace': activeNecklace,
         'profile_bg_url': profileBgUrl,
         'owned_items': ownedItems,
         'owned_badges': ownedBadges,

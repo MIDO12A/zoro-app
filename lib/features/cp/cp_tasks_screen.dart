@@ -250,7 +250,7 @@ class _CpTasksScreenState extends State<CpTasksScreen> {
       padding: EdgeInsets.symmetric(horizontal: 26),
       child: Text(
         'أكمل المهام اليومية لزيادة نقاط القربى ورفع مستوى علاقتكم. كلما زادت نقاطكم، حصلت على مكافآت أفضل!',
-        style: TextStyle(color: Colors.white80, fontSize: 12),
+        style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
         textAlign: TextAlign.center,
       ),
     );
