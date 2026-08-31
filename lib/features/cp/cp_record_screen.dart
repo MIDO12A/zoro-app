@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../config/r.dart';
 import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
 

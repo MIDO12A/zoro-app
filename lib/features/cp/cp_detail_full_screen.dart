@@ -9,8 +9,6 @@ import 'cp_rewards_screen.dart';
 import 'cp_space_screen.dart';
 import 'cp_tasks_screen.dart';
 import 'cp_settings_screen.dart';
-import 'cp_record_screen.dart';
-import 'cp_ranking_screen.dart';
 import 'cp_display_screen.dart';
 import 'cp_invitation_list_screen.dart';
 
