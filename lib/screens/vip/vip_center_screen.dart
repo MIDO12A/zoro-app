@@ -782,24 +782,16 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
         }
       }
 
-      // ✅ Find matching store_items by category and add their item_ids
-      // The backpack filters by item_id, so we must add IDs not just URLs
+      // ✅ Add ALL store_items from VIP categories to backpack
       final vipCategories = ['car', 'bubble', 'entrance', 'frame', 'cover'];
       try {
         final storeItems = await _supabase
             .from('store_items')
-            .select('item_id, category, icon_asset, svga_asset')
+            .select('item_id')
             .inFilter('category', vipCategories);
         for (final s in (storeItems as List<dynamic>?) ?? []) {
           final id = s['item_id']?.toString();
-          final icon = s['icon_asset']?.toString();
-          final svga = s['svga_asset']?.toString();
-          if (id == null) continue;
-          if (ownedItems.contains(id)) continue;
-          // Match if any VIP URL matches this item's icon or svga
-          final matchByUrl = (icon != null && ownedItems.contains(icon)) ||
-              (svga != null && ownedItems.contains(svga));
-          if (matchByUrl) {
+          if (id != null && !ownedItems.contains(id)) {
             ownedItems.add(id);
           }
         }
