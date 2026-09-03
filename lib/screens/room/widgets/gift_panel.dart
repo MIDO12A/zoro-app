@@ -877,14 +877,14 @@ class _ImageGiftOverlayState extends State<_ImageGiftOverlay>
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.amber.withOpacity(0.4),
+                    color: Colors.amber.withValues(alpha: 0.4),
                     blurRadius: 30,
                     spreadRadius: 10,
                   ),
                 ],
               ),
-              child: R.cachedImage(
-                widget.imageUrl,
+              child: Image(
+                image: R.cachedImage(widget.imageUrl),
                 fit: BoxFit.contain,
               ),
             ),
