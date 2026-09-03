@@ -1564,7 +1564,7 @@ class AuthResponse {
 }
 
 /// Firestore-backed query builder exposing a Supabase-like fluent API.
-enum _QOp { select, insert, update, delete }
+enum _QOp { select, insert, update, delete, upsert }
 
 class SupabaseQueryBuilder implements Future<List<Map<String, dynamic>>> {
   final FirebaseFirestore _db;
@@ -1664,6 +1664,16 @@ class SupabaseQueryBuilder implements Future<List<Map<String, dynamic>>> {
     return this;
   }
 
+  SupabaseQueryBuilder upsert(dynamic payload, {String? onConflict}) {
+    _op = _QOp.upsert;
+    if (payload is Map<String, dynamic>) {
+      _payload = payload;
+    } else if (payload is List && payload.isNotEmpty && payload.first is Map<String, dynamic>) {
+      _payload = payload.first as Map<String, dynamic>;
+    }
+    return this;
+  }
+
   SupabaseQueryBuilder delete() {
     _op = _QOp.delete;
     return this;
@@ -1755,6 +1765,20 @@ class SupabaseQueryBuilder implements Future<List<Map<String, dynamic>>> {
         final snap = await _buildQuery().get();
         for (final doc in snap.docs) {
           await doc.reference.delete();
+        }
+        return <Map<String, dynamic>>[];
+      case _QOp.upsert:
+        if (_payload != null) {
+          final docId = _payload!['id']?.toString() ??
+              _payload!['uid']?.toString() ??
+              _payload!['user_id']?.toString() ??
+              _payload!['agency_id']?.toString();
+          if (docId != null && docId.isNotEmpty) {
+            await _db.collection(_table).doc(docId).set(_payload!, SetOptions(merge: true));
+          } else {
+            await _db.collection(_table).add(_payload!);
+          }
+          return <Map<String, dynamic>>[_payload!];
         }
         return <Map<String, dynamic>>[];
     }
