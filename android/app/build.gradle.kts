@@ -34,6 +34,17 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Workaround for AndroidX Window compatibility with older emulators
+        vectorDrawables.useSupportLibrary = true
+    }
+
+    // Workaround for AndroidX Window compatibility with older emulators
+    // These classes are only available on API 31+ but Flutter 3.47+ requires them
+    packagingOptions {
+        resources {
+            excludes += "/META-INF/INDEX.LIST"
+            pickFirsts += "**/kotlin-reflect.jlibr"
+        }
     }
 
     signingConfigs {

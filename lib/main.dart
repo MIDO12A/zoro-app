@@ -23,19 +23,23 @@ import 'config/r.dart';
 import 'config/app_colors.dart';
 import 'core/ui/in_app_toast.dart';
 import 'features/host_agency/widgets/agency_notification_handler.dart';
-import 'features/host_agency/screens/agency_join_requests_screen.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Guard against [core/duplicate-app]: on Android the google-services plugin
   // may already have created the [DEFAULT] app before Dart runs.
-  if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    ).catchError((Object e) {
+  try {
+    Firebase.app();
+  } catch (_) {
+    // No default app exists yet — initialize it
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (e) {
       debugPrint('Firebase.initializeApp: $e');
-      return Firebase.app();
-    });
+    }
   }
   FirebaseAuth.instance.authStateChanges().listen((data) {
     developer.log('AUTH STATE CHANGE: ${data?.uid ?? 'none'}');

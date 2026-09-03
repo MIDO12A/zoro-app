@@ -78,6 +78,21 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<GoogleSignInAccount?> _freshGoogleAuth(GoogleSignIn signIn) async {
+    // Sign out of Firebase Auth first to avoid stale-credential conflicts
+    await FirebaseAuth.instance.signOut();
+    // Fully revoke + disconnect to clear all cached tokens
+    try {
+      await signIn.disconnect();
+    } catch (_) {}
+    try {
+      await signIn.signOut();
+    } catch (_) {}
+    // Small delay to let cached tokens clear on the device
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    return signIn.authenticate();
+  }
+
   Future<void> _signInWithGoogle() async {
     if (_isLoading) {
       developer.log('_signInWithGoogle: already loading, skipping');
@@ -87,38 +102,31 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final signIn = GoogleSignIn.instance;
       await signIn.initialize();
-      
-      // Sign out first to clear any stale cached tokens
+
+      // Ensure a clean slate: sign out of Firebase + disconnect Google
+      await FirebaseAuth.instance.signOut();
       try {
-        await signIn.signOut();
-      } catch (_) {
-        // Ignore sign out errors
-      }
-      
+        await signIn.disconnect();
+      } catch (_) {}
+
       final account = await signIn.authenticate();
       final idToken = account.authentication.idToken;
       if (idToken == null) {
         throw Exception('Google sign-in returned no idToken');
       }
-      
+
       final credential = GoogleAuthProvider.credential(idToken: idToken);
-      FirebaseAuthException? authError;
       User? user;
-      
+
       try {
         final res = await FirebaseAuth.instance.signInWithCredential(credential);
         user = res.user;
       } on FirebaseAuthException catch (e) {
-        authError = e;
-        // If credential is stale/invalid, retry once with fresh token
+        // If credential is stale/invalid, retry with a completely fresh token
         if (e.code == 'invalid-credential' || e.code == 'id-token-expired') {
-          developer.log('_signInWithGoogle: stale token, retrying...');
-          try {
-            await signIn.signOut();
-          } catch (_) {}
-          
-          final freshAccount = await signIn.authenticate();
-          final freshIdToken = freshAccount.authentication.idToken;
+          developer.log('_signInWithGoogle: stale token, retrying with full reset...');
+          final freshAccount = await _freshGoogleAuth(signIn);
+          final freshIdToken = freshAccount?.authentication.idToken;
           if (freshIdToken == null) {
             throw Exception('Google sign-in returned no idToken on retry');
           }
@@ -129,7 +137,7 @@ class _LoginScreenState extends State<LoginScreen> {
           rethrow;
         }
       }
-      
+
       if (user == null) return;
       await _handleSignIn(user);
     } on GoogleSignInException catch (e) {

@@ -802,6 +802,16 @@ class DynamicConfigService extends ChangeNotifier {
     _initAssetsCompleter = Completer<void>();
     _setupAppAssetsStream();
 
+    // Only block startup on first data when there is a real session. When
+    // signed out, Firestore streams won't emit (permission denied) and we do
+    // NOT want to stall the app at the login screen for the full timeout.
+    if (!hasValidSession) {
+      _initCompleter?.complete();
+      _initAssetsCompleter?.complete();
+      debugPrint('DynamicConfigService: no session, continuing immediately with defaults');
+      return;
+    }
+
     // Wait for both config and assets first data, or timeout after 10s.
     // Never throw here: a timeout (offline / signed-out) must not block startup.
     try {
