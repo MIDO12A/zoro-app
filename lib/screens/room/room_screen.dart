@@ -519,10 +519,13 @@ class _RoomScreenState extends State<RoomScreen> {
             final af = cachedUser.activeFrame;
             final isFrameUrl = af != null && af.startsWith('http');
             final frameAsset = isFrameUrl ? af : index[af]?.svgaAsset;
-            final carStoreItem = cachedUser.activeCar != null
-                ? index[cachedUser.activeCar!]
+            final carVal = cachedUser.activeCar;
+            final carStoreItem = carVal != null && !carVal.startsWith('http')
+                ? index[carVal]
                 : null;
-            final carAsset = carStoreItem?.svgaAsset;
+            final carAsset = carVal != null && carVal.startsWith('http')
+                ? carVal
+                : carStoreItem?.svgaAsset;
             _seats[i] = seat.copyWith(
               frameAsset: frameAsset,
               carAsset: carAsset,
@@ -538,11 +541,16 @@ class _RoomScreenState extends State<RoomScreen> {
           bool playedAny = false;
           // Car SVGA
           if (u.activeCar != null) {
-            final carItem = index[u.activeCar!];
-            if (carItem != null && carItem.animationUrl != null) {
+            final carValue = u.activeCar!;
+            final carItem = carValue.startsWith('http') ? null : index[carValue];
+            // Support raw URL fallback for VIP-purchased car assets
+            final carAssetUrl = carItem != null && carItem.animationUrl != null
+                ? carItem.animationUrl
+                : (carValue.startsWith('http') ? carValue : null);
+            if (carAssetUrl != null) {
               playedAny = true;
-              final nameKey = carItem.nameKey;
-              final photoKey = carItem.photoKey;
+              final nameKey = carItem?.nameKey;
+              final photoKey = carItem?.photoKey;
               final textReplacement = nameKey != null && nameKey.isNotEmpty
                   ? <String, String>{nameKey: u.name}
                   : null;
@@ -550,21 +558,25 @@ class _RoomScreenState extends State<RoomScreen> {
                   ? <String, String>{photoKey: u.photoUrl}
                   : null;
               setState(() {
-                _entranceAnimAsset = carItem.animationUrl;
+                _entranceAnimAsset = carAssetUrl;
                 _showEntranceAnim = true;
                 _entranceTextReplacement = textReplacement;
                 _entranceImageReplacement = imageReplacement;
-                _entranceDefaultImage = carItem.defaultImage;
+                _entranceDefaultImage = carItem?.defaultImage;
               });
             }
           }
           // Entrance item (category 'entrance') – plays above the car
           if (u.activeEntrance != null) {
-            final entranceItem = index[u.activeEntrance!];
-            if (entranceItem != null && entranceItem.animationUrl != null) {
+            final entValue = u.activeEntrance!;
+            final entranceItem = entValue.startsWith('http') ? null : index[entValue];
+            final entranceAssetUrl = entranceItem != null && entranceItem.animationUrl != null
+                ? entranceItem.animationUrl
+                : (entValue.startsWith('http') ? entValue : null);
+            if (entranceAssetUrl != null) {
               playedAny = true;
-              final nameKey = entranceItem.nameKey;
-              final photoKey = entranceItem.photoKey;
+              final nameKey = entranceItem?.nameKey;
+              final photoKey = entranceItem?.photoKey;
               final textReplacement = nameKey != null && nameKey.isNotEmpty
                   ? <String, String>{nameKey: u.name}
                   : null;
@@ -572,11 +584,11 @@ class _RoomScreenState extends State<RoomScreen> {
                   ? <String, String>{photoKey: u.photoUrl}
                   : null;
               setState(() {
-                _entranceItemAnimAsset = entranceItem.animationUrl;
+                _entranceItemAnimAsset = entranceAssetUrl;
                 _showEntranceItemAnim = true;
                 _entranceItemTextReplacement = textReplacement;
                 _entranceItemImageReplacement = imageReplacement;
-                _entranceItemDefaultImage = entranceItem.defaultImage;
+                _entranceItemDefaultImage = entranceItem?.defaultImage;
               });
             }
           }
@@ -619,7 +631,12 @@ class _RoomScreenState extends State<RoomScreen> {
         if (storeItem == null || storeItem.animationUrl == null) {
           if (_storeItemsIndex.isEmpty) {
             _pendingEntrances.add(entry);
+            continue;
           }
+          // Fallback: raw URL entrance (VIP-purchased) -> play directly
+          final rawUrl = entranceItemId.startsWith('http') ? entranceItemId : null;
+          if (rawUrl == null) continue;
+          _playEntranceEffectRaw(entry, rawUrl);
           continue;
         }
         _playEntranceEffect(entry, storeItem, uid);
@@ -688,8 +705,12 @@ class _RoomScreenState extends State<RoomScreen> {
         final isFrameUrl = activeFrame != null && activeFrame.startsWith('http');
         final frameAsset = isFrameUrl ? activeFrame! : _storeItemsIndex[activeFrame]?.svgaAsset;
         final activeCar = data['active_car']?.toString() ?? cachedUser?.activeCar;
-        final carStoreItem = activeCar != null ? _storeItemsIndex[activeCar] : null;
-        final carAsset = carStoreItem?.svgaAsset;
+        final carStoreItem = activeCar != null && !activeCar.startsWith('http')
+            ? _storeItemsIndex[activeCar]
+            : null;
+        final carAsset = activeCar != null && activeCar.startsWith('http')
+            ? activeCar
+            : carStoreItem?.svgaAsset;
 
         final giftTotal = _giftReceiverTotals[uid] ?? 0;
         final isMuted = data['is_muted'] == true;
@@ -726,6 +747,17 @@ class _RoomScreenState extends State<RoomScreen> {
       _roomAudio.resetPublishingState();
     }
     if (mounted) setState(() {});
+  }
+
+  void _playEntranceEffectRaw(Map<String, dynamic> data, String url) {
+    if (!mounted) return;
+    setState(() {
+      _entranceItemAnimAsset = url;
+      _showEntranceItemAnim = true;
+      _entranceItemTextReplacement = null;
+      _entranceItemImageReplacement = null;
+      _entranceItemDefaultImage = null;
+    });
   }
 
   void _playEntranceEffect(Map<String, dynamic> data, StoreItemModel storeItem, String? uid) {
