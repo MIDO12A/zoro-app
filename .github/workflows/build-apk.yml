@@ -52,7 +52,7 @@ jobs:
         run: echo "ver=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)" >> "$GITHUB_OUTPUT"
 
       - name: Build release APKs
-        run: flutter build apk --release --split-per-abi --build-number=$((2000009600 + ${{ github.run_number }}))
+        run: flutter build apk --release --split-per-abi --build-number=$((2000012000 + ${{ github.run_number }}))
 
       - name: Rename APKs
         run: |
@@ -67,7 +67,7 @@ jobs:
           RUN_NUM: ${{ github.run_number }}
           SHA: ${{ github.sha }}
         run: |
-          bn=$((2000009600 + RUN_NUM))
+          bn=$((2000012000 + RUN_NUM))
           printf '{"version":"%s","build_number":%s,"commit":"%s"}\n' "$APP_VER" "$bn" "$SHA" > build_info.json
           cat build_info.json
 
@@ -89,6 +89,7 @@ jobs:
           tag_name: latest
           name: Update v${{ steps.ver.outputs.ver }} (${{ github.run_number }})
           body: Auto-build of commit ${{ github.sha }}
+          overwrite: true
           files: |
             zero-app.apk
             zero-app-arm32.apk

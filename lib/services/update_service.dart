@@ -135,10 +135,9 @@ class UpdateService {
 
       final currentBuild = int.tryParse(info.buildNumber) ?? 0;
       final isNewerVersion = _versionCode(latestVersion) > _versionCode(info.version);
-      final isSameVersionNewerBuild = _versionCode(latestVersion) == _versionCode(info.version) &&
-          latestBuild > currentBuild;
+      final isNewerBuild = latestBuild > currentBuild;
 
-      if (!isNewerVersion && !isSameVersionNewerBuild) {
+      if (!isNewerVersion && !isNewerBuild) {
         return null;
       }
       return AppUpdateInfo(
