@@ -86,10 +86,12 @@ jobs:
         continue-on-error: true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: Update v${{ steps.ver.outputs.ver }} (${{ github.run_number }})
+          tag_name: v${{ steps.ver.outputs.ver }}
+          name: Update v${{ steps.ver.outputs.ver }} (Build ${{ github.run_number }})
           body: Auto-build of commit ${{ github.sha }}
+          make_latest: true
           overwrite: true
+          prerelease: false
           files: |
             zero-app.apk
             zero-app-arm32.apk

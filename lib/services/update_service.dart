@@ -115,13 +115,12 @@ class UpdateService {
 
           if (apiRes.statusCode == 200 && apiRes.data != null) {
             final tagName = (apiRes.data!['tag_name'] ?? '').toString();
-            // e.g. v1.0.48+2000009100 or v60
             final cleaned = tagName.replaceFirst('v', '');
             final parts = cleaned.split('+');
             final version = parts[0];
-            final buildNum = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : int.tryParse(version) ?? 0;
+            final buildNum = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : _versionCode(version);
             if (version.isNotEmpty) {
-              d = {'version': version, 'build_number': buildNum};
+              d = {'version': version, 'build_number': buildNum > 0 ? buildNum : 1};
             }
           }
         } catch (_) {}
@@ -130,8 +129,8 @@ class UpdateService {
       if (d == null) return null;
 
       final latestVersion = (d['version'] ?? '').toString().trim();
-      final latestBuild = int.tryParse('${d['build_number'] ?? ''}') ?? 0;
-      if (latestVersion.isEmpty || latestBuild == 0) return null;
+      final latestBuild = int.tryParse('${d['build_number'] ?? ''}') ?? _versionCode(latestVersion);
+      if (latestVersion.isEmpty) return null;
 
       final currentBuild = int.tryParse(info.buildNumber) ?? 0;
       final isNewerVersion = _versionCode(latestVersion) > _versionCode(info.version);
