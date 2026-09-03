@@ -244,18 +244,15 @@ class _NormalSeat extends StatelessWidget {
               ),
               if (emoji != null && emoji!.isNotEmpty && hasUser)
                 Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.4),
-                      shape: BoxShape.circle,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: emoji!.startsWith('http')
+                          ? Image.network(emoji!, width: 64, height: 64, fit: BoxFit.contain)
+                          : Text(
+                              emoji!,
+                              style: const TextStyle(fontSize: 48),
+                            ),
                     ),
-                    alignment: Alignment.center,
-                    child: emoji!.startsWith('http')
-                        ? Image.network(emoji!, width: 64, height: 64, fit: BoxFit.contain)
-                        : Text(
-                            emoji!,
-                            style: const TextStyle(fontSize: 48),
-                          ),
                   ),
                 ),
               if (!hasUser && seat.isLocked)

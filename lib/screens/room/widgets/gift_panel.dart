@@ -611,31 +611,6 @@ class _GiftPanelState extends State<GiftPanel> {
             ),
           Row(
             children: [
-              Row(
-                children: [
-                  R.image(
-                    R.commonGoldIc1,
-                    width: 18,
-                    height: 18,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${widget.coins}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: canAfford ? Colors.white : Colors.redAccent,
-                    ),
-                  ),
-                ],
-              ),
-              if (gift != null && !canAfford) ...[
-                const SizedBox(width: 4),
-                Text(
-                  '(تحتاج $totalCost)',
-                  style: const TextStyle(fontSize: 9, color: Colors.redAccent),
-                ),
-              ],
-              const Spacer(),
               GestureDetector(
                 onTap: widget.onCountTap,
                 child: Container(
@@ -703,6 +678,32 @@ class _GiftPanelState extends State<GiftPanel> {
                         ),
                 ),
               ),
+              const Spacer(),
+              Row(
+                children: [
+                  R.image(
+                    R.commonGoldIc1,
+                    width: 18,
+                    height: 18,
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${widget.coins}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: canAfford ? Colors.white : Colors.redAccent,
+                    ),
+                  ),
+                ],
+              ),
+              if (_errorMsg != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(
+                    _errorMsg!,
+                    style: const TextStyle(fontSize: 10, color: Colors.redAccent),
+                  ),
+                ),
             ],
           ),
         ],
@@ -732,32 +733,36 @@ class GiftSvgaOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final aa = animationAsset;
+    final w = showBackground ? screenSize.width * 0.72 : screenSize.width * 0.8;
+    final h = showBackground ? screenSize.height * 0.72 : screenSize.height * 0.8;
     return Positioned.fill(
-      child: Container(
-        color: showBackground ? Colors.black.withValues(alpha: 0.6) : Colors.transparent,
-        child: Center(
-          child: aa != null && aa.isNotEmpty
-              ? isVideoType(aa)
-                  ? VapPlayer(
-                      url: aa,
-                      width: screenSize.width,
-                      height: screenSize.height,
-                      loops: false,
-                      onFinished: onFinished,
-                      fit: BoxFit.contain,
-                    )
-                  : SvgaPlayer(
-                      assetPath: aa,
-                      width: screenSize.width,
-                      height: screenSize.height,
-                      loops: false,
-                      fit: BoxFit.contain,
-                      onFinished: onFinished,
-                      textReplacement: textReplacement,
-                      imageReplacement: imageReplacement,
-                      defaultImageUrl: defaultImageUrl,
-                    )
-              : const SizedBox.shrink(),
+      child: IgnorePointer(
+        child: Container(
+          color: showBackground ? Colors.black.withValues(alpha: 0.35) : Colors.transparent,
+          child: Center(
+            child: aa != null && aa.isNotEmpty
+                ? isVideoType(aa)
+                    ? VapPlayer(
+                        url: aa,
+                        width: w,
+                        height: h,
+                        loops: false,
+                        onFinished: onFinished,
+                        fit: BoxFit.contain,
+                      )
+                    : SvgaPlayer(
+                        assetPath: aa,
+                        width: w,
+                        height: h,
+                        loops: false,
+                        fit: BoxFit.contain,
+                        onFinished: onFinished,
+                        textReplacement: textReplacement,
+                        imageReplacement: imageReplacement,
+                        defaultImageUrl: defaultImageUrl,
+                      )
+                : const SizedBox.shrink(),
+          ),
         ),
       ),
     );

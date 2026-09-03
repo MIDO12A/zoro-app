@@ -527,7 +527,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           color: config.fullProfileBgColor,
                           image: config.fullProfileBgImage.isNotEmpty
                               ? DecorationImage(
-                                  image: NetworkImage(config.fullProfileBgImage),
+                                  image: R.cachedImage(config.fullProfileBgImage),
                                   fit: BoxFit.cover,
                                 )
                               : null,
@@ -538,6 +538,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                             children: [
                               _buildNewProfileHeader(config, user),
                               const SizedBox(height: 12),
+                              _buildNewIdentitySection(config, user),
+                              const SizedBox(height: 20),
                               _buildActionButtons(config, user),
                               const SizedBox(height: 12),
                               _buildNewStatsRow(config),
@@ -545,8 +547,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               _buildNewCardsRow(config),
                               const SizedBox(height: 16),
                               _buildNewSupportersRow(config),
-                              const SizedBox(height: 24),
-                              _buildNewIdentitySection(config, user),
                               const SizedBox(height: 24),
                               _buildNewBadgesSection(config),
                               const SizedBox(height: 24),
@@ -629,7 +629,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 width: double.infinity,
                 child: hasCover
                     ? Image(
-                        image: NetworkImage(coverUrl),
+                        image: R.cachedImage(coverUrl),
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(color: const Color(0xFF22202A)),
                       )
@@ -713,21 +713,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    // ID + Gender + Flag
+                    // Gender + Flag
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            'ID: ${(user?.customId.isNotEmpty == true) ? user!.customId : ((1000000 + ((user?.uid ?? '').hashCode.abs() % 9000000)).toString())}',
-                            style: const TextStyle(fontSize: 12, color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
@@ -807,12 +795,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                       child: ClipOval(
                         child: (user?.photoUrl != null && user!.photoUrl.isNotEmpty)
-                            ? Image(
-                                image: NetworkImage(user.photoUrl),
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    Image.asset(R.avaBoy, fit: BoxFit.cover),
-                              )
+                        ? Image(
+                            image: R.cachedImage(user.photoUrl),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) =>
+                                Image.asset(R.avaBoy, fit: BoxFit.cover),
+                          )
                             : Image.asset(R.avaBoy, fit: BoxFit.cover),
                       ),
                     ),
@@ -1211,20 +1199,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          _newSectionTitle(config.fullProfileIdentityTitleImg, 'وسم الهوية'),
-          const SizedBox(height: 12),
           if (necklaces.isEmpty)
-            const Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                'لا توجد قلادات بعد',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-            )
+            const SizedBox.shrink()
           else
             LayoutBuilder(builder: (context, constraints) {
-              // Bigger necklaces: exactly 3 fit side by side across the section width
-              final double tile = ((constraints.maxWidth - 16) / 3).clamp(72.0, 130.0);
+              // Necklaces: exactly 4 fit side by side across the section width, transparent (no border)
+              final double tile = ((constraints.maxWidth - 24) / 4).clamp(56.0, 96.0);
               return SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 reverse: true,
@@ -1239,11 +1219,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         margin: const EdgeInsets.only(left: 8),
                         width: tile,
                         height: tile,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.white10),
-                        ),
                         child: (svga != null && svga.isNotEmpty)
                             ? SvgaPlayer(assetPath: svga, width: tile, height: tile)
                             : (img != null && img.isNotEmpty)
@@ -1271,7 +1246,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         if (id.endsWith('.svga') || id.contains('.svga')) {
           badgeWidgets.add(
             Container(
-              margin: const EdgeInsets.only(left: 8),
+              margin: const EdgeInsets.only(right: 8),
               width: 44, height: 44,
               child: SvgaPlayer(assetPath: id, width: 44, height: 44),
             ),
@@ -1279,7 +1254,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         } else {
           badgeWidgets.add(
             Container(
-              margin: const EdgeInsets.only(left: 8),
+              margin: const EdgeInsets.only(right: 8),
               width: 44, height: 44,
               child: CachedImg(id, width: 44, height: 44, fit: BoxFit.contain),
             ),
@@ -1297,7 +1272,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             GestureDetector(
               onTap: () => _showBadgeDetail(b),
               child: Container(
-                margin: const EdgeInsets.only(left: 8),
+                margin: const EdgeInsets.only(right: 8),
                 width: 44, height: 44,
                 child: SvgaPlayer(assetPath: svgaUrl, width: 44, height: 44),
               ),
@@ -1308,7 +1283,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             GestureDetector(
               onTap: () => _showBadgeDetail(b),
               child: Container(
-                margin: const EdgeInsets.only(left: 8),
+                margin: const EdgeInsets.only(right: 8),
                 width: 44, height: 44,
                 child: CachedImg(imgUrl, width: 44, height: 44, fit: BoxFit.contain),
               ),
@@ -1322,7 +1297,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       if (url.endsWith('.svga') || url.contains('.svga') || detectAssetType(url) == AssetType.svga) {
         badgeWidgets.add(
           Container(
-            margin: const EdgeInsets.only(left: 8),
+            margin: const EdgeInsets.only(right: 8),
             width: 44, height: 44,
             child: SvgaPlayer(assetPath: url, width: 44, height: 44),
           ),
@@ -1330,7 +1305,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       } else {
         badgeWidgets.add(
           Container(
-            margin: const EdgeInsets.only(left: 8),
+            margin: const EdgeInsets.only(right: 8),
             width: 44, height: 44,
             child: CachedImg(url, width: 44, height: 44, fit: BoxFit.contain),
           ),
@@ -1341,7 +1316,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _newSectionTitle(config.fullProfileBadgesTitleImg, 'شارات'),
           const SizedBox(height: 12),
@@ -1353,13 +1328,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 )
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  reverse: true,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: badgeWidgets,
-                  ),
+              : Wrap(
+                  spacing: 4,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.start,
+                  children: badgeWidgets,
                 ),
         ],
       ),
