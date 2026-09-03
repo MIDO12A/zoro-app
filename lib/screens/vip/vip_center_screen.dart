@@ -109,6 +109,8 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        _buildVipNameHeader(_tier!),
+                        const SizedBox(width: 8),
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.4),
@@ -131,6 +133,38 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
                   ),
               ],
             ),
+    );
+  }
+
+  Widget _buildVipNameHeader(Map<String, dynamic> t) {
+    final nameImg = (t['image_url']?.toString().isNotEmpty == true)
+        ? t['image_url']?.toString()
+        : null;
+    final name = t['name']?.toString() ?? 'VIP';
+    if (nameImg != null && nameImg.isNotEmpty) {
+      return CachedNetImage(
+        nameImg,
+        height: 32,
+        fit: BoxFit.contain,
+        error: (_, __, ___) => Text(
+          name,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+          ),
+        ),
+      );
+    }
+    return Text(
+      name,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.bold,
+        shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+      ),
     );
   }
 
@@ -274,6 +308,7 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
       final uid = user.uid;
 
       final ownedItems = List<String>.from(user.ownedItems);
+      final ownedVipItems = user.ownedVipItems.map((m) => Map<String, String>.from(m)).toList();
 
       String dbKey(String field, String fallback) {
         final k = t['${field}_key']?.toString();
@@ -292,18 +327,33 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
         }
       }
 
+      void addVipItem(String type, String? url, String? name) {
+        if (url == null || url.isEmpty) return;
+        final already = ownedVipItems.any((m) => m['url'] == url);
+        if (!already) {
+          ownedVipItems.add({'type': type, 'url': url, 'name': name ?? 'VIP'});
+        }
+      }
+
+      addVipItem('frame', t['headwear_url']?.toString(), t['headwear_name']?.toString());
       processAcc(t['headwear_url']?.toString(), dbKey('headwear', 'active_headwear'));
       processImg(t['headwear_img_url']?.toString());
+      addVipItem('bubble', t['bubble_url']?.toString(), t['bubble_name']?.toString());
       processAcc(t['bubble_url']?.toString(), dbKey('bubble', 'active_bubble'));
       processImg(t['bubble_img_url']?.toString());
+      addVipItem('entrance', t['entrance_url']?.toString(), t['entrance_name']?.toString());
       processAcc(t['entrance_url']?.toString(), dbKey('entrance', 'active_entrance'));
       processImg(t['entrance_img_url']?.toString());
+      addVipItem('necklace', t['necklace_url']?.toString(), t['necklace_name']?.toString());
       processAcc(t['necklace_url']?.toString(), dbKey('necklace', 'active_necklace'));
       processImg(t['necklace_img_url']?.toString());
+      addVipItem('car', t['car_url']?.toString(), t['car_name']?.toString());
       processAcc(t['car_url']?.toString(), dbKey('car', 'active_car'));
       processImg(t['car_img_url']?.toString());
+      addVipItem('cover', t['cover_url']?.toString(), t['cover_name']?.toString());
       processAcc(t['cover_url']?.toString(), dbKey('cover', 'active_cover'));
       processImg(t['cover_img_url']?.toString());
+      addVipItem('medal', t['medal_url']?.toString(), t['medal_name']?.toString());
       processImg(t['medal_url']?.toString());
       processImg(t['medal_img_url']?.toString());
 
@@ -313,6 +363,7 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
           final fm = f as Map<String, dynamic>;
           final url = fm['url']?.toString();
           if (url != null && url.isNotEmpty) {
+            addVipItem(fm['type']?.toString() ?? 'item', url, fm['name']?.toString());
             processImg(url);
           }
         }
@@ -324,6 +375,7 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
           final m = item as Map<String, dynamic>;
           final url = m['svgaUrl']?.toString() ?? m['img']?.toString();
           if (url != null && url.isNotEmpty) {
+            addVipItem('item', url, m['name']?.toString() ?? m['title']?.toString());
             processImg(url);
           }
         }
@@ -361,6 +413,7 @@ class _VipCenterScreenState extends State<VipCenterScreen> {
 
       final updates = <String, dynamic>{
         'owned_items': ownedItems,
+        'owned_vip_items': ownedVipItems,
         'active_headwear': t['headwear_url']?.toString() ?? user.activeHeadwear,
         'active_frame': t['headwear_url']?.toString() ?? user.activeFrame,
         'active_bubble': t['bubble_url']?.toString() ?? user.activeBubble,

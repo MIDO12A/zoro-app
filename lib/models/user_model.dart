@@ -41,6 +41,7 @@ class UserModel {
   final List<String> ownedLevelFrames;
   final List<String> ownedLevelBadges;
   final List<String> ownedNecklaces;
+  final List<Map<String, String>> ownedVipItems;
   final bool isRechargeAgent;
   final String? rechargeAgencyName;
   final String? rechargeAgencyLogo;
@@ -89,6 +90,7 @@ class UserModel {
     this.ownedLevelFrames = const [],
     this.ownedLevelBadges = const [],
     this.ownedNecklaces = const [],
+    this.ownedVipItems = const [],
     this.isRechargeAgent = false,
     this.rechargeAgencyName,
     this.rechargeAgencyLogo,
@@ -137,6 +139,7 @@ class UserModel {
     List<String>? ownedLevelFrames,
     List<String>? ownedLevelBadges,
     List<String>? ownedNecklaces,
+    List<Map<String, String>>? ownedVipItems,
     bool? isRechargeAgent,
     String? rechargeAgencyName,
     String? rechargeAgencyLogo,
@@ -185,6 +188,7 @@ class UserModel {
       ownedLevelFrames: ownedLevelFrames ?? this.ownedLevelFrames,
       ownedLevelBadges: ownedLevelBadges ?? this.ownedLevelBadges,
       ownedNecklaces: ownedNecklaces ?? this.ownedNecklaces,
+      ownedVipItems: ownedVipItems ?? this.ownedVipItems,
       isRechargeAgent: isRechargeAgent ?? this.isRechargeAgent,
       rechargeAgencyName: rechargeAgencyName ?? this.rechargeAgencyName,
       rechargeAgencyLogo: rechargeAgencyLogo ?? this.rechargeAgencyLogo,
@@ -236,6 +240,9 @@ class UserModel {
       ownedLevelFrames: (map['owned_level_frames'] as List?)?.map((e) => e.toString()).toList() ?? [],
       ownedLevelBadges: (map['owned_level_badges'] as List?)?.map((e) => e.toString()).toList() ?? [],
       ownedNecklaces: (map['owned_necklaces'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      ownedVipItems: ((map['owned_vip_items'] as List?) ?? const [])
+          .map((e) => (e as Map).map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))
+          .toList(),
       isRechargeAgent: map['is_recharge_agent'] == true || map['isRechargeAgent'] == true,
       rechargeAgencyName: map['recharge_agency_name']?.toString(),
       rechargeAgencyLogo: map['recharge_agency_logo']?.toString(),
@@ -286,6 +293,7 @@ class UserModel {
         'owned_level_frames': ownedLevelFrames,
         'owned_level_badges': ownedLevelBadges,
         'owned_necklaces': ownedNecklaces,
+        'owned_vip_items': ownedVipItems,
         'is_recharge_agent': isRechargeAgent,
         'recharge_agency_name': rechargeAgencyName,
         'recharge_agency_logo': rechargeAgencyLogo,

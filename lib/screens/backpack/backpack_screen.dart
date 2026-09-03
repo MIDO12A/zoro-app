@@ -173,7 +173,25 @@ class _BackpackScreenState extends State<BackpackScreen>
               }).toList()
             : <StoreItemModel>[];
 
-        final displayItems = [...storeItems, ...levelFrames];
+        // VIP accessories owned as raw URLs (http...) that aren't store items
+        // VIP accessories with known type/category from owned_vip_items
+        final vipItems = (user?.ownedVipItems ?? [])
+            .where((m) => m['type'] == category)
+            .map((m) {
+              final url = m['url'] ?? '';
+              return StoreItemModel(
+                itemId: url,
+                name: m['name']?.isNotEmpty == true ? m['name']! : 'VIP',
+                category: category,
+                iconAsset: url,
+                svgaAsset: url.toLowerCase().endsWith('.svga') ? url : null,
+                price: 0,
+              );
+            })
+            .where((si) => !storeItems.any((s) => s.itemId == si.itemId))
+            .toList();
+
+        final displayItems = [...storeItems, ...vipItems, ...levelFrames];
 
         if (displayItems.isEmpty) {
           return _emptyState('لا توجد عناصر في هذا القسم');
