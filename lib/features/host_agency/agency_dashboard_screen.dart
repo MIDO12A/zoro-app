@@ -22,7 +22,10 @@ import 'screens/agency_join_requests_screen.dart';
 import 'screens/agency_chat_screen.dart';
 import 'screens/agency_invite_by_id_screen.dart';
 import 'screens/agency_owner_wallet_screen.dart';
+import 'screens/agency_verification_screen.dart';
+import 'screens/agency_level_desc_screen.dart';
 import 'data/agency_chat_models.dart';
+import 'data/agency_repository.dart';
 
 // ── palette (same design system as host_dashboard_screen) ────────────────────
 const Color _bgDeep    = Color(0xFF03030A);
@@ -125,7 +128,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
       onPayload: (_) => _scheduleReload(),
     );
 
-    // ✅ تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
+    // تغييرات دفتر الألماس الموحد (agency_diamond_ledger)
     _rtTransactions = SupabaseRealtimeBridge.subscribePostgres(
       topic: 'agency_ledger:$agencyId',
       event: PostgresChangeEvent.insert,
@@ -168,7 +171,6 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
         agencyId = row['agency_id'] as String;
         _resolvedAgencyId = agencyId;
 
-        // ابدأ Realtime فور معرفة agencyId
         if (!mounted) return;
         _bindRealtime(agencyId);
       }
@@ -236,6 +238,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
       ),
     );
   }
+
   // ── main body ─────────────────────────────────────────────────────────────
   Widget _buildLoading() => const Center(
     child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -407,7 +410,7 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
           const SizedBox(height: 8),
           Text(r['name'] ?? '',
               textAlign: TextAlign.center,
-              style: TextStyle(color: _textMuted, fontSize: 14,
+              style: const TextStyle(color: _textMuted, fontSize: 14,
                   fontFamily: 'IBM Plex Sans Arabic')),
           const SizedBox(height: 16),
           _RewardChip(type: r['reward_type']?.toString() ?? '', value: r['reward_value']),
@@ -484,16 +487,16 @@ class _AgencyHeader extends StatelessWidget {
                       color: _purple.withOpacity(.3 + .2 * pulseCtrl.value),
                       blurRadius: 16)],
                 ),
-                child: const Center(child: Text('ðŸŽ™ï¸', style: TextStyle(fontSize: 24))),
+                child: const Center(child: Text('🎙️', style: TextStyle(fontSize: 24))),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(name,
-                      style: TextStyle(color: _textMain, fontSize: 18,
+                      style: const TextStyle(color: _textMain, fontSize: 18,
                           fontWeight: FontWeight.bold, fontFamily: 'IBM Plex Sans Arabic')),
                   if (spec.isNotEmpty)
-                    Text(spec, style: TextStyle(color: _textMuted, fontSize: 12,
+                    Text(spec, style: const TextStyle(color: _textMuted, fontSize: 12,
                         fontFamily: 'IBM Plex Sans Arabic')),
                   if (agencyPublicId != null) ...[
                     const SizedBox(height: 4),
@@ -552,7 +555,7 @@ class _KpiTile extends StatelessWidget {
       Text(value, style: TextStyle(color: color, fontSize: 18,
           fontWeight: FontWeight.bold, fontFamily: 'Space Grotesk',
           shadows: [Shadow(color: color.withOpacity(.5), blurRadius: 6)])),
-      Text(label, style: TextStyle(color: _textMuted, fontSize: 10,
+      Text(label, style: const TextStyle(color: _textMuted, fontSize: 10,
           fontFamily: 'IBM Plex Sans Arabic')),
     ]),
   );
@@ -572,7 +575,6 @@ class _LeaderboardList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     context.watch<DynamicConfigService>();
-    // compute max for bar scaling
     final maxD = members.fold<double>(
       1,
       (prev, m) => math.max(prev, ((m['week_diamonds'] ?? 0) as num).toDouble()),
@@ -595,7 +597,6 @@ class _LeaderboardList extends StatelessWidget {
             border: Border.all(color: i == 0 ? _gold.withOpacity(.3) : _border),
           ),
           child: Row(children: [
-            // rank badge
             Container(
               width: 28, height: 28,
               decoration: BoxDecoration(
@@ -609,11 +610,10 @@ class _LeaderboardList extends StatelessWidget {
             ),
             const SizedBox(width: 10),
 
-            // name + bar
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: TextStyle(color: _textMain, fontSize: 13,
+                Text(name, style: const TextStyle(color: _textMain, fontSize: 13,
                     fontFamily: 'IBM Plex Sans Arabic')),
                 const SizedBox(height: 6),
                 Stack(children: [
@@ -764,8 +764,8 @@ class _RewardChip extends StatelessWidget {
       'gold'     => '🪙',
       'diamonds' => '💎',
       'vip_days' => '👑',
-      'badge'    => 'ðŸ…',
-      _          => 'ðŸŽ',
+      'badge'    => '⭐',
+      _          => '🎁',
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -775,7 +775,7 @@ class _RewardChip extends StatelessWidget {
         border: Border.all(color: _gold.withOpacity(.3)),
       ),
       child: Text('$emoji $value',
-          style: TextStyle(color: _gold, fontSize: 11,
+          style: const TextStyle(color: _gold, fontSize: 11,
               fontFamily: 'Space Grotesk')),
     );
   }
@@ -877,7 +877,7 @@ class _AgencyQuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     context.watch<DynamicConfigService>();
-    final actions = [
+    final actionsRow1 = [
       _QuickAction(
         icon: '👥',
         label: 'طلبات الانضمام',
@@ -895,7 +895,7 @@ class _AgencyQuickActions extends StatelessWidget {
           builder: (_) => AgencyChatScreen(agencyId: agencyId, agencyName: agencyName, myRole: AgencyMemberRole.owner))),
       ),
       _QuickAction(
-        icon: 'ðŸ”',
+        icon: '🔍',
         label: 'دعوة بـ ID',
         badge: 0,
         color: _green,
@@ -912,13 +912,45 @@ class _AgencyQuickActions extends StatelessWidget {
       ),
     ];
 
-    return Row(
-      children: actions.map((a) => Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: _QuickActionCard(action: a),
+    final actionsRow2 = [
+      _QuickAction(
+        icon: '🛡️',
+        label: 'توثيق المضيف',
+        badge: 0,
+        color: const Color(0xFF00B5B3),
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const AgencyVerificationScreen())),
+      ),
+      _QuickAction(
+        icon: '⭐',
+        label: 'مستويات الوكالة',
+        badge: 0,
+        color: const Color(0xFF8198FB),
+        onTap: () => Navigator.push(context, MaterialPageRoute(
+          builder: (_) => const AgencyLevelDescScreen())),
+      ),
+    ];
+
+    return Column(
+      children: [
+        Row(
+          children: actionsRow1.map((a) => Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _QuickActionCard(action: a),
+            ),
+          )).toList(),
         ),
-      )).toList(),
+        const SizedBox(height: 8),
+        Row(
+          children: actionsRow2.map((a) => Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _QuickActionCard(action: a),
+            ),
+          )).toList(),
+        ),
+      ],
     );
   }
 }
@@ -981,6 +1013,3 @@ class _QuickActionCard extends StatelessWidget {
     );
   }
 }
-
-
-

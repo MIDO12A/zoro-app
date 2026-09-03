@@ -273,6 +273,10 @@ class _UserProfileState extends State<UserProfile> {
             '';
     final userCover = _resolveSvga(rawUserCover);
     final hasUserCover = userCover.isNotEmpty;
+    final coverWidth = MediaQuery.of(context).size.width;
+    final coverHeight = config.miniprofileCoverHeight > 0
+        ? config.miniprofileCoverHeight
+        : coverWidth / config.miniprofileCoverAspectRatio;
 
     return Stack(
       clipBehavior: Clip.none,
@@ -286,24 +290,34 @@ class _UserProfileState extends State<UserProfile> {
                 : -160,
             left: 0,
             right: 0,
-            height: config.miniprofileCoverHeight > 0
-                ? config.miniprofileCoverHeight
-                : MediaQuery.of(context).size.width / config.miniprofileCoverAspectRatio,
+            height: coverHeight,
             child: IgnorePointer(
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (detectAssetType(userCover) == AssetType.svga)
-                    SvgaPlayer(assetPath: userCover, fit: BoxFit.cover, loops: true)
-                  else if (detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
-                    VapPlayer(url: userCover, fit: BoxFit.cover, loops: true)
-                  else
-                    Image(
-                      image: R.cachedImage(userCover),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const SizedBox(),
-                    ),
-                ],
+              child: SizedBox(
+                width: coverWidth,
+                height: coverHeight,
+                child: (isVideoType(userCover) || detectAssetType(userCover) == AssetType.vap || detectAssetType(userCover) == AssetType.mp4)
+                    ? VapPlayer(
+                        url: userCover,
+                        width: coverWidth,
+                        height: coverHeight,
+                        fit: BoxFit.cover,
+                        loops: true,
+                      )
+                    : detectAssetType(userCover) == AssetType.svga
+                        ? SvgaPlayer(
+                            assetPath: userCover,
+                            width: coverWidth,
+                            height: coverHeight,
+                            fit: BoxFit.cover,
+                            loops: true,
+                          )
+                        : Image(
+                            image: R.cachedImage(userCover),
+                            fit: BoxFit.cover,
+                            width: coverWidth,
+                            height: coverHeight,
+                            errorBuilder: (_, __, ___) => const SizedBox(),
+                          ),
               ),
             ),
           ),

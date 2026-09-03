@@ -892,3 +892,228 @@ ALTER PUBLICATION supabase_realtime ADD TABLE dashboard_bans;
 --   SELECT SUM(value * count) FROM sent_gifts WHERE receiver_id = u.uid
 -- ), 0);
 -- ============================================================
+
+-- ============================================================
+-- COMPLETE AGENCY SYSTEM SCHEMA (WITHOUT SUB-AGENCIES)
+-- ============================================================
+
+-- 1. HOST REAL-NAME VERIFICATION TABLE
+CREATE TABLE IF NOT EXISTS host_verifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  uid TEXT NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('id_card', 'passport', 'driver_license')),
+  doc_number TEXT,
+  doc_front_url TEXT NOT NULL,
+  doc_back_url TEXT,
+  face_photo1_url TEXT NOT NULL,
+  face_photo2_url TEXT NOT NULL,
+  video_url TEXT NOT NULL,
+  video_duration_seconds INT NOT NULL CHECK (video_duration_seconds >= 5 AND video_duration_seconds <= 10),
+  previous_platforms TEXT,
+  daily_work_hours INT DEFAULT 4,
+  country TEXT,
+  whatsapp TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  rejection_reason TEXT,
+  reviewed_by TEXT,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE host_verifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "host_verifications_select" ON host_verifications FOR SELECT USING (true);
+CREATE POLICY "host_verifications_insert" ON host_verifications FOR INSERT WITH CHECK (auth.uid()::text = uid);
+CREATE POLICY "host_verifications_update_admin" ON host_verifications FOR UPDATE USING (auth.role() = 'authenticated' OR auth.role() = 'service_role');
+
+-- 2. AGENCY LEVELS CONFIG
+CREATE TABLE IF NOT EXISTS agency_level_config (
+  level INT PRIMARY KEY,
+  level_name TEXT NOT NULL,
+  min_exp BIGINT NOT NULL,
+  admin_limit INT NOT NULL DEFAULT 2,
+  members_limit INT NOT NULL DEFAULT 20,
+  maintain_exp_percentage NUMERIC(5,2) NOT NULL DEFAULT 30.00,
+  badge_icon_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO agency_level_config (level, level_name, min_exp, admin_limit, members_limit, maintain_exp_percentage)
+VALUES 
+  (1, 'برونز', 0, 2, 20, 30.00),
+  (2, 'فضي', 50000, 3, 50, 30.00),
+  (3, 'ذهبي', 200000, 5, 100, 30.00),
+  (4, 'بلاتيني', 800000, 8, 200, 30.00),
+  (5, 'ألماسي', 2500000, 12, 500, 30.00)
+ON CONFLICT (level) DO UPDATE SET 
+  min_exp = EXCLUDED.min_exp,
+  admin_limit = EXCLUDED.admin_limit,
+  members_limit = EXCLUDED.members_limit;
+
+ALTER TABLE agency_level_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "agency_level_config_select" ON agency_level_config FOR SELECT USING (true);
+
+-- 3. AGENCIES TABLE
+CREATE TABLE IF NOT EXISTS full_agencies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_code BIGINT UNIQUE,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  logo_url TEXT DEFAULT '',
+  background_url TEXT DEFAULT '',
+  announcement TEXT DEFAULT '',
+  owner_uid TEXT NOT NULL REFERENCES users(uid),
+  level INT NOT NULL DEFAULT 1 REFERENCES agency_level_config(level),
+  monthly_exp BIGINT NOT NULL DEFAULT 0,
+  total_exp BIGINT NOT NULL DEFAULT 0,
+  member_count INT NOT NULL DEFAULT 1,
+  admin_count INT NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE full_agencies ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "full_agencies_select" ON full_agencies FOR SELECT USING (true);
+CREATE POLICY "full_agencies_insert" ON full_agencies FOR INSERT WITH CHECK (auth.uid()::text = owner_uid);
+CREATE POLICY "full_agencies_update" ON full_agencies FOR UPDATE USING (auth.uid()::text = owner_uid OR auth.role() = 'service_role');
+
+-- 4. AGENCY ADMINS WITH GRANULAR PERMISSIONS
+CREATE TABLE IF NOT EXISTS full_agency_admins (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES full_agencies(id) ON DELETE CASCADE,
+  admin_uid TEXT NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+  can_audit_join BOOLEAN NOT NULL DEFAULT true,
+  can_audit_quit BOOLEAN NOT NULL DEFAULT false,
+  can_invite BOOLEAN NOT NULL DEFAULT true,
+  can_kickout BOOLEAN NOT NULL DEFAULT false,
+  can_view_member_salary BOOLEAN NOT NULL DEFAULT false,
+  can_view_agency_salary BOOLEAN NOT NULL DEFAULT false,
+  assigned_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (agency_id, admin_uid)
+);
+
+ALTER TABLE full_agency_admins ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "full_agency_admins_select" ON full_agency_admins FOR SELECT USING (true);
+CREATE POLICY "full_agency_admins_manage_owner" ON full_agency_admins FOR ALL USING (
+  EXISTS (SELECT 1 FROM full_agencies WHERE id = agency_id AND owner_uid = auth.uid()::text)
+);
+
+-- 5. AGENCY CONTRACTS & MEMBERS TABLE
+CREATE TABLE IF NOT EXISTS full_agency_contracts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES full_agencies(id) ON DELETE CASCADE,
+  host_uid TEXT NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+  duration_days INT NOT NULL DEFAULT 30,
+  signed_at TIMESTAMPTZ DEFAULT NOW(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'pending_exit', 'terminated')),
+  exit_requested_at TIMESTAMPTZ,
+  auto_release_at TIMESTAMPTZ, -- 30-day legal auto release timestamp
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT uq_active_host_agency UNIQUE (host_uid, status)
+);
+
+ALTER TABLE full_agency_contracts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "full_agency_contracts_select" ON full_agency_contracts FOR SELECT USING (true);
+
+-- 6. AGENCY JOIN REQUESTS WITH 3-DAY EXPIRATION
+CREATE TABLE IF NOT EXISTS full_agency_join_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES full_agencies(id) ON DELETE CASCADE,
+  host_uid TEXT NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+  message TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'expired')),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '3 days'),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE full_agency_join_requests ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "full_agency_join_requests_select" ON full_agency_join_requests FOR SELECT USING (true);
+CREATE POLICY "full_agency_join_requests_insert" ON full_agency_join_requests FOR INSERT WITH CHECK (auth.uid()::text = host_uid);
+
+-- 7. DAILY STREAMING & DIAMOND TARGET TRACKING
+CREATE TABLE IF NOT EXISTS full_agency_daily_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES full_agencies(id) ON DELETE CASCADE,
+  host_uid TEXT NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+  record_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  live_duration_seconds INT NOT NULL DEFAULT 0,
+  diamonds_earned BIGINT NOT NULL DEFAULT 0,
+  is_ge_2h BOOLEAN GENERATED ALWAYS AS (live_duration_seconds >= 7200) STORED,
+  is_ge_4h BOOLEAN GENERATED ALWAYS AS (live_duration_seconds >= 14400) STORED,
+  is_ge_6h BOOLEAN GENERATED ALWAYS AS (live_duration_seconds >= 21600) STORED,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (host_uid, record_date)
+);
+
+ALTER TABLE full_agency_daily_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "full_agency_daily_records_select" ON full_agency_daily_records FOR SELECT USING (true);
+
+-- 8. AGENCY SALARIES & OVERDRAFT (السحب على المكشوف)
+CREATE TABLE IF NOT EXISTS full_agency_salaries_overdraft (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES full_agencies(id) ON DELETE CASCADE,
+  period_month VARCHAR(7) NOT NULL, -- Format: YYYY-MM
+  diamond_target BIGINT NOT NULL DEFAULT 500000,
+  diamond_balance BIGINT NOT NULL DEFAULT 0,
+  next_diamond_target BIGINT NOT NULL DEFAULT 1000000,
+  total_salary_usd NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  overdrawn_amount_usd NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+  remaining_salary_usd NUMERIC(10,2) GENERATED ALWAYS AS (total_salary_usd - overdrawn_amount_usd) STORED,
+  can_overdraft BOOLEAN NOT NULL DEFAULT true,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (agency_id, period_month)
+);
+
+ALTER TABLE full_agency_salaries_overdraft ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "full_agency_salaries_overdraft_select" ON full_agency_salaries_overdraft FOR SELECT USING (true);
+
+-- 9. WITHDRAWALS & BANK / PAYONEER / USDT DETAILS
+CREATE TABLE IF NOT EXISTS full_agency_withdrawals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES full_agencies(id) ON DELETE CASCADE,
+  requester_uid TEXT NOT NULL REFERENCES users(uid),
+  amount_usd NUMERIC(10,2) NOT NULL CHECK (amount_usd > 0),
+  channel TEXT NOT NULL CHECK (channel IN ('bank_card', 'payoneer', 'usdt')),
+  fee_usd NUMERIC(10,2) NOT NULL DEFAULT 0.00, -- Bank max $25 fee
+  net_amount_usd NUMERIC(10,2) NOT NULL,
+  account_info JSONB NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'rejected')),
+  rejection_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  processed_at TIMESTAMPTZ
+);
+
+ALTER TABLE full_agency_withdrawals ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "full_agency_withdrawals_select" ON full_agency_withdrawals FOR SELECT USING (true);
+CREATE POLICY "full_agency_withdrawals_insert" ON full_agency_withdrawals FOR INSERT WITH CHECK (auth.uid()::text = requester_uid);
+
+-- 10. CRON HELPER / STORED PROCEDURES
+CREATE OR REPLACE FUNCTION process_agency_join_request_timeout()
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE full_agency_join_requests
+  SET status = 'expired', updated_at = NOW()
+  WHERE status = 'pending' AND expires_at <= NOW();
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION process_agency_contract_auto_release()
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  -- Auto release contracts where 30 days passed without owner approval
+  UPDATE full_agency_contracts
+  SET status = 'terminated', updated_at = NOW()
+  WHERE status = 'pending_exit' AND auto_release_at <= NOW();
+
+  -- Auto expire normal finished contracts
+  UPDATE full_agency_contracts
+  SET status = 'expired', updated_at = NOW()
+  WHERE status = 'active' AND expires_at <= NOW();
+END;
+$$;

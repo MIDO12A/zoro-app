@@ -980,6 +980,14 @@ class FirebaseService {
     await _db.collection('gift_categories').doc(id).delete();
   }
 
+  Future<void> saveGift(gm.GiftModel gift) async {
+    await _db.collection('gifts').doc(gift.id).set(gift.toMap());
+  }
+
+  Future<void> deleteGift(String id) async {
+    await _db.collection('gifts').doc(id).delete();
+  }
+
   Stream<List<GiftBannerConfig>> giftBannerConfigsStream() {
     return _db
         .collection('gift_banner_configs')

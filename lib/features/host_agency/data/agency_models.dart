@@ -545,3 +545,277 @@ class AgencyOwnerDashboard {
     );
   }
 }
+
+// ─── 1. توثيق المضيف الحقيقي (Host Real-Name Verification) ───────────────────
+enum HostDocType { idCard, passport, driverLicense }
+
+extension HostDocTypeX on HostDocType {
+  String get label {
+    switch (this) {
+      case HostDocType.idCard:        return 'بطاقة شخصية';
+      case HostDocType.passport:      return 'جواز السفر';
+      case HostDocType.driverLicense: return 'رخصة القيادة';
+    }
+  }
+
+  String get code {
+    switch (this) {
+      case HostDocType.idCard:        return 'id_card';
+      case HostDocType.passport:      return 'passport';
+      case HostDocType.driverLicense: return 'driver_license';
+    }
+  }
+
+  static HostDocType fromString(String? s) {
+    switch (s) {
+      case 'passport':       return HostDocType.passport;
+      case 'driver_license': return HostDocType.driverLicense;
+      default:               return HostDocType.idCard;
+    }
+  }
+}
+
+class HostVerificationModel {
+  final String id;
+  final String uid;
+  final String fullName;
+  final HostDocType docType;
+  final String? docNumber;
+  final String docFrontUrl;
+  final String? docBackUrl;
+  final String facePhoto1Url;
+  final String facePhoto2Url;
+  final String videoUrl;
+  final int videoDurationSeconds;
+  final String? previousPlatforms;
+  final int dailyWorkHours;
+  final String? country;
+  final String? whatsapp;
+  final String status; // pending / approved / rejected
+  final String? rejectionReason;
+  final DateTime? reviewedAt;
+  final DateTime createdAt;
+
+  const HostVerificationModel({
+    required this.id,
+    required this.uid,
+    required this.fullName,
+    required this.docType,
+    this.docNumber,
+    required this.docFrontUrl,
+    this.docBackUrl,
+    required this.facePhoto1Url,
+    required this.facePhoto2Url,
+    required this.videoUrl,
+    required this.videoDurationSeconds,
+    this.previousPlatforms,
+    this.dailyWorkHours = 4,
+    this.country,
+    this.whatsapp,
+    this.status = 'pending',
+    this.rejectionReason,
+    this.reviewedAt,
+    required this.createdAt,
+  });
+
+  bool get isApproved => status == 'approved';
+  bool get isPending => status == 'pending';
+  bool get isRejected => status == 'rejected';
+
+  factory HostVerificationModel.fromMap(Map<String, dynamic> m) {
+    return HostVerificationModel(
+      id:                   m['id']?.toString() ?? '',
+      uid:                  m['uid'] as String? ?? '',
+      fullName:             m['full_name'] as String? ?? '',
+      docType:              HostDocTypeX.fromString(m['doc_type'] as String?),
+      docNumber:            m['doc_number'] as String?,
+      docFrontUrl:          m['doc_front_url'] as String? ?? '',
+      docBackUrl:           m['doc_back_url'] as String?,
+      facePhoto1Url:        m['face_photo1_url'] as String? ?? '',
+      facePhoto2Url:        m['face_photo2_url'] as String? ?? '',
+      videoUrl:             m['video_url'] as String? ?? '',
+      videoDurationSeconds: (m['video_duration_seconds'] as num?)?.toInt() ?? 5,
+      previousPlatforms:    m['previous_platforms'] as String?,
+      dailyWorkHours:       (m['daily_work_hours'] as num?)?.toInt() ?? 4,
+      country:              m['country'] as String?,
+      whatsapp:             m['whatsapp'] as String?,
+      status:               m['status'] as String? ?? 'pending',
+      rejectionReason:      m['rejection_reason'] as String?,
+      reviewedAt:           m['reviewed_at'] != null ? DateTime.tryParse(m['reviewed_at']) : null,
+      createdAt:            DateTime.tryParse(m['created_at'] ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
+// ─── 2. مستويات وامتيازات الوكالة (Agency Level & Tier Privileges) ─────────────
+class AgencyLevelConfigModel {
+  final int level;
+  final String levelName;
+  final int minExp;
+  final int adminLimit;
+  final int membersLimit;
+  final double maintainExpPercentage; // 30.0%
+  final String? badgeIconUrl;
+
+  const AgencyLevelConfigModel({
+    required this.level,
+    required this.levelName,
+    required this.minExp,
+    required this.adminLimit,
+    required this.membersLimit,
+    this.maintainExpPercentage = 30.0,
+    this.badgeIconUrl,
+  });
+
+  int get maintainExpThreshold => (minExp * (maintainExpPercentage / 100)).round();
+
+  factory AgencyLevelConfigModel.fromMap(Map<String, dynamic> m) {
+    return AgencyLevelConfigModel(
+      level:                 (m['level'] as num?)?.toInt() ?? 1,
+      levelName:             m['level_name'] as String? ?? 'مستوى ${m['level']}',
+      minExp:                (m['min_exp'] as num?)?.toInt() ?? 0,
+      adminLimit:            (m['admin_limit'] as num?)?.toInt() ?? 2,
+      membersLimit:          (m['members_limit'] as num?)?.toInt() ?? 20,
+      maintainExpPercentage: (m['maintain_exp_percentage'] as num?)?.toDouble() ?? 30.0,
+      badgeIconUrl:          m['badge_icon_url'] as String?,
+    );
+  }
+}
+
+// ─── 3. تتبع ساعات البث اليومية والتارجت (Daily Live Hours Target) ───────────
+class AgencyDailyHoursTarget {
+  final String hostUid;
+  final DateTime recordDate;
+  final int liveDurationSeconds;
+  final int diamondsEarned;
+  final int daysGe2h; // عدد الأيام التي حققت >= 2 ساعة
+  final int daysGe4h; // عدد الأيام التي حققت >= 4 ساعات
+  final int daysGe6h; // عدد الأيام التي حققت >= 6 ساعات
+
+  const AgencyDailyHoursTarget({
+    required this.hostUid,
+    required this.recordDate,
+    required this.liveDurationSeconds,
+    required this.diamondsEarned,
+    this.daysGe2h = 0,
+    this.daysGe4h = 0,
+    this.daysGe6h = 0,
+  });
+
+  bool get isTodayGe2h => liveDurationSeconds >= 7200;
+  bool get isTodayGe4h => liveDurationSeconds >= 14400;
+  bool get isTodayGe6h => liveDurationSeconds >= 21600;
+
+  String get formattedTodayHours {
+    final hours = liveDurationSeconds / 3600;
+    return '${hours.toStringAsFixed(1)} ساعة';
+  }
+
+  factory AgencyDailyHoursTarget.fromMap(Map<String, dynamic> m) {
+    return AgencyDailyHoursTarget(
+      hostUid:             m['host_uid'] as String? ?? '',
+      recordDate:          DateTime.tryParse(m['record_date'] ?? '') ?? DateTime.now(),
+      liveDurationSeconds: (m['live_duration_seconds'] as num?)?.toInt() ?? 0,
+      diamondsEarned:      (m['diamonds_earned'] as num?)?.toInt() ?? 0,
+      daysGe2h:            (m['days_ge_2h'] as num?)?.toInt() ?? 0,
+      daysGe4h:            (m['days_ge_4h'] as num?)?.toInt() ?? 0,
+      daysGe6h:            (m['days_ge_6h'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+// ─── 4. رواتب الوكالة والسحب على المكشوف (Salary & Overdraft Model) ───────────
+class AgencySalaryOverdraftModel {
+  final String agencyId;
+  final String periodMonth;
+  final int diamondTarget;
+  final int diamondBalance;
+  final int nextDiamondTarget;
+  final double totalSalaryUsd;
+  final double overdrawnAmountUsd;
+  final double remainingSalaryUsd;
+  final bool canOverdraft;
+
+  const AgencySalaryOverdraftModel({
+    required this.agencyId,
+    required this.periodMonth,
+    required this.diamondTarget,
+    required this.diamondBalance,
+    required this.nextDiamondTarget,
+    required this.totalSalaryUsd,
+    required this.overdrawnAmountUsd,
+    required this.remainingSalaryUsd,
+    this.canOverdraft = true,
+  });
+
+  double get targetProgressPercentage {
+    if (diamondTarget <= 0) return 1.0;
+    return (diamondBalance / diamondTarget).clamp(0.0, 1.0);
+  }
+
+  factory AgencySalaryOverdraftModel.fromMap(Map<String, dynamic> m) {
+    final total = (m['total_salary_usd'] as num?)?.toDouble() ?? 0.0;
+    final overdrawn = (m['overdrawn_amount_usd'] as num?)?.toDouble() ?? 0.0;
+    return AgencySalaryOverdraftModel(
+      agencyId:           m['agency_id']?.toString() ?? '',
+      periodMonth:        m['period_month'] as String? ?? '',
+      diamondTarget:      (m['diamond_target'] as num?)?.toInt() ?? 500000,
+      diamondBalance:     (m['diamond_balance'] as num?)?.toInt() ?? 0,
+      nextDiamondTarget:  (m['next_diamond_target'] as num?)?.toInt() ?? 1000000,
+      totalSalaryUsd:     total,
+      overdrawnAmountUsd: overdrawn,
+      remainingSalaryUsd: (m['remaining_salary_usd'] as num?)?.toDouble() ?? (total - overdrawn),
+      canOverdraft:       m['can_overdraft'] as bool? ?? true,
+    );
+  }
+}
+
+// ─── 5. مصفوفة صلاحيات المشرفين (Agency Admin Permissions Matrix) ────────────
+class AgencyAdminPermissions {
+  final String agencyId;
+  final String adminUid;
+  final bool canAuditJoin;
+  final bool canAuditQuit;
+  final bool canInvite;
+  final bool canKickout;
+  final bool canViewMemberSalary;
+  final bool canViewAgencySalary;
+
+  const AgencyAdminPermissions({
+    required this.agencyId,
+    required this.adminUid,
+    this.canAuditJoin = true,
+    this.canAuditQuit = false,
+    this.canInvite = true,
+    this.canKickout = false,
+    this.canViewMemberSalary = false,
+    this.canViewAgencySalary = false,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'agency_id': agencyId,
+      'admin_uid': adminUid,
+      'can_audit_join': canAuditJoin,
+      'can_audit_quit': canAuditQuit,
+      'can_invite': canInvite,
+      'can_kickout': canKickout,
+      'can_view_member_salary': canViewMemberSalary,
+      'can_view_agency_salary': canViewAgencySalary,
+    };
+  }
+
+  factory AgencyAdminPermissions.fromMap(Map<String, dynamic> m) {
+    return AgencyAdminPermissions(
+      agencyId:            m['agency_id']?.toString() ?? '',
+      adminUid:            m['admin_uid'] as String? ?? '',
+      canAuditJoin:        m['can_audit_join'] as bool? ?? true,
+      canAuditQuit:        m['can_audit_quit'] as bool? ?? false,
+      canInvite:           m['can_invite'] as bool? ?? true,
+      canKickout:          m['can_kickout'] as bool? ?? false,
+      canViewMemberSalary: m['can_view_member_salary'] as bool? ?? false,
+      canViewAgencySalary: m['can_view_agency_salary'] as bool? ?? false,
+    );
+  }
+}
+

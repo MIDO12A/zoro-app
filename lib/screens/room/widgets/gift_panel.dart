@@ -87,9 +87,7 @@ class _GiftPanelState extends State<GiftPanel> {
       if (mounted) {
         setState(() {
           _categories = cats;
-          if (_selectedCategoryId == null && cats.isNotEmpty) {
-            _selectedCategoryId = cats.first.id;
-          }
+          _selectedCategoryId ??= 'all';
         });
       }
     });
@@ -105,7 +103,12 @@ class _GiftPanelState extends State<GiftPanel> {
   }
 
   List<gm.GiftModel> get _filteredGifts {
-    if (_selectedCategoryId == null) return _gifts;
+    if (_selectedCategoryId == null || _selectedCategoryId == 'all') {
+      return _gifts;
+    }
+    if (_selectedCategoryId == 'lucky') {
+      return _gifts.where((g) => g.isLucky || g.categoryId == 'lucky').toList();
+    }
     return _gifts.where((g) => g.categoryId == _selectedCategoryId).toList();
   }
 
@@ -130,6 +133,13 @@ class _GiftPanelState extends State<GiftPanel> {
 
   Widget _buildHeader() {
     final users = widget.targetUsers;
+    final allTabs = [
+      const GiftCategory(id: 'all', name: 'الكل', sortOrder: -2),
+      if (_gifts.any((g) => g.isLucky))
+        const GiftCategory(id: 'lucky', name: '🍀 الحظ', sortOrder: -1),
+      ..._categories,
+    ];
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
       child: Column(
@@ -179,42 +189,41 @@ class _GiftPanelState extends State<GiftPanel> {
             ),
           ),
           const SizedBox(height: 6),
-          if (_categories.isNotEmpty)
-            SizedBox(
-              height: 28,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final cat in _categories)
-                    GestureDetector(
-                      onTap: () => setState(() => _selectedCategoryId = cat.id),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: _selectedCategoryId == cat.id
-                              ? const Color(0xFFDE880F)
-                              : Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          cat.name,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: _selectedCategoryId == cat.id
-                                ? Colors.white
-                                : Colors.white70,
-                            fontWeight: _selectedCategoryId == cat.id
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
+          SizedBox(
+            height: 28,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final cat in allTabs)
+                  GestureDetector(
+                    onTap: () => setState(() => _selectedCategoryId = cat.id),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: (_selectedCategoryId ?? 'all') == cat.id
+                            ? const Color(0xFFDE880F)
+                            : Colors.white.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        cat.name,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: (_selectedCategoryId ?? 'all') == cat.id
+                              ? Colors.white
+                              : Colors.white70,
+                          fontWeight: (_selectedCategoryId ?? 'all') == cat.id
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                         ),
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );

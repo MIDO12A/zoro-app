@@ -584,13 +584,15 @@ class _AgencyOwnerWalletScreenState extends State<AgencyOwnerWalletScreen>
                   fontFamily: 'Tajawal'),
               items: const [
                 DropdownMenuItem(value: 'bank_transfer',
-                    child: Text('تحويل بنكي')),
+                    child: Text('تحويل بنكي (رسوم حد أقصى \$25)')),
+                DropdownMenuItem(value: 'payoneer',
+                    child: Text('Payoneer')),
+                DropdownMenuItem(value: 'usdt',
+                    child: Text('USDT (TRC20)')),
                 DropdownMenuItem(value: 'paypal',
                     child: Text('PayPal')),
                 DropdownMenuItem(value: 'wise',
                     child: Text('Wise')),
-                DropdownMenuItem(value: 'usdt',
-                    child: Text('USDT (Crypto)')),
               ],
               onChanged: (v) => setState(() =>
                   _payMethodCtrl.text = v ?? 'bank_transfer'),

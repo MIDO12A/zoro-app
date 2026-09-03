@@ -448,4 +448,242 @@ abstract final class AgencyRepository {
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
   }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  1. توثيق المضيف الحقيقي (Real-Name Host Verification)
+  // ═══════════════════════════════════════════════════════════════════
+  static Future<void> submitHostVerification(HostVerificationModel v) async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) throw Exception('المستخدم غير مسجل الدخول');
+
+    if (v.videoDurationSeconds < 5 || v.videoDurationSeconds > 10) {
+      throw Exception('يجب أن تكون مدة مقطع الفيديو بين 5 و 10 ثوانٍ فقط');
+    }
+
+    await _sb.from('host_verifications').upsert({
+      'uid': uid,
+      'full_name': v.fullName,
+      'doc_type': v.docType.code,
+      'doc_number': v.docNumber,
+      'doc_front_url': v.docFrontUrl,
+      'doc_back_url': v.docBackUrl,
+      'face_photo1_url': v.facePhoto1Url,
+      'face_photo2_url': v.facePhoto2Url,
+      'video_url': v.videoUrl,
+      'video_duration_seconds': v.videoDurationSeconds,
+      'previous_platforms': v.previousPlatforms,
+      'daily_work_hours': v.dailyWorkHours,
+      'country': v.country,
+      'whatsapp': v.whatsapp,
+      'status': 'pending',
+      'created_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Future<HostVerificationModel?> getHostVerificationStatus() async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) return null;
+    final row = await _sb
+        .from('host_verifications')
+        .select('*')
+        .eq('uid', uid)
+        .order('created_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    if (row == null) return null;
+    return HostVerificationModel.fromMap(Map<String, dynamic>.from(row as Map));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  2. مستويات وامتيازات الوكالة (Agency Levels & Tier Config)
+  // ═══════════════════════════════════════════════════════════════════
+  static Future<List<AgencyLevelConfigModel>> getAgencyLevelConfigs() async {
+    try {
+      final rows = await _sb
+          .from('agency_level_config')
+          .select('*')
+          .order('level', ascending: true);
+      final list = (rows as List<dynamic>?) ?? [];
+      if (list.isNotEmpty) {
+        return list.map((e) => AgencyLevelConfigModel.fromMap(Map<String, dynamic>.from(e as Map))).toList();
+      }
+    } catch (e) {
+      debugPrint('[AgencyRepository] Fallback to default level config: $e');
+    }
+
+    return const [
+      AgencyLevelConfigModel(level: 1, levelName: 'برونز', minExp: 0, adminLimit: 2, membersLimit: 20),
+      AgencyLevelConfigModel(level: 2, levelName: 'فضي', minExp: 50000, adminLimit: 3, membersLimit: 50),
+      AgencyLevelConfigModel(level: 3, levelName: 'ذهبي', minExp: 200000, adminLimit: 5, membersLimit: 100),
+      AgencyLevelConfigModel(level: 4, levelName: 'بلاتيني', minExp: 800000, adminLimit: 8, membersLimit: 200),
+      AgencyLevelConfigModel(level: 5, levelName: 'ألماسي', minExp: 2500000, adminLimit: 12, membersLimit: 500),
+    ];
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  3. تتبع ساعات البث اليومية والتارجت (Daily Live Hours)
+  // ═══════════════════════════════════════════════════════════════════
+  static Future<AgencyDailyHoursTarget> getDailyHoursTarget({
+    required String agencyId,
+    required String hostUid,
+  }) async {
+    try {
+      final today = DateTime.now().toIso8601String().split('T').first;
+      final row = await _sb
+          .from('full_agency_daily_records')
+          .select('*')
+          .eq('agency_id', agencyId)
+          .eq('host_uid', hostUid)
+          .eq('record_date', today)
+          .maybeSingle();
+
+      // Count monthly >=2h, >=4h, >=6h days
+      final startOfMonth = DateTime(DateTime.now().year, DateTime.now().month, 1).toIso8601String().split('T').first;
+      final monthlyRecords = await _sb
+          .from('full_agency_daily_records')
+          .select('is_ge_2h, is_ge_4h, is_ge_6h')
+          .eq('agency_id', agencyId)
+          .eq('host_uid', hostUid)
+          .gte('record_date', startOfMonth);
+
+      int ge2h = 0;
+      int ge4h = 0;
+      int ge6h = 0;
+      for (final r in (monthlyRecords as List<dynamic>? ?? [])) {
+        if (r['is_ge_2h'] == true) ge2h++;
+        if (r['is_ge_4h'] == true) ge4h++;
+        if (r['is_ge_6h'] == true) ge6h++;
+      }
+
+      if (row != null) {
+        return AgencyDailyHoursTarget.fromMap({
+          ...Map<String, dynamic>.from(row as Map),
+          'days_ge_2h': ge2h,
+          'days_ge_4h': ge4h,
+          'days_ge_6h': ge6h,
+        });
+      }
+
+      return AgencyDailyHoursTarget(
+        hostUid: hostUid,
+        recordDate: DateTime.now(),
+        liveDurationSeconds: 0,
+        diamondsEarned: 0,
+        daysGe2h: ge2h,
+        daysGe4h: ge4h,
+        daysGe6h: ge6h,
+      );
+    } catch (_) {
+      return AgencyDailyHoursTarget(
+        hostUid: hostUid,
+        recordDate: DateTime.now(),
+        liveDurationSeconds: 0,
+        diamondsEarned: 0,
+      );
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  4. رواتب الوكالة والسحب على المكشوف (Salary & Overdraft)
+  // ═══════════════════════════════════════════════════════════════════
+  static Future<AgencySalaryOverdraftModel> getSalaryAndOverdraft(String agencyId) async {
+    final periodMonth = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}';
+    try {
+      final row = await _sb
+          .from('full_agency_salaries_overdraft')
+          .select('*')
+          .eq('agency_id', agencyId)
+          .eq('period_month', periodMonth)
+          .maybeSingle();
+
+      if (row != null) {
+        return AgencySalaryOverdraftModel.fromMap(Map<String, dynamic>.from(row as Map));
+      }
+    } catch (e) {
+      debugPrint('[AgencyRepository] getSalaryAndOverdraft fallback: $e');
+    }
+
+    return AgencySalaryOverdraftModel(
+      agencyId: agencyId,
+      periodMonth: periodMonth,
+      diamondTarget: 500000,
+      diamondBalance: 0,
+      nextDiamondTarget: 1000000,
+      totalSalaryUsd: 0.0,
+      overdrawnAmountUsd: 0.0,
+      remainingSalaryUsd: 0.0,
+      canOverdraft: true,
+    );
+  }
+
+  static Future<void> requestOverdraft({
+    required String agencyId,
+    required double amountUsd,
+  }) async {
+    final periodMonth = '${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}';
+    final current = await getSalaryAndOverdraft(agencyId);
+
+    if (amountUsd <= 0) throw Exception('يجب إدخال مبلغ سحب صحيح أكبر من 0');
+    if (amountUsd > current.remainingSalaryUsd) {
+      throw Exception('مبلغ السحب المطلوب يتجاوز الرصيد المتاح للسلفة (${current.remainingSalaryUsd}\$)');
+    }
+
+    await _sb.from('full_agency_salaries_overdraft').upsert({
+      'agency_id': agencyId,
+      'period_month': periodMonth,
+      'overdrawn_amount_usd': current.overdrawnAmountUsd + amountUsd,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  5. مصفوفة صلاحيات المشرفين (Admin Permissions)
+  // ═══════════════════════════════════════════════════════════════════
+  static Future<AgencyAdminPermissions> getAdminPermissions({
+    required String agencyId,
+    required String adminUid,
+  }) async {
+    try {
+      final row = await _sb
+          .from('full_agency_admins')
+          .select('*')
+          .eq('agency_id', agencyId)
+          .eq('admin_uid', adminUid)
+          .maybeSingle();
+
+      if (row != null) {
+        return AgencyAdminPermissions.fromMap(Map<String, dynamic>.from(row as Map));
+      }
+    } catch (e) {
+      debugPrint('[AgencyRepository] getAdminPermissions error: $e');
+    }
+
+    return AgencyAdminPermissions(agencyId: agencyId, adminUid: adminUid);
+  }
+
+  static Future<void> updateAdminPermissions(AgencyAdminPermissions permissions) async {
+    await _sb.from('full_agency_admins').upsert(permissions.toMap());
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  //  6. طلب مغادرة الوكالة مع فك الارتباط التلقائي بعد 30 يوماً
+  // ═══════════════════════════════════════════════════════════════════
+  static Future<void> requestAgencyExitWithAutoRelease({
+    required String agencyId,
+    required String hostUid,
+  }) async {
+    final autoReleaseDate = DateTime.now().add(const Duration(days: 30)).toIso8601String();
+    await _sb
+        .from('full_agency_contracts')
+        .update({
+          'status': 'pending_exit',
+          'exit_requested_at': DateTime.now().toIso8601String(),
+          'auto_release_at': autoReleaseDate,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('agency_id', agencyId)
+        .eq('host_uid', hostUid)
+        .eq('status', 'active');
+  }
 }
+

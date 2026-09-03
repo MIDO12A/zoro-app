@@ -28,6 +28,7 @@ import '../../features/cp/cp_detail_full_screen.dart';
 import '../../features/host_agency/host_agency_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
 import '../../features/signin/weekly_signin_screen.dart';
+import '../admin/admin_gift_management_screen.dart';
 
 
 class ProfileScreen extends StatelessWidget {
@@ -557,6 +558,18 @@ class ProfileScreen extends StatelessWidget {
               },
             ),
           ],
+          _buildDivider(),
+          _buildMenuItem(
+            R.roomUserInfoGiftIc,
+            'إدارة الهدايا والفئات',
+            'لوحة الإدارة',
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AdminGiftManagementScreen()),
+              );
+            },
+          ),
           _buildDivider(),
           _buildMenuItem(
             R.mineLevelIc,

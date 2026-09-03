@@ -127,8 +127,9 @@ class _VapPlayerState extends State<VapPlayer> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final w = widget.width ?? constraints.maxWidth;
-        final h = widget.height ?? constraints.maxHeight;
+        final screen = MediaQuery.of(context).size;
+        double w = widget.width ?? (constraints.maxWidth.isFinite && constraints.maxWidth > 0 ? constraints.maxWidth : screen.width);
+        double h = widget.height ?? (constraints.maxHeight.isFinite && constraints.maxHeight > 0 ? constraints.maxHeight : screen.height);
 
         if (!_ready) {
           return SizedBox(
@@ -145,7 +146,7 @@ class _VapPlayerState extends State<VapPlayer> {
             controller: _controller,
             scaleType: _mapFit(),
             onVideoFinish: () {
-              if (widget.loops) {
+              if (widget.loops && _localPath != null) {
                 _controller.play(
                   path: _localPath!,
                   sourceType: VapSourceType.file,
@@ -163,12 +164,14 @@ class _VapPlayerState extends State<VapPlayer> {
               }
             },
             onCreateView: () {
-              _controller.play(
-                path: _localPath!,
-                sourceType: VapSourceType.file,
-                repeatCount: widget.loops ? 9999 : 1,
-                deleteOnEnd: false,
-              );
+              if (_localPath != null) {
+                _controller.play(
+                  path: _localPath!,
+                  sourceType: VapSourceType.file,
+                  repeatCount: widget.loops ? 0 : 1,
+                  deleteOnEnd: false,
+                );
+              }
             },
           ),
         );

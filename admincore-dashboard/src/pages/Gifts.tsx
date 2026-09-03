@@ -121,14 +121,25 @@ export default function GiftsPage() {
               </>
             )}
           </div>
-          <div className="flex items-center gap-4">
-            {(['isVap', 'isLucky', 'isStar', 'isMusic'] as const).map(f => (
-              <label key={f} className="flex items-center gap-1.5 text-xs text-slate-400">
+          <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-white/5">
+            <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${form.isLucky ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'}`}>
+              <input type="checkbox" checked={form.isLucky} onChange={e => updateField('isLucky', e.target.checked)} className="accent-emerald-500 w-4 h-4" />
+              <span>🍀 هدية حظ (Lucky Gift)</span>
+            </label>
+
+            <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${form.isVap ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'}`}>
+              <input type="checkbox" checked={form.isVap} onChange={e => updateField('isVap', e.target.checked)} className="accent-purple-500 w-4 h-4" />
+              <span>🎬 تأثير VAP (Alpha MP4)</span>
+            </label>
+
+            {(['isStar', 'isMusic'] as const).map(f => (
+              <label key={f} className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer">
                 <input type="checkbox" checked={form[f]} onChange={e => updateField(f, e.target.checked)} className="accent-indigo-500" />
-                {f.replace('is', '')}
+                {f === 'isStar' ? '⭐ مميزة' : '🎵 صوتية'}
               </label>
             ))}
-            <label className="flex items-center gap-1.5 text-xs text-rose-400 font-semibold">
+
+            <label className="flex items-center gap-1.5 text-xs text-rose-400 font-semibold cursor-pointer">
               <input type="checkbox" checked={form.isCpGift} onChange={e => updateField('isCpGift', e.target.checked)} className="accent-rose-500" />
               CP Gift
             </label>
@@ -140,8 +151,8 @@ export default function GiftsPage() {
             )}
           </div>
           <div className="flex gap-2">
-            <button onClick={editing ? handleSave : handleAdd} className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-xs text-white font-semibold rounded-lg flex items-center gap-1">
-              <Save className="w-3 h-3" /> {editing ? t('save') : t('gift.add')}
+            <button onClick={editing ? handleSave : handleAdd} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-xs text-white font-bold rounded-lg flex items-center gap-1.5 shadow-lg shadow-emerald-900/30">
+              <Save className="w-3.5 h-3.5" /> {editing ? t('save') : t('gift.add')}
             </button>
           </div>
         </div>
@@ -154,9 +165,9 @@ export default function GiftsPage() {
           { key: 'name', label: t('gift.name'), sortable: true },
           { key: 'categoryId', label: 'Category', render: g => { const cat = categories.find(c => c.id === g.categoryId); return <span className="text-[10px] text-slate-400">{cat ? cat.name : '-'}</span>; } },
           { key: 'value', label: t('gift.value'), sortable: true, render: g => <span className="text-amber-400 font-mono">{g.value}</span> },
-          { key: 'isLucky', label: '★', render: g => g.isLucky ? <span className="text-rose-400">✓</span> : '-' },
+          { key: 'isLucky', label: '🍀 الحظ', render: g => g.isLucky ? <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px]">🍀 حظ</span> : '-' },
+          { key: 'isVap', label: 'VAP', render: g => g.isVap ? <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold text-[10px]">VAP</span> : '-' },
           { key: 'isStar', label: '☆', render: g => g.isStar ? <span className="text-amber-400">✓</span> : '-' },
-          { key: 'isVap', label: 'VAP', render: g => g.isVap ? <span className="text-indigo-400">✓</span> : '-' },
           { key: 'isMusic', label: '♪', render: g => g.isMusic ? <span className="text-emerald-400">✓</span> : '-' },
           { key: 'isCpGift', label: 'CP', render: g => g.isCpGift ? <span className="text-rose-400 font-semibold">♥ {g.cpGiftDurationHours ? `${Math.round(g.cpGiftDurationHours / 24)}d` : ''}</span> : '-' },
           { key: 'sortOrder', label: 'Order', sortable: true },
