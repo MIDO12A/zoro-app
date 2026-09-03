@@ -914,14 +914,6 @@ class _AgencyQuickActions extends StatelessWidget {
 
     final actionsRow2 = [
       _QuickAction(
-        icon: '🛡️',
-        label: 'توثيق المضيف',
-        badge: 0,
-        color: const Color(0xFF00B5B3),
-        onTap: () => Navigator.push(context, MaterialPageRoute(
-          builder: (_) => const AgencyVerificationScreen())),
-      ),
-      _QuickAction(
         icon: '⭐',
         label: 'مستويات الوكالة',
         badge: 0,

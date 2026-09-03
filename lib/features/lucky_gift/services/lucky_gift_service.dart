@@ -181,7 +181,7 @@ class LuckyGiftService {
     String senderAvatar = '',
   }) {
     _roomWinOverlay?.remove();
-    final overlay = Overlay.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
     _roomWinOverlay = OverlayEntry(
       builder: (ctx) => LuckyRoomWinSvgaOverlay(
         multiplier: multiplier,
@@ -202,7 +202,7 @@ class LuckyGiftService {
   OverlayEntry? _comboSvgaOverlay;
   void showComboSvgaOverlay(BuildContext context, int count) {
     _comboSvgaOverlay?.remove();
-    final overlay = Overlay.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
     _comboSvgaOverlay = OverlayEntry(
       builder: (ctx) => LuckyComboSvgaOverlay(
         count: count,
@@ -217,7 +217,7 @@ class LuckyGiftService {
   }
 
   void _showCardFlipOverlay(BuildContext context, LuckyGiftBroadcastData data) {
-    final overlay = Overlay.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
     _currentOverlay = OverlayEntry(
       builder: (ctx) => LuckyCardFlipLayout(
         data: data,
@@ -242,7 +242,7 @@ class LuckyGiftService {
     required int totalWon,
   }) {
     _bannerOverlay?.remove();
-    final overlay = Overlay.of(context);
+    final overlay = Overlay.of(context, rootOverlay: true);
     _bannerOverlay = OverlayEntry(
       builder: (ctx) => BigWinBanner(
         senderName: senderName,

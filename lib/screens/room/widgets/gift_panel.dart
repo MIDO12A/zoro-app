@@ -554,7 +554,16 @@ class _GiftPanelState extends State<GiftPanel> {
           count: widget.selectedCount,
         );
         if (!ok) allOk = false;
-        if (ok && gift.isLucky) {
+        final isLuckyGift = gift.isLucky ||
+            (gift.categoryId != null &&
+                (gift.categoryId!.toLowerCase().contains('lucky') ||
+                    gift.categoryId!.contains('حظ') ||
+                    _categories.any((c) =>
+                        c.id == gift.categoryId &&
+                        (c.name.contains('حظ') ||
+                            c.name.toLowerCase().contains('lucky')))));
+
+        if (ok && isLuckyGift) {
           LuckyGiftService().executeLuckyGiftDraw(
             context: context,
             roomId: widget.roomId,
