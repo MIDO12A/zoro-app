@@ -127,6 +127,44 @@ export default function GiftsPage() {
               <span>🍀 هدية حظ (Lucky Gift)</span>
             </label>
 
+            {form.isLucky && (
+              <div className="w-full bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-3.5 space-y-2 mt-2">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-400">
+                  <span>⚙️ إعدادات نسب أرباح ومضاعفات هدية الحظ</span>
+                  <span className="text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded text-emerald-300">مربوطة تلقائياً بسستم الحظ</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">نسبة العائد (RTP %)</label>
+                    <input type="number" defaultValue={85} min={50} max={100} placeholder="85%" className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">أعلى مضاعف (Max Mult)</label>
+                    <select className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
+                      <option value="500">500X (الافتراضي)</option>
+                      <option value="1000">1000X (أسطوري)</option>
+                      <option value="250">250X (متوسط)</option>
+                      <option value="100">100X (محافظ)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">انفجار الحظ (Burst)</label>
+                    <select className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
+                      <option value="true">مفعل (Auto Burst)</option>
+                      <option value="false">معطل</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">طريقة العرض في الروم</label>
+                    <select className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
+                      <option value="cards">كروت 3D + SVGA + بانر</option>
+                      <option value="svga">SVGA فقط</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <label className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all cursor-pointer ${form.isVap ? 'bg-purple-500/20 border-purple-500/50 text-purple-300' : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'}`}>
               <input type="checkbox" checked={form.isVap} onChange={e => updateField('isVap', e.target.checked)} className="accent-purple-500 w-4 h-4" />
               <span>🎬 تأثير VAP (Alpha MP4)</span>

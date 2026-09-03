@@ -767,27 +767,29 @@ class GiftSvgaOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
     final aa = animationAsset;
-    final w = showBackground ? screenSize.width * 0.72 : screenSize.width * 0.8;
-    final h = showBackground ? screenSize.height * 0.72 : screenSize.height * 0.8;
+
+    final isImg = aa != null && (aa.endsWith('.png') || aa.endsWith('.webp') || aa.endsWith('.jpg') || aa.endsWith('.jpeg'));
+    final displayImg = isImg ? aa : (defaultImageUrl != null && defaultImageUrl!.isNotEmpty ? defaultImageUrl : null);
+
     return Positioned.fill(
       child: IgnorePointer(
         child: Container(
-          color: showBackground ? Colors.black.withValues(alpha: 0.35) : Colors.transparent,
+          color: showBackground ? Colors.black.withValues(alpha: 0.25) : Colors.transparent,
           child: Center(
-            child: aa != null && aa.isNotEmpty
+            child: aa != null && aa.isNotEmpty && !isImg
                 ? isVideoType(aa)
                     ? VapPlayer(
                         url: aa,
-                        width: w,
-                        height: h,
+                        width: screenSize.width,
+                        height: screenSize.height,
                         loops: false,
                         onFinished: onFinished,
-                        fit: BoxFit.contain,
+                        fit: BoxFit.cover,
                       )
                     : SvgaPlayer(
                         assetPath: aa,
-                        width: w,
-                        height: h,
+                        width: screenSize.width,
+                        height: screenSize.height,
                         loops: false,
                         fit: BoxFit.contain,
                         onFinished: onFinished,
@@ -795,10 +797,100 @@ class GiftSvgaOverlay extends StatelessWidget {
                         imageReplacement: imageReplacement,
                         defaultImageUrl: defaultImageUrl,
                       )
-                : const SizedBox.shrink(),
+                : displayImg != null
+                    ? _ImageGiftOverlay(
+                        imageUrl: displayImg,
+                        onFinished: onFinished,
+                      )
+                    : const SizedBox.shrink(),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ImageGiftOverlay extends StatefulWidget {
+  final String imageUrl;
+  final VoidCallback? onFinished;
+
+  const _ImageGiftOverlay({
+    required this.imageUrl,
+    this.onFinished,
+  });
+
+  @override
+  State<_ImageGiftOverlay> createState() => _ImageGiftOverlayState();
+}
+
+class _ImageGiftOverlayState extends State<_ImageGiftOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+  late Animation<double> _fade;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2500),
+    );
+
+    _scale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.2, end: 1.2).chain(CurveTween(curve: Curves.easeOutBack)), weight: 25),
+      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)), weight: 15),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 40),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeInBack)), weight: 20),
+    ]).animate(_ctrl);
+
+    _fade = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 15),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 65),
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 20),
+    ]).animate(_ctrl);
+
+    _ctrl.forward().then((_) {
+      if (mounted) widget.onFinished?.call();
+    });
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) {
+        return Opacity(
+          opacity: _fade.value.clamp(0.0, 1.0),
+          child: Transform.scale(
+            scale: _scale.value,
+            child: Container(
+              width: 220,
+              height: 220,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.amber.withOpacity(0.4),
+                    blurRadius: 30,
+                    spreadRadius: 10,
+                  ),
+                ],
+              ),
+              child: R.cachedImage(
+                widget.imageUrl,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
