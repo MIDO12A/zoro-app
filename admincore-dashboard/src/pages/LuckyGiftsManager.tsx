@@ -23,6 +23,8 @@ import {
 import { supabase } from '../lib/supabase';
 import { firestoreDb } from '../lib/firebase';
 import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
+import ImageUpload from '../components/ImageUpload';
+import { uploadGiftIcon, uploadGiftAnimation } from '../lib/storage';
 
 interface MultiplierTier {
   id: string;
@@ -367,29 +369,31 @@ export default function LuckyGiftsManager() {
                 تصميم وأغلفة كروت الحظ
               </h2>
 
-              <div className="space-y-3">
-                <div>
-                  <label className="text-xs text-slate-300 font-medium block mb-1">
-                    رابط صورة غلاف الكارت المغلق (Front Cover URL)
-                  </label>
-                  <input
-                    type="text"
-                    value={visuals.coverUrl}
-                    onChange={e => setVisuals({ ...visuals, coverUrl: e.target.value })}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 outline-none"
-                  />
-                </div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                    <label className="text-xs text-amber-300 font-bold block mb-2">
+                      غلاف الكارت المغلق (Card Front Cover)
+                    </label>
+                    <ImageUpload
+                      currentUrl={visuals.coverUrl}
+                      onUpload={file => uploadGiftIcon(file, `lucky_cover_${Date.now()}`)}
+                      onUrlChange={url => setVisuals({ ...visuals, coverUrl: url })}
+                      label="رفع غلاف الكارت من الجهاز"
+                    />
+                  </div>
 
-                <div>
-                  <label className="text-xs text-slate-300 font-medium block mb-1">
-                    رابط خلفية الكارت بعد الفتح (Back Background URL)
-                  </label>
-                  <input
-                    type="text"
-                    value={visuals.backBgUrl}
-                    onChange={e => setVisuals({ ...visuals, backBgUrl: e.target.value })}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-amber-500 outline-none"
-                  />
+                  <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                    <label className="text-xs text-amber-300 font-bold block mb-2">
+                      خلفية الكارت بعد الفتح (Card Back BG)
+                    </label>
+                    <ImageUpload
+                      currentUrl={visuals.backBgUrl}
+                      onUpload={file => uploadGiftIcon(file, `lucky_back_${Date.now()}`)}
+                      onUrlChange={url => setVisuals({ ...visuals, backBgUrl: url })}
+                      label="رفع خلفية الكارت من الجهاز"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 pt-2">
@@ -831,16 +835,39 @@ export default function LuckyGiftsManager() {
                       </td>
 
                       <td className="p-3">
-                        <input
-                          type="text"
-                          value={rec.pathOrUrl}
-                          onChange={e => {
-                            const updated = [...svgaLibrary];
-                            updated[idx].pathOrUrl = e.target.value;
-                            setSvgaLibrary(updated);
-                          }}
-                          className="w-56 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-slate-300 outline-none"
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={rec.pathOrUrl}
+                            onChange={e => {
+                              const updated = [...svgaLibrary];
+                              updated[idx].pathOrUrl = e.target.value;
+                              setSvgaLibrary(updated);
+                            }}
+                            className="w-44 bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-slate-300 outline-none"
+                            placeholder="assets/svga/... أو رابط"
+                          />
+                          <label className="cursor-pointer px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded text-[10px] font-bold border border-amber-500/40 whitespace-nowrap transition">
+                            <span>رفع 📁</span>
+                            <input
+                              type="file"
+                              accept=".svga,.vap,.mp4,.json,.zip,.png,.webp"
+                              className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  const url = await uploadGiftAnimation(file, `svga_${rec.category}_${Date.now()}`);
+                                  const updated = [...svgaLibrary];
+                                  updated[idx].pathOrUrl = url;
+                                  setSvgaLibrary(updated);
+                                } catch (err) {
+                                  alert('فشل رفع الملف');
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
                       </td>
 
                       <td className="p-3 text-slate-400">
