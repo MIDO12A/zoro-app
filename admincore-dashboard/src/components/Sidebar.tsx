@@ -16,6 +16,7 @@ const navItems = [
   { to: '/gifts', icon: Gift, label: 'nav.gifts' },
   { to: '/store', icon: Store, label: 'nav.store' },
   { to: '/rooms', icon: DoorOpen, label: 'nav.rooms' },
+  { to: '/lucky-gifts', icon: Sparkles, label: 'nav.luckyGifts' },
   { to: '/unions', icon: Building2, label: 'nav.unions' },
   { to: '/vip', icon: Crown, label: 'nav.vip' },
   { to: '/vip-gifting', icon: GiftIcon, label: 'nav.vipGifting' },
