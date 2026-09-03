@@ -428,25 +428,31 @@ class _RoomScreenState extends State<RoomScreen> {
       }
       _giftStreamInitial = false;
       // Show gift animation for the newest unseen gift
-      if (latestNewGift != null && latestNewGift.animationAsset != null && latestNewGift.animationAsset!.isNotEmpty) {
+      if (latestNewGift != null) {
         final latest = latestNewGift;
         final giftDef = _cachedGiftItems[latest.giftId];
-        final nameKey = giftDef?.nameKey;
-        final photoKey = giftDef?.photoKey;
-        final defaultImage = giftDef?.defaultImage;
-        final textReplacement = nameKey != null && nameKey.isNotEmpty && latest.senderName.isNotEmpty
-            ? <String, String>{nameKey: latest.senderName}
-            : null;
-        final imageReplacement = photoKey != null && photoKey.isNotEmpty && latest.senderPhotoUrl != null && latest.senderPhotoUrl!.isNotEmpty
-            ? <String, String>{photoKey: latest.senderPhotoUrl!}
-            : null;
-        if (mounted) setState(() {
-          _giftAnimAsset = latest.animationAsset;
-          _showGiftAnim = true;
-          _giftTextReplacement = textReplacement;
-          _giftImageReplacement = imageReplacement;
-          _giftDefaultImage = defaultImage;
-        });
+        final effectiveAsset = (latest.animationAsset != null && latest.animationAsset!.isNotEmpty)
+            ? latest.animationAsset
+            : (giftDef?.iconAsset ?? giftDef?.defaultImage);
+
+        if (effectiveAsset != null && effectiveAsset.isNotEmpty) {
+          final nameKey = giftDef?.nameKey;
+          final photoKey = giftDef?.photoKey;
+          final defaultImage = giftDef?.defaultImage ?? giftDef?.iconAsset;
+          final textReplacement = nameKey != null && nameKey.isNotEmpty && latest.senderName.isNotEmpty
+              ? <String, String>{nameKey: latest.senderName}
+              : null;
+          final imageReplacement = photoKey != null && photoKey.isNotEmpty && latest.senderPhotoUrl != null && latest.senderPhotoUrl!.isNotEmpty
+              ? <String, String>{photoKey: latest.senderPhotoUrl!}
+              : null;
+          if (mounted) setState(() {
+            _giftAnimAsset = effectiveAsset;
+            _showGiftAnim = true;
+            _giftTextReplacement = textReplacement;
+            _giftImageReplacement = imageReplacement;
+            _giftDefaultImage = defaultImage;
+          });
+        }
       }
       // Show gift banner strip for ALL users (not just sender), regardless of animation
       if (latestNewGift != null && mounted) {

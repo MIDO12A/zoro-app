@@ -80,12 +80,29 @@ class LuckyGiftService {
       ));
     }
 
-    // إضافة الكوينز الفائزة إلى محفظة المستخدم
+    // إضافة الكوينز الفائزة إلى محفظة المستخدم وإشعار الغرفة
     if (totalWon > 0) {
       try {
         await FirebaseFirestore.instance.collection('users').doc(senderId).update({
           'coins': FieldValue.increment(totalWon),
         });
+        if (roomId.isNotEmpty) {
+          await FirebaseFirestore.instance
+              .collection('rooms')
+              .doc(roomId)
+              .collection('messages')
+              .add({
+            'user_id': senderId,
+            'user_name': senderName,
+            'user_photo_url': senderAvatar,
+            'type': 'lucky_win',
+            'message': '🍀 فاز $senderName بـ $totalWon عملة (مضاعف ${maxMult}X) من هدية الحظ $giftName!',
+            'multiplier': maxMult,
+            'total_won': totalWon,
+            'gift_name': giftName,
+            'created_at': FieldValue.serverTimestamp(),
+          });
+        }
       } catch (_) {}
     }
 

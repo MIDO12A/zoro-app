@@ -56,6 +56,7 @@ class _GiftPanelState extends State<GiftPanel> {
   StreamSubscription? _catSub;
   Timer? _comboTimer;
   int _comboSeconds = 0;
+  int _comboMultiplier = 0;
 
   @override
   void initState() {
@@ -518,12 +519,15 @@ class _GiftPanelState extends State<GiftPanel> {
     if (widget.onSend != null) {
       widget.onSend!();
     }
-    widget.onSendGift?.call(gift.animationAsset);
+    final anim = gift.animationAsset;
+    final defImg = gift.defaultImage;
+    final effectiveAsset = (anim != null && anim.isNotEmpty) ? anim : gift.iconAsset;
+    widget.onSendGift?.call(effectiveAsset);
     widget.onSendGiftExtended?.call({
-      'animationAsset': gift.animationAsset,
+      'animationAsset': effectiveAsset,
       'nameKey': gift.nameKey,
       'photoKey': gift.photoKey,
-      'defaultImage': gift.defaultImage,
+      'defaultImage': (defImg != null && defImg.isNotEmpty) ? defImg : gift.iconAsset,
       'senderName': currentUser?.name ?? '',
       'senderPhotoUrl': currentUser?.photoUrl ?? '',
       'receiverId': _selectedUserId,
@@ -610,6 +614,7 @@ class _GiftPanelState extends State<GiftPanel> {
 
   void _startComboTimer() {
     _comboTimer?.cancel();
+    _comboMultiplier = (_comboSeconds > 0) ? _comboMultiplier + 1 : 1;
     setState(() => _comboSeconds = 10);
     _comboTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) {
@@ -619,6 +624,7 @@ class _GiftPanelState extends State<GiftPanel> {
       setState(() {
         _comboSeconds--;
         if (_comboSeconds <= 0) {
+          _comboMultiplier = 0;
           timer.cancel();
         }
       });
@@ -649,7 +655,7 @@ class _GiftPanelState extends State<GiftPanel> {
                 onTap: widget.onCountTap,
                 child: Container(
                   width: 72,
-                  height: 30,
+                  height: 32,
                   alignment: Alignment.center,
                   decoration: const BoxDecoration(
                     color: Color(0x1AFFFFFF),
@@ -679,12 +685,16 @@ class _GiftPanelState extends State<GiftPanel> {
               GestureDetector(
                 onTap: canAfford ? _sendGift : null,
                 child: Container(
-                  width: _comboSeconds > 0 ? 80 : 72,
-                  height: 30,
+                  width: _comboSeconds > 0 ? 92 : 72,
+                  height: 32,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     gradient: canAfford
-                        ? AppColors.giftBtnGradient
+                        ? (_comboSeconds > 0
+                            ? const LinearGradient(
+                                colors: [Color(0xFFFF8800), Color(0xFFFF2255)],
+                              )
+                            : AppColors.giftBtnGradient)
                         : const LinearGradient(
                             colors: [Color(0xFF666666), Color(0xFF444444)],
                           ),
@@ -692,6 +702,15 @@ class _GiftPanelState extends State<GiftPanel> {
                       topRight: Radius.circular(8),
                       bottomRight: Radius.circular(8),
                     ),
+                    boxShadow: _comboSeconds > 0
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFFFF4400).withValues(alpha: 0.5),
+                              blurRadius: 8,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
                   ),
                   child: _sending
                       ? const SizedBox(
@@ -703,11 +722,13 @@ class _GiftPanelState extends State<GiftPanel> {
                           ),
                         )
                       : Text(
-                          _comboSeconds > 0 ? 'GO $_comboSeconds' : 'إرسال',
+                          _comboSeconds > 0
+                              ? 'COMBO x$_comboMultiplier (${_comboSeconds}s)'
+                              : 'إرسال',
                           style: TextStyle(
-                            fontSize: 12, 
-                            color: Colors.white, 
-                            fontWeight: _comboSeconds > 0 ? FontWeight.bold : FontWeight.normal
+                            fontSize: _comboSeconds > 0 ? 10 : 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                 ),

@@ -146,14 +146,7 @@ class _VapPlayerState extends State<VapPlayer> {
             controller: _controller,
             scaleType: _mapFit(),
             onVideoFinish: () {
-              if (widget.loops && _localPath != null) {
-                _controller.play(
-                  path: _localPath!,
-                  sourceType: VapSourceType.file,
-                  repeatCount: 0,
-                  deleteOnEnd: false,
-                );
-              } else {
+              if (!widget.loops) {
                 widget.onFinished?.call();
               }
             },
@@ -168,7 +161,7 @@ class _VapPlayerState extends State<VapPlayer> {
                 _controller.play(
                   path: _localPath!,
                   sourceType: VapSourceType.file,
-                  repeatCount: widget.loops ? 0 : 1,
+                  repeatCount: widget.loops ? -1 : 0,
                   deleteOnEnd: false,
                 );
               }
