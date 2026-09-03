@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../models/lucky_gift_model.dart';
 import '../widgets/lucky_card_flip_layout.dart';
@@ -19,6 +21,104 @@ class LuckyGiftService {
   bool _isPlayingAnim = false;
   OverlayEntry? _currentOverlay;
   OverlayEntry? _bannerOverlay;
+
+  /// تنفيذ سحب هدية الحظ وحساب الجوائز وتشغيل المؤثرات
+  Future<LuckyGiftBroadcastData> executeLuckyGiftDraw({
+    required BuildContext context,
+    required String roomId,
+    required String giftId,
+    required String giftName,
+    required int coinPrice,
+    required String iconAsset,
+    required String senderId,
+    required String senderName,
+    required String senderAvatar,
+    required String receiverName,
+    required int count,
+  }) async {
+    final random = Random();
+    final cardCount = min(max(count, 4), 8);
+    final List<LuckyCardResult> cards = [];
+    int totalWon = 0;
+    int maxMult = 0;
+
+    // احتمالات ومضاعفات الحظ
+    const tiers = [
+      {'mult': 0, 'weight': 600}, // 60%
+      {'mult': 1, 'weight': 220}, // 22%
+      {'mult': 2, 'weight': 90},  // 9%
+      {'mult': 5, 'weight': 50},  // 5%
+      {'mult': 10, 'weight': 25}, // 2.5%
+      {'mult': 50, 'weight': 10}, // 1%
+      {'mult': 100, 'weight': 4}, // 0.4%
+      {'mult': 500, 'weight': 1}, // 0.1%
+    ];
+
+    final totalWeight = tiers.fold<int>(0, (sum, t) => sum + (t['weight'] as int));
+
+    for (int i = 0; i < cardCount; i++) {
+      int r = random.nextInt(totalWeight);
+      int mult = 0;
+      for (final t in tiers) {
+        if (r < (t['weight'] as int)) {
+          mult = t['mult'] as int;
+          break;
+        }
+        r -= (t['weight'] as int);
+      }
+
+      final won = mult * coinPrice;
+      totalWon += won;
+      if (mult > maxMult) maxMult = mult;
+
+      cards.add(LuckyCardResult(
+        index: i,
+        multiplier: mult,
+        wonCoins: won,
+        giftName: giftName,
+        giftIcon: iconAsset,
+      ));
+    }
+
+    // إضافة الكوينز الفائزة إلى محفظة المستخدم
+    if (totalWon > 0) {
+      try {
+        await FirebaseFirestore.instance.collection('users').doc(senderId).update({
+          'coins': FieldValue.increment(totalWon),
+        });
+      } catch (_) {}
+    }
+
+    final giftModel = LuckyGiftModel(
+      id: giftId,
+      giftName: giftName,
+      giftNameAr: giftName,
+      coinPrice: coinPrice,
+      giftIconUrl: iconAsset,
+      giftCoverUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&q=80',
+      giftBgUrl: 'https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=300&q=80',
+    );
+
+    final broadcastData = LuckyGiftBroadcastData(
+      roomId: roomId,
+      senderName: senderName,
+      senderAvatar: senderAvatar,
+      receiverName: receiverName,
+      gift: giftModel,
+      cards: cards,
+      totalWonCoins: totalWon,
+      maxMultiplier: maxMult,
+      isBigWin: maxMult >= 50,
+      comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
+      comboCount: count,
+    );
+
+    if (context.mounted) {
+      enqueueLuckyGift(context, broadcastData);
+    }
+
+    return broadcastData;
+  }
 
   /// إضافة حدث هدية حظ إلى طابور العرض
   void enqueueLuckyGift(BuildContext context, LuckyGiftBroadcastData data) {

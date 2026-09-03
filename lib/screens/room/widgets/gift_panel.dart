@@ -9,6 +9,7 @@ import '../../../models/gift_category_model.dart';
 import '../../../providers/user_provider.dart';
 import '../../../services/supabase_service.dart';
 import '../../../services/media_prefetch_service.dart';
+import '../../../features/lucky_gift/services/lucky_gift_service.dart';
 import 'svga_player.dart';
 import 'vap_player.dart';
 
@@ -553,6 +554,21 @@ class _GiftPanelState extends State<GiftPanel> {
           count: widget.selectedCount,
         );
         if (!ok) allOk = false;
+        if (ok && gift.isLucky) {
+          LuckyGiftService().executeLuckyGiftDraw(
+            context: context,
+            roomId: widget.roomId,
+            giftId: gift.id,
+            giftName: gift.name,
+            coinPrice: gift.value,
+            iconAsset: gift.iconAsset,
+            senderId: currentUser.uid,
+            senderName: currentUser.name,
+            senderAvatar: currentUser.photoUrl ?? '',
+            receiverName: r['name']?.toString() ?? '',
+            count: widget.selectedCount,
+          );
+        }
         if (ok && gift.isCpGift) {
           await CpService.sendGiftAndLink(
             giftId: gift.id,
