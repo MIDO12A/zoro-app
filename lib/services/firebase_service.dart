@@ -5,7 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
-import 'package:zero/services/agency_target_evaluator.dart';
+
 import '../services/api_service.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
@@ -403,6 +403,51 @@ class FirebaseService {
     required int value,
     int count = 1,
   }) async {
+    // Server-authoritative send first (V1.8): the backend reads the TRUE gift
+    // price from gifts/{giftId} inside a transaction, so the client can't pay
+    // less than the real price. Fall back to the legacy client transaction
+    // ONLY when the API server is unreachable (offline/dev), not when the
+    // server rejects the request (insufficient coins / gift not found).
+    try {
+      await ApiService().sendGift(
+        giftId: giftId,
+        receiverId: receiverId,
+        roomId: roomId,
+        count: count,
+      );
+      // Value/name are used afterwards for local notification & history only.
+      try {
+        await sendNotification(
+          uid: receiverId,
+          type: 'gift',
+          actorUid: senderId,
+          title: '🎁 هدية من $senderName',
+          body: '$senderName أرسل لك "$giftName" x$count',
+          data: <String, dynamic>{
+            'sender_name': senderName,
+            'sender_photo': senderPhotoUrl,
+            'gift_id': giftId,
+            'gift_name': giftName,
+            'gift_image': animationAsset ?? '',
+            'value': value,
+            'count': count,
+            'room_id': roomId,
+          },
+        );
+      } catch (_) {}
+      return true;
+    } catch (e) {
+      final apiDown = e is ApiException
+          ? (e.statusCode == 500 || e.statusCode == 502 || e.statusCode == 503 ||
+              e.statusCode == 504 || e.statusCode == 404 || e.statusCode == 0)
+          : true;
+      if (!apiDown) {
+        debugPrint('sendGift: server rejected send: $e');
+        return false;
+      }
+      debugPrint('sendGift: server unreachable ($e), using legacy client send');
+    }
+
     final id = const Uuid().v4();
     final totalCost = value * count;
     final senderRef = _db.collection('users').doc(senderId);
@@ -508,8 +553,8 @@ class FirebaseService {
       return false;
     }
 
-    // Evaluate targets asynchronously (do not await)
-    AgencyTargetEvaluator.evaluateHostTargets(receiverId);
+    // Host target evaluation is handled server-side (V2.7) in POST
+    // /api/v1/gifts/send — the client no longer awards cross-account rewards.
 
     // Real-time notification for the receiver (non-fatal)
     try {
@@ -1541,9 +1586,17 @@ class FirebaseService {
           .count()
           .get();
       final int count = countSnap.count ?? 0;
-      await _db.collection('users').doc(visitedUid).update({
-        'visitors': count,
-      });
+      // V1.2: clients may NOT write to another user's document (users/{uid} is
+      // now restricted to self by Firestore rules). The visitor counter is read
+      // from profile_visits at display time instead.
+      if (!visitedUid.isEmpty) {
+        try {
+          await _db.collection('user_stats').doc(visitedUid).set(
+                {'visitors': count},
+                SetOptions(merge: true),
+              );
+        } catch (_) {}
+      }
     } catch (e) {
       debugPrint('recordProfileVisit error: $e');
     }

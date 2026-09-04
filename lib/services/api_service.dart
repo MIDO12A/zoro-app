@@ -139,6 +139,24 @@ class ApiService {
     return (data['orders'] as List).cast<Map<String, dynamic>>();
   }
 
+  // ===== Gifts (server-authoritative send) =====
+  Future<Map<String, dynamic>> sendGift({
+    required String giftId,
+    required String receiverId,
+    required String roomId,
+    int count = 1,
+  }) async {
+    final body = {
+      'giftId': giftId,
+      'receiverId': receiverId,
+      'roomId': roomId,
+      'count': count,
+    };
+    final data = await _post('/gifts/send', body);
+    if (data['success'] == true) return data;
+    throw ApiException(400, data['error']?.toString() ?? 'Gift send failed');
+  }
+
   // ===== Lucky Gift (server-authoritative draw) =====
   Future<Map<String, dynamic>> drawLuckyGift({
     required String giftId,

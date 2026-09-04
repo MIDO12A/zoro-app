@@ -39,10 +39,14 @@ service cloud.firestore {
     }
 
     // ── بيانات المستخدمين ──────────────────────────────────────────────
-    // نموذج مفتوح مثل الغرف: العميل هو من ينفذ خصم العملات وإضافة الماس
-    // في نفس الـ Transaction عند إرسال الهدايا.
+    // V1.2: منذ الآن المستخدم يكتب وثيقته فقط (uid == request.auth.uid).
+    // أي محاولة لتعديل وثيقة مستخدم آخر (رصيده/بياناته) تُرفض. العمليات
+    // المالية الاختيارية تتم عبر الخادم (Admin SDK يتجاوز هذه القواعد).
     match /users/{uid} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
     }
 
     match /profiles/{uid} {
@@ -50,8 +54,15 @@ service cloud.firestore {
       allow write: if signedIn() && request.auth.uid == uid;
     }
 
+    // ── محافظ العملات ────────────────────────────────────────────────
+    // V1.1/V1.2: المحفظة أمانة بمستندها (uid) — لا يُعدبلها إلا صاحبها
+    // أو الخادم (Admin SDK يتجاوز القواعد). لا يحق لأي مستخدم خصم/إيداع
+    // في محفظة مستخدم آخر.
     match /user_wallets/{uid} {
-      allow read, write: if signedIn();
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow delete: if isAdmin();
     }
 
     // ── الإشعارات: المستخدم يقرأ/يعدل إشعاراته فقط ─────────────────────
@@ -82,6 +93,7 @@ service cloud.firestore {
     match /reports/{id} { allow read, write: if signedIn(); }
     match /signin_rewards/{id} { allow read: if signedIn(); allow write: if isAdmin(); }
     match /user_bag/{id} { allow read, write: if signedIn(); }
+    match /user_stats/{id} { allow read, write: if signedIn(); }
 
     // ── نظام العلاقات (CP) ────────────────────────────────────────────
     match /cp_couples/{id} { allow read, write: if signedIn(); }

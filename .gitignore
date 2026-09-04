@@ -65,6 +65,8 @@ key.properties
 # Temp / debug files
 flutter_analyze_output.txt
 tmp_check_rpc*.js
+flutter_logs.txt
+.poolside/
 
 # Secrets (defense in depth)
 .env
