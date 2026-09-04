@@ -3,5 +3,9 @@ class AppConfig {
   static const String databaseUrl =
       'https://zero-f5b4b-default-rtdb.asia-southeast1.firebasedatabase.app/';
   static const int zegoAppId = 2088500186;
-  static const String zegoAppSign = '8f8b1ee4b137b8444208a6eb8a001a3a377c2b9e5323d351c933f9034d7c1b1d';
+  // Zego AppSign is a build-time secret — never hardcode it. Inject via:
+  //   flutter build apk --dart-define=ZEGO_APP_SIGN=<appsign>
+  // Falls back to an empty string so a missing define fails loudly (init guard)
+  // instead of silently leaking a real signing key into the public repo.
+  static const String zegoAppSign = String.fromEnvironment('ZEGO_APP_SIGN');
 }

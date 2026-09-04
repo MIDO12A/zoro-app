@@ -47,6 +47,10 @@ class RoomAudioService {
 
   Future<bool> _doInitialize() async {
     try {
+      if (AppConfig.zegoAppSign.isEmpty) {
+        debugPrint('[RoomAudioService] Zego appSign missing — build with --dart-define=ZEGO_APP_SIGN');
+        return false;
+      }
       final status = await Permission.microphone.request();
       if (!status.isGranted) {
         debugPrint('[RoomAudioService] Microphone permission denied');
@@ -154,6 +158,36 @@ class RoomAudioService {
     _isPublishing = false;
     _micEnabled = true;
     debugPrint('[RoomAudioService] Publishing state reset');
+  }
+
+  /// Pause mic publishing when the app goes to the background to save battery
+  /// and avoid Zego SIGSEGV on some devices. Remote audio (listening) keeps
+  /// running so the minimized room stays audible.
+  void pauseForBackground() {
+    if (!_isPublishing) return;
+    try {
+      final engine = ZegoExpressEngine.instance;
+      engine?.stopPublishingStream();
+      _isPublishing = false;
+      debugPrint('[RoomAudioService] Publishing paused for background');
+    } catch (e) {
+      debugPrint('[RoomAudioService] pauseForBackground failed: $e');
+    }
+  }
+
+  /// Restore mic publishing when the app returns to the foreground.
+  Future<void> resumeFromBackground() async {
+    if (_currentRoomId == null || _currentUid == null || _isPublishing) return;
+    try {
+      final engine = ZegoExpressEngine.instance;
+      if (engine == null) return;
+      final streamId = 'audio_${_currentUid}_$_currentRoomId';
+      await engine.startPublishingStream(streamId);
+      _isPublishing = true;
+      debugPrint('[RoomAudioService] Publishing resumed from background');
+    } catch (e) {
+      debugPrint('[RoomAudioService] resumeFromBackground failed: $e');
+    }
   }
 
   void stopRemoteStream(String uid, String channelName) {

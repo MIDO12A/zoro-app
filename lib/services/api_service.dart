@@ -139,6 +139,28 @@ class ApiService {
     return (data['orders'] as List).cast<Map<String, dynamic>>();
   }
 
+  // ===== Lucky Gift (server-authoritative draw) =====
+  Future<Map<String, dynamic>> drawLuckyGift({
+    required String giftId,
+    required String receiverId,
+    required String roomId,
+    int count = 1,
+    int comboCount = 1,
+    String? comboId,
+  }) async {
+    final body = {
+      'giftId': giftId,
+      'receiverId': receiverId,
+      'roomId': roomId,
+      'count': count,
+      'comboCount': comboCount,
+      if (comboId != null) 'comboId': comboId,
+    };
+    final data = await _post('/lucky/draw', body);
+    if (data['success'] == true) return data;
+    throw ApiException(400, data['error']?.toString() ?? 'Lucky draw failed');
+  }
+
   // ===== Agencies =====
   Future<Map<String, dynamic>> createAgency(String name) async {
     return await _post('/agencies/create', {'name': name});

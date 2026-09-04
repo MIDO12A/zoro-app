@@ -186,7 +186,7 @@ class RoomScreen extends StatefulWidget {
   State<RoomScreen> createState() => _RoomScreenState();
 }
 
-class _RoomScreenState extends State<RoomScreen> {
+class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // ── UI state ──────────────────────────────────────────────────
   bool _isMicOn = true;
   bool _showGift = false;
@@ -299,6 +299,7 @@ class _RoomScreenState extends State<RoomScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -307,6 +308,19 @@ class _RoomScreenState extends State<RoomScreen> {
     );
     _seats = _buildInitialSeats();
     _loadRoomData();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Pause resource-heavy animation/audio when the app is in the background
+    // (SIGSEGV / battery drain protection). Animations are re-triggered via
+    // the gift/message subscriptions when the room becomes active again.
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _roomAudio.pauseForBackground();
+    } else if (state == AppLifecycleState.resumed) {
+      _roomAudio.resumeFromBackground();
+    }
   }
 
   void _loadRoomData() {
@@ -858,6 +872,7 @@ class _RoomScreenState extends State<RoomScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     // Minimized rooms keep their seat, membership and audio session alive –
     // the user is still "in" the room via the floating bubble.
     if (!_isMinimized) {

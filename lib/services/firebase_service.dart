@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import 'package:zero/services/agency_target_evaluator.dart';
+import '../services/api_service.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
 import '../models/gift_model.dart' as gm;
@@ -569,6 +570,44 @@ class FirebaseService {
     String? comboId,
     int comboCount = 1,
   }) async {
+    // Server-authoritative draw first: SHAPE THE RESULT WITHOUT TRUSTING CLIENT.
+    // The backend deducts coins, credits winnings/receiver and writes the
+    // room_messages strip inside ONE transaction — the client cannot cheat
+    // the multiplier odds. Fall back to the legacy client draw only when the
+    // API server is unreachable (offline/dev), not on server-denied errors
+    // such as 'insufficient_coins'.
+    try {
+      final res = await ApiService().drawLuckyGift(
+        giftId: giftId,
+        receiverId: receiverId,
+        roomId: roomId,
+        count: count,
+        comboCount: comboCount,
+        comboId: comboId,
+      );
+      if (res['success'] == true) {
+        return {
+          'success': true,
+          'wonCoins': res['wonCoins'] ?? 0,
+          'multipliers': (res['multipliers'] as List?)?.cast<num>().map((m) => m.toInt()).toList() ?? const [],
+          'maxMultiplier': (res['maxMultiplier'] as num?)?.toInt() ?? 0,
+          'isBigWin': res['isBigWin'] == true,
+        };
+      }
+      debugPrint('sendLuckyGift: server draw returned failure: $res');
+      return null;
+    } catch (e) {
+      final apiDown = e is ApiException
+          ? (e.statusCode == 500 || e.statusCode == 502 || e.statusCode == 503 ||
+              e.statusCode == 504 || e.statusCode == 404 || e.statusCode == 0)
+          : true;
+      if (!apiDown) {
+        debugPrint('sendLuckyGift: server rejected draw: $e');
+        return null;
+      }
+      debugPrint('sendLuckyGift: server unreachable ($e), using legacy client draw');
+    }
+
     final cardCount = count < 4 ? 4 : (count > 8 ? 8 : count);
     final multipliers = _drawLuckyMultipliers(cardCount);
     int totalWonCoins = 0;

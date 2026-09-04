@@ -8,6 +8,7 @@ import rechargeRoutes from './routes/recharge';
 import agencyRoutes from './routes/agencies';
 import rankingRoutes from './routes/rankings';
 import cpRewardRoutes from './routes/cpRewards';
+import luckyRoutes from './routes/lucky';
 
 import openapiDoc from './openapi.json';
 
@@ -60,6 +61,7 @@ app.use('/api/v1/recharge', rechargeRoutes);
 app.use('/api/v1/agencies', agencyRoutes);
 app.use('/api/v1/rankings', rankingRoutes);
 app.use('/api/v1/cp-rewards', cpRewardRoutes);
+app.use('/api/v1/lucky', luckyRoutes);
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'Route not found' });
