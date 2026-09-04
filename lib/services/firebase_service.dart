@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -642,6 +641,9 @@ class FirebaseService {
       debugPrint('sendLuckyGift: server draw returned failure: $res');
       return null;
     } catch (e) {
+      // Client-side lucky draws are DISABLED for security — the server is the
+      // only authority for drawing multipliers and moving coins. If the API is
+      // unreachable, the send fails (no local fallback, no coin write here).
       final apiDown = e is ApiException
           ? (e.statusCode == 500 || e.statusCode == 502 || e.statusCode == 503 ||
               e.statusCode == 504 || e.statusCode == 404 || e.statusCode == 0)
@@ -650,185 +652,7 @@ class FirebaseService {
         debugPrint('sendLuckyGift: server rejected draw: $e');
         return null;
       }
-      debugPrint('sendLuckyGift: server unreachable ($e), using legacy client draw');
-    }
-
-    final cardCount = count < 4 ? 4 : (count > 8 ? 8 : count);
-    final multipliers = _drawLuckyMultipliers(cardCount);
-    int totalWonCoins = 0;
-    for (final m in multipliers) {
-      totalWonCoins += (value * m);
-    }
-    final totalCost = value * count;
-    final isBigWin = multipliers.any((m) => m >= 50);
-    final maxMultiplier = multipliers.isEmpty ? 0 : multipliers.reduce((curr, next) => curr > next ? curr : next);
-
-    final id = const Uuid().v4();
-    final senderRef = _db.collection('users').doc(senderId);
-
-    try {
-      await _db.runTransaction((txn) async {
-        final senderSnap = await txn.get(senderRef);
-        if (!senderSnap.exists) throw Exception('sender missing');
-        final senderCoins = _asInt(senderSnap.data()?['coins']);
-        if (senderCoins < totalCost) throw Exception('insufficient coins');
-
-        final receiverRef = _db.collection('users').doc(receiverId);
-        final recvSnap = await txn.get(receiverRef);
-
-        final roomRef = _db.collection('rooms').doc(roomId);
-        final roomSnap = await txn.get(roomRef);
-
-        final walletRef = _db.collection('user_wallets').doc(receiverId);
-        final wSnap = await txn.get(walletRef);
-
-        // تسجيل العملية في sent_lucky_gifts
-        txn.set(_db.collection('sent_lucky_gifts').doc(id), {
-          'id': id,
-          'gift_id': giftId,
-          'gift_name': giftName,
-          'gift_name_ar': giftNameAr,
-          'gift_icon_url': giftIconUrl,
-          'sender_id': senderId,
-          'sender_name': senderName,
-          'sender_photo_url': senderPhotoUrl,
-          'receiver_id': receiverId,
-          'receiver_name': receiverName,
-          'room_id': roomId,
-          'value': value,
-          'count': count,
-          'combo_id': comboId ?? id,
-          'combo_count': comboCount,
-          'won_coins': totalWonCoins,
-          'multipliers': multipliers,
-          'is_big_win': isBigWin,
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-        // تسجيل الهدية في sent_gifts أيضاً حتى يظهر شريط الوهب/الاستقبال لجميع أعضاء الغرفة
-        txn.set(_db.collection('sent_gifts').doc(const Uuid().v4()), {
-          'id': const Uuid().v4(),
-          'gift_id': giftId,
-          'gift_name': giftNameAr.isNotEmpty ? giftNameAr : giftName,
-          'animation_asset': giftIconUrl,
-          'sender_id': senderId,
-          'sender_name': senderName,
-          'sender_photo_url': senderPhotoUrl,
-          'receiver_id': receiverId,
-          'receiver_name': receiverName,
-          'room_id': roomId,
-          'value': value,
-          'count': count,
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-        // بث الحدث اللحظي للغرفة عبر room_messages
-        txn.set(_db.collection('room_messages').doc(const Uuid().v4()), {
-          'msg_id': const Uuid().v4(),
-          'room_id': roomId,
-          'sender_uid': senderId,
-          'sender_name': senderName,
-          'type': 'lucky_gift',
-          'text': '$senderName 🍀 $giftNameAr x$count (فاز بـ $totalWonCoins 🪙)',
-          'gift_payload': {
-            'roomId': roomId,
-            'sender': {
-              'id': senderId,
-              'nickname': senderName,
-              'avatar': senderPhotoUrl,
-            },
-            'receiver': {
-              'id': receiverId,
-              'nickname': receiverName,
-            },
-            'gift': {
-              'id': giftId,
-              'giftName': giftName,
-              'giftNameAr': giftNameAr,
-              'coinPrice': value,
-              'giftIconUrl': giftIconUrl,
-              'giftCoverUrl': giftCoverUrl,
-              'giftBgUrl': giftBgUrl,
-              'svgaAnimUrl': svgaAnimUrl,
-            },
-            'combo': {
-              'comboId': comboId ?? id,
-              'comboCount': comboCount,
-              'times': count,
-            },
-            'results': {
-              'multipliers': multipliers,
-              'cards': List.generate(multipliers.length, (i) => {
-                'index': i,
-                'multiplier': multipliers[i],
-                'wonCoins': value * multipliers[i],
-                'giftName': giftNameAr,
-                'giftIcon': giftIconUrl,
-              }),
-              'totalWonCoins': totalWonCoins,
-              'maxMultiplier': maxMultiplier,
-              'isBigWin': isBigWin,
-            },
-          },
-          'created_at': DateTime.now().toIso8601String(),
-        });
-
-        // خصم التكلفة وإيداع أرباح الحظ في محفظة المرسل ذرّياً
-        final sd = senderSnap.data() ?? {};
-        final sentTotal = _asInt(sd['total_gifts_sent']);
-        txn.update(senderRef, {
-          'coins': senderCoins - totalCost + totalWonCoins,
-          'total_gifts_sent': sentTotal + totalCost,
-        });
-
-        if (recvSnap.exists) {
-          final rd = recvSnap.data() ?? {};
-          txn.update(receiverRef, {
-            'diamonds': _asInt(rd['diamonds']) + totalCost,
-            'total_gifts_received': _asInt(rd['total_gifts_received']) + totalCost,
-          });
-        }
-
-        if (roomSnap.exists) {
-          final rm = roomSnap.data() ?? {};
-          txn.update(roomRef, {
-            'total_gifts': _asInt(rm['total_gifts']) + totalCost,
-            'hot_value': _asInt(rm['hot_value']) + totalCost,
-          });
-        }
-
-        if (wSnap.exists) {
-          final wd = wSnap.data() ?? {};
-          txn.update(walletRef, {'diamond_balance': _asInt(wd['diamond_balance']) + totalCost});
-        } else {
-          txn.set(walletRef, {'user_id': receiverId, 'diamond_balance': totalCost, 'gold_balance': 0});
-        }
-      });
-
-      // بث الفوز الكبير عبر جميع الغرف في التطبيق (Global Big Win Broadcast)
-      if (isBigWin) {
-        _db.collection('global_announcements').add({
-          'type': 'lucky_big_win',
-          'sender_name': senderName,
-          'gift_name': giftNameAr,
-          'room_id': roomId,
-          'multiplier': maxMultiplier,
-          'total_won': totalWonCoins,
-          'created_at': DateTime.now().toIso8601String(),
-        }).catchError((err) {
-          debugPrint('global_announcements error: $err');
-        });
-      }
-
-      return {
-        'success': true,
-        'wonCoins': totalWonCoins,
-        'multipliers': multipliers,
-        'maxMultiplier': maxMultiplier,
-        'isBigWin': isBigWin,
-      };
-    } catch (e) {
-      debugPrint('sendLuckyGift error: $e');
+      debugPrint('sendLuckyGift: client draw disabled (server-only). Server unreachable: $e');
       return null;
     }
   }
@@ -842,38 +666,6 @@ class FirebaseService {
         .snapshots()
         .where((snap) => snap.docs.isNotEmpty)
         .map((snap) => snap.docs.first.data());
-  }
-
-  List<int> _drawLuckyMultipliers(int count) {
-    final odds = [
-      {'multiplier': 0, 'weight': 650},
-      {'multiplier': 1, 'weight': 200},
-      {'multiplier': 2, 'weight': 90},
-      {'multiplier': 5, 'weight': 40},
-      {'multiplier': 10, 'weight': 15},
-      {'multiplier': 50, 'weight': 4},
-      {'multiplier': 100, 'weight': 1},
-      {'multiplier': 500, 'weight': 1},
-    ];
-
-    final totalWeight = odds.fold<int>(0, (sum, item) => sum + (item['weight'] as int));
-    final random = Random.secure();
-    final results = <int>[];
-
-    for (int c = 0; c < count; c++) {
-      final roll = random.nextInt(totalWeight);
-      int current = 0;
-      int selected = 0;
-      for (final item in odds) {
-        current += (item['weight'] as int);
-        if (roll < current) {
-          selected = item['multiplier'] as int;
-          break;
-        }
-      }
-      results.add(selected);
-    }
-    return results;
   }
 
   Stream<List<gm.SentGiftModel>> sentGiftsStream(String roomId) {

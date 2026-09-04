@@ -19,6 +19,7 @@ export default function GiftsPage() {
     packageCount: 0, sortOrder: 0, categoryId: '',
     nameKey: '', photoKey: '', defaultImage: '',
     isCpGift: false, cpGiftDurationHours: 0,
+    luckyRtp: 85, luckyMaxMultiplier: 100, luckyBurst: true, luckyDisplayMode: 'cards',
   });
   const { t } = useContext(I18nContext);
 
@@ -28,11 +29,11 @@ export default function GiftsPage() {
   };
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => setForm({ id: '', name: '', value: 0, iconAsset: '', animationAsset: '', isVap: false, isLucky: false, isStar: false, isMusic: false, packageCount: 0, sortOrder: 0, categoryId: '', nameKey: '', photoKey: '', defaultImage: '', isCpGift: false, cpGiftDurationHours: 0 });
+  const resetForm = () => setForm({ id: '', name: '', value: 0, iconAsset: '', animationAsset: '', isVap: false, isLucky: false, isStar: false, isMusic: false, packageCount: 0, sortOrder: 0, categoryId: '', nameKey: '', photoKey: '', defaultImage: '', isCpGift: false, cpGiftDurationHours: 0, luckyRtp: 85, luckyMaxMultiplier: 100, luckyBurst: true, luckyDisplayMode: 'cards' });
 
   const handleEdit = (g: GiftModel) => {
     setEditing(g);
-    setForm({ id: g.id, name: g.name, value: g.value, iconAsset: g.iconAsset, animationAsset: g.animationAsset || '', isVap: g.isVap, isLucky: g.isLucky, isStar: g.isStar, isMusic: g.isMusic, packageCount: g.packageCount, sortOrder: g.sortOrder, categoryId: g.categoryId || '', nameKey: g.nameKey || '', photoKey: g.photoKey || '', defaultImage: g.defaultImage || '', isCpGift: g.isCpGift || false, cpGiftDurationHours: g.cpGiftDurationHours || 0 });
+    setForm({ id: g.id, name: g.name, value: g.value, iconAsset: g.iconAsset, animationAsset: g.animationAsset || '', isVap: g.isVap, isLucky: g.isLucky, isStar: g.isStar, isMusic: g.isMusic, packageCount: g.packageCount, sortOrder: g.sortOrder, categoryId: g.categoryId || '', nameKey: g.nameKey || '', photoKey: g.photoKey || '', defaultImage: g.defaultImage || '', isCpGift: g.isCpGift || false, cpGiftDurationHours: g.cpGiftDurationHours || 0, luckyRtp: g.luckyRtp ?? 85, luckyMaxMultiplier: g.luckyMaxMultiplier ?? 100, luckyBurst: g.luckyBurst ?? true, luckyDisplayMode: g.luckyDisplayMode ?? 'cards' });
     setShowAdd(false);
   };
 
@@ -136,27 +137,27 @@ export default function GiftsPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   <div>
                     <label className="block text-[10px] text-slate-400 font-bold mb-1">نسبة العائد (RTP %)</label>
-                    <input type="number" defaultValue={85} min={50} max={100} placeholder="85%" className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold" />
+                    <input type="number" min={50} max={100} placeholder="85" value={form.luckyRtp ?? 85} onChange={e => updateField('luckyRtp', Number(e.target.value))} className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold" />
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-400 font-bold mb-1">أعلى مضاعف (Max Mult)</label>
-                    <select className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
-                      <option value="500">500X (الافتراضي)</option>
-                      <option value="1000">1000X (أسطوري)</option>
-                      <option value="250">250X (متوسط)</option>
+                    <select value={form.luckyMaxMultiplier ?? 100} onChange={e => updateField('luckyMaxMultiplier', Number(e.target.value))} className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
                       <option value="100">100X (محافظ)</option>
+                      <option value="250">250X (متوسط)</option>
+                      <option value="500">500X (قوي)</option>
+                      <option value="1000">1000X (أسطوري)</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-400 font-bold mb-1">انفجار الحظ (Burst)</label>
-                    <select className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
+                    <select value={form.luckyBurst === false ? 'false' : 'true'} onChange={e => updateField('luckyBurst', e.target.value === 'true')} className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
                       <option value="true">مفعل (Auto Burst)</option>
                       <option value="false">معطل</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-400 font-bold mb-1">طريقة العرض في الروم</label>
-                    <select className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
+                    <select value={form.luckyDisplayMode ?? 'cards'} onChange={e => updateField('luckyDisplayMode', e.target.value)} className="w-full bg-[#121214] border border-emerald-500/30 rounded-lg p-1.5 text-xs text-emerald-300 font-bold">
                       <option value="cards">كروت 3D + SVGA + بانر</option>
                       <option value="svga">SVGA فقط</option>
                     </select>

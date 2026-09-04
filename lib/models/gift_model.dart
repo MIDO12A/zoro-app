@@ -21,6 +21,10 @@ class GiftModel {
   final String? categoryId;
   final bool isCpGift;
   final int cpGiftDurationHours;
+  final int luckyRtp;
+  final int luckyMaxMultiplier;
+  final bool luckyBurst;
+  final String luckyDisplayMode;
 
   const GiftModel({
     required this.id,
@@ -42,6 +46,10 @@ class GiftModel {
     this.categoryId,
     this.isCpGift = false,
     this.cpGiftDurationHours = 0,
+    this.luckyRtp = 85,
+    this.luckyMaxMultiplier = 100,
+    this.luckyBurst = true,
+    this.luckyDisplayMode = 'cards',
   });
 
   GiftModel copyWith({
@@ -64,6 +72,10 @@ class GiftModel {
     String? categoryId,
     bool? isCpGift,
     int? cpGiftDurationHours,
+    int? luckyRtp,
+    int? luckyMaxMultiplier,
+    bool? luckyBurst,
+    String? luckyDisplayMode,
   }) {
     return GiftModel(
       id: id ?? this.id,
@@ -85,6 +97,10 @@ class GiftModel {
       categoryId: categoryId ?? this.categoryId,
       isCpGift: isCpGift ?? this.isCpGift,
       cpGiftDurationHours: cpGiftDurationHours ?? this.cpGiftDurationHours,
+      luckyRtp: luckyRtp ?? this.luckyRtp,
+      luckyMaxMultiplier: luckyMaxMultiplier ?? this.luckyMaxMultiplier,
+      luckyBurst: luckyBurst ?? this.luckyBurst,
+      luckyDisplayMode: luckyDisplayMode ?? this.luckyDisplayMode,
     );
   }
 
@@ -108,6 +124,10 @@ class GiftModel {
         if (categoryId != null) 'category_id': categoryId,
         'is_cp_gift': isCpGift,
         'cp_gift_duration_hours': cpGiftDurationHours,
+        'lucky_rtp': luckyRtp,
+        'lucky_max_multiplier': luckyMaxMultiplier,
+        'lucky_burst': luckyBurst,
+        'lucky_display_mode': luckyDisplayMode,
       };
 
   factory GiftModel.fromMap(Map<String, dynamic> map) => GiftModel(
@@ -130,6 +150,10 @@ class GiftModel {
         categoryId: map['category_id']?.toString(),
         isCpGift: (map['is_cp_gift'] ?? false) as bool,
         cpGiftDurationHours: (map['cp_gift_duration_hours'] ?? 0).toInt(),
+        luckyRtp: (map['lucky_rtp'] ?? map['rtp'] ?? 85).toInt(),
+        luckyMaxMultiplier: (map['lucky_max_multiplier'] ?? map['max_multiplier'] ?? 100).toInt(),
+        luckyBurst: (map['lucky_burst'] ?? true) as bool,
+        luckyDisplayMode: map['lucky_display_mode']?.toString() ?? 'cards',
       );
 }
 

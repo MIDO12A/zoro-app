@@ -78,6 +78,10 @@ export interface GiftModel {
   categoryId?: string;
   isCpGift?: boolean;
   cpGiftDurationHours?: number;
+  luckyRtp?: number;
+  luckyMaxMultiplier?: number;
+  luckyBurst?: boolean;
+  luckyDisplayMode?: string;
 }
 
 export interface SentGiftModel {

@@ -4,20 +4,52 @@ import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
-// Odds table mirrors the client's legacy `_drawLuckyMultipliers` weights so the
-// economy stays consistent, but the draw itself now runs ONLY on the server.
-const ODDS: { multiplier: number; weight: number }[] = [
-  { multiplier: 0, weight: 650 },
-  { multiplier: 1, weight: 200 },
-  { multiplier: 2, weight: 90 },
-  { multiplier: 5, weight: 40 },
-  { multiplier: 10, weight: 15 },
-  { multiplier: 50, weight: 4 },
-  { multiplier: 100, weight: 1 },
-  { multiplier: 500, weight: 1 },
-];
+/**
+ * Build a multiplier distribution whose EXACT expected value equals the
+ * configured RTP (Return To Player).
+ *
+ *   MYSTERY: Σ P(m)·m = RTP             (m = multiplier, "1" = tie, "0" = loss)
+ *   P(m) = w_m / Z for winning multis; P(0) = w_0 / Z.
+ *
+ * Base weights decay as w(m) = m^-1.15 (heavy on small wins, thin on the
+ * jackpot). We then solve for w₀ = (Σw·m)/RTP − Σw so the sum hits RTP exactly,
+ * and normalize Z = w₀ + Σw. This makes the house edge mathematical — the only
+ * thing that matters — instead of a hand-tuned weight table.
+ */
+function buildOdds(maxMultiplier: number, rtpPercent: number) {
+  const rtp = Math.max(0.5, Math.min(1.0, (rtpPercent || 85) / 100));
+  const candidates = [1, 2, 5, 10, 50, 100, 500, 1000];
+  const multis = candidates.filter((m) => m <= maxMultiplier);
+  if (multis.length === 0) multis.push(1);
 
-const TOTAL_WEIGHT = ODDS.reduce((sum, o) => sum + o.weight, 0);
+  const weights = multis.map((m) => Math.pow(m, -1.15));
+  const sumW = weights.reduce((s, w) => s + w, 0);
+  const sumWM = multis.reduce((s, m, i) => s + m * weights[i], 0);
+
+  // Solve w₀ = sumWM/rtp − sumW ; clamp at 0 so a crazy-high RTP just yields
+  // "near-certain tie" instead of a negative loss bucket.
+  let w0 = sumWM / rtp - sumW;
+  if (!isFinite(w0) || w0 < 0) w0 = 0;
+
+  const Z = w0 + sumW;
+  const odds = multis.map((m, i) => ({
+    multiplier: m,
+    probability: weights[i] / Z,
+  }));
+  odds.push({ multiplier: 0, probability: w0 / Z });
+
+  return odds;
+}
+
+function drawFromOdds(odds: { multiplier: number; probability: number }[]): number {
+  const roll = secureRandomInt(1000000) / 1000000;
+  let cumulative = 0;
+  for (const item of odds) {
+    cumulative += item.probability;
+    if (roll < cumulative) return item.multiplier;
+  }
+  return 0;
+}
 
 function secureRandomInt(max: number): number {
   const bytes = new Uint32Array(1);
@@ -30,21 +62,11 @@ function secureRandomInt(max: number): number {
   return bytes[0] % max;
 }
 
-function drawMultipliers(count: number): number[] {
+function drawMultipliers(count: number, odds: { multiplier: number; probability: number }[]): number[] {
   const clamped = count < 4 ? 4 : count > 8 ? 8 : count;
   const results: number[] = [];
   for (let c = 0; c < clamped; c++) {
-    const roll = secureRandomInt(TOTAL_WEIGHT);
-    let current = 0;
-    let selected = ODDS[0].multiplier;
-    for (const item of ODDS) {
-      current += item.weight;
-      if (roll < current) {
-        selected = item.multiplier;
-        break;
-      }
-    }
-    results.push(selected);
+    results.push(drawFromOdds(odds));
   }
   return results;
 }
@@ -55,13 +77,32 @@ function asInt(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+// ── Lightweight per-user rate limiter (in-memory; clear on process restart).
+// Limit: 12 draws / 60s per user. Blocks bot bursts without blocking play.
+const hitWindow = new Map<string, number[]>();
+const RATE_LIMIT = 12;
+const RATE_WINDOW_MS = 60_000;
+
+function rateLimited(uid: string): boolean {
+  const now = Date.now();
+  const hits = (hitWindow.get(uid) ?? []).filter((t) => now - t < RATE_WINDOW_MS);
+  if (hits.length >= RATE_LIMIT) {
+    hitWindow.set(uid, hits);
+    return true;
+  }
+  hits.push(now);
+  hitWindow.set(uid, hits);
+  return false;
+}
+
 /**
  * POST /api/v1/lucky/draw
  * Server-authoritative lucky gift draw:
- *  - reads the verified gift config (price + asset URLs)
- *  - draws multipliers server-side
- *  - deducts coins from sender, credits winnings, credits receiver diamonds
- *  - writes sent_lucky_gifts + room_messages (with gift_payload for the strip)
+ *  - requires the gift to be flagged is_lucky
+ *  - builds a probability table whose EV == configured RTP (per gift)
+ *  - draws multipliers server-side with a per-user rate limiter
+ *  - deducts coins from sender, credits winnings back to the SENDER
+ *  - broadcasts the strip to the whole room via room_messages
  * All inside ONE Firestore transaction via Admin SDK.
  */
 router.post('/draw', authenticate, async (req: Request, res: Response) => {
@@ -73,8 +114,13 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
 
   const { giftId, receiverId, roomId, count: rawCount, comboCount, comboId: rawComboId } = req.body ?? {};
   const count = Math.max(1, Math.min(100, Number(rawCount) || 1));
-  if (!giftId || !receiverId || !roomId) {
-    res.status(400).json({ error: 'Missing giftId/receiverId/roomId' });
+  if (!giftId || !roomId) {
+    res.status(400).json({ error: 'Missing giftId/roomId' });
+    return;
+  }
+
+  if (rateLimited(senderId)) {
+    res.status(429).json({ error: 'rate_limited' });
     return;
   }
 
@@ -93,19 +139,25 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
       if (!giftSnap.exists) throw new Error('gift_not_found');
       const gift = giftSnap.data() ?? {};
       if (gift.is_active === false) throw new Error('gift_inactive');
+      if (gift.is_lucky !== true) throw new Error('not_a_lucky_gift');
 
       const value = asInt(gift.value);
       if (value <= 0) throw new Error('invalid_gift_value');
+
+      // Per-gift RTP + max multiplier (admin-controlled, defaults 85% / 100X).
+      const rtp = asInt(gift.lucky_rtp ?? gift.rtp ?? 85);
+      const maxMult = asInt(gift.lucky_max_multiplier ?? gift.max_multiplier ?? 100);
+      const odds = buildOdds(maxMult, rtp);
 
       const totalCost = value * count;
       if (!senderSnap.exists) throw new Error('sender_not_found');
       const coins = asInt(senderSnap.data()?.coins);
       if (coins < totalCost) throw new Error('insufficient_coins');
 
-      const multipliers = drawMultipliers(count);
+      const multipliers = drawMultipliers(count, odds);
       const totalWonCoins = multipliers.reduce((s, m) => s + value * m, 0);
       const isBigWin = multipliers.some((m) => m >= 50);
-      const maxMultiplier = multipliers.length
+      const maxWinner = multipliers.length
         ? multipliers.reduce((a, b) => (a > b ? a : b), 0)
         : 0;
 
@@ -128,11 +180,13 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
         sender_id: senderId,
         sender_name: String(senderSnapData.name ?? ''),
         sender_photo_url: String(senderSnapData.photo_url ?? senderSnapData.photoUrl ?? ''),
-        receiver_id: receiverId,
+        receiver_id: String(receiverId ?? ''),
         receiver_name: '',
         room_id: roomId,
         value,
         count,
+        rtp,
+        max_multiplier: maxMult,
         combo_id: String(comboId ?? id),
         combo_count: Math.max(1, Number(comboCount) || 1),
         won_coins: totalWonCoins,
@@ -149,7 +203,7 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
           nickname: String(senderSnapData.name ?? ''),
           avatar: String(senderSnapData.photo_url ?? senderSnapData.photoUrl ?? ''),
         },
-        receiver: { id: receiverId, nickname: '' },
+        receiver: { id: String(receiverId ?? ''), nickname: '' },
         gift: {
           id: giftId,
           giftName,
@@ -175,7 +229,7 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
             giftIcon: giftIconUrl,
           })),
           totalWonCoins,
-          maxMultiplier,
+          maxMultiplier: maxWinner,
           isBigWin,
         },
       };
@@ -190,18 +244,10 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
         created_at: new Date().toISOString(),
       });
 
-      // Deduct + credit atomically.
+      // Deduct + credit back to the SENDER atomically (winner = sender).
       txn.update(senderRef, {
         coins: coins - totalCost + totalWonCoins,
         total_gifts_sent: asInt(senderSnapData.total_gifts_sent) + totalCost,
-      });
-
-      const receiverRef = db.collection('users').doc(String(receiverId));
-      const receiverSnap = await txn.get(receiverRef);
-      const receiverSnapData = receiverSnap.data() ?? {};
-      txn.update(receiverRef, {
-        diamonds: asInt(receiverSnapData.diamonds) + totalCost,
-        total_gifts_received: asInt(receiverSnapData.total_gifts_received) + totalCost,
       });
 
       const roomRef = db.collection('rooms').doc(String(roomId));
@@ -219,7 +265,7 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
         id,
         wonCoins: totalWonCoins,
         multipliers,
-        maxMultiplier,
+        maxMultiplier: maxWinner,
         isBigWin,
       };
     });
