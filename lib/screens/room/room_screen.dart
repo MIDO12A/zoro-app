@@ -52,6 +52,8 @@ import '../notifications/notifications_screen.dart';
 import '../user_profile/user_profile_screen.dart';
 import '../report/report_room_screen.dart';
 import '../report/report_user_screen.dart';
+import '../../features/lucky_gift/services/lucky_gift_service.dart';
+import '../../features/lucky_gift/models/lucky_gift_model.dart';
 
 /// Helper to navigate to a room, exiting any minimized room first
 Future<void> navigateToRoom(
@@ -404,6 +406,17 @@ class _RoomScreenState extends State<RoomScreen> {
             ..addAll(msgs.where((m) => m.timestamp >= filterTime));
           _msgCount = _chatMessages.length;
         });
+        // عرض هدايا الحظ (lucky_gift) لكافة أعضاء الغرفة لحظياً
+        for (final m in msgs) {
+          if (m.type == 'lucky_gift' &&
+              m.timestamp >= filterTime &&
+              m.giftPayload != null) {
+            try {
+              final data = LuckyGiftBroadcastData.fromJson(m.giftPayload!);
+              LuckyGiftService().enqueueLuckyGift(context, data);
+            } catch (_) {}
+          }
+        }
         if (_chatScroll.hasClients) {
           _chatScroll.animateTo(
             _chatScroll.position.maxScrollExtent,

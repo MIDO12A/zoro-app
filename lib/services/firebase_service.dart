@@ -569,7 +569,8 @@ class FirebaseService {
     String? comboId,
     int comboCount = 1,
   }) async {
-    final multipliers = _drawLuckyMultipliers(count);
+    final cardCount = count < 4 ? 4 : (count > 8 ? 8 : count);
+    final multipliers = _drawLuckyMultipliers(cardCount);
     int totalWonCoins = 0;
     for (final m in multipliers) {
       totalWonCoins += (value * m);
@@ -617,6 +618,23 @@ class FirebaseService {
           'won_coins': totalWonCoins,
           'multipliers': multipliers,
           'is_big_win': isBigWin,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        // تسجيل الهدية في sent_gifts أيضاً حتى يظهر شريط الوهب/الاستقبال لجميع أعضاء الغرفة
+        txn.set(_db.collection('sent_gifts').doc(const Uuid().v4()), {
+          'id': const Uuid().v4(),
+          'gift_id': giftId,
+          'gift_name': giftNameAr.isNotEmpty ? giftNameAr : giftName,
+          'animation_asset': giftIconUrl,
+          'sender_id': senderId,
+          'sender_name': senderName,
+          'sender_photo_url': senderPhotoUrl,
+          'receiver_id': receiverId,
+          'receiver_name': receiverName,
+          'room_id': roomId,
+          'value': value,
+          'count': count,
           'created_at': DateTime.now().toIso8601String(),
         });
 

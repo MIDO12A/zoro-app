@@ -1171,13 +1171,25 @@ export async function getDashboardBans(): Promise<DashboardBan[]> {
 
 export async function banFromDashboard(uid: string, email: string, reason: string, bannedBy: string) {
   const client = getAdminSupabase() || supabase
-  const { error } = await client.from('dashboard_bans').upsert({ uid, email, reason, banned_by: bannedBy })
-  if (error) throw error
+  // First flag the `users` doc (what the Flutter splash screen reads) — this
+  // is the actual enforcement point. Sync the record afterwards.
+  await updateUser(uid, { banned: true, banReason: reason })
+  try {
+    const { error } = await client.from('dashboard_bans').upsert({ uid, email, reason, banned_by: bannedBy })
+    if (error) console.warn('dashboard_bans record failed:', error)
+  } catch (e) {
+    console.warn('dashboard_bans record failed:', e)
+  }
 }
 
 export async function unbanFromDashboard(uid: string) {
   const client = getAdminSupabase() || supabase
-  await client.from('dashboard_bans').delete().eq('uid', uid)
+  await updateUser(uid, { banned: false, banReason: '' })
+  try {
+    await client.from('dashboard_bans').delete().eq('uid', uid)
+  } catch (e) {
+    console.warn('dashboard_bans delete failed:', e)
+  }
 }
 
 export async function isBannedFromDashboard(uid: string): Promise<boolean> {

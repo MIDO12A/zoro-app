@@ -9,6 +9,7 @@ class MessageModel {
   final int timestamp;
   final String? imageUrl;
   final String? activeBubble;
+  final Map<String, dynamic>? giftPayload;
 
   MessageModel({
     this.msgId = '',
@@ -21,9 +22,11 @@ class MessageModel {
     this.timestamp = 0,
     this.imageUrl,
     this.activeBubble,
+    this.giftPayload,
   });
 
   factory MessageModel.fromMap(Map map) {
+    final payloadRaw = map['gift_payload'];
     return MessageModel(
       msgId: map['msg_id']?.toString() ?? '',
       roomId: map['room_id']?.toString() ?? '',
@@ -38,6 +41,9 @@ class MessageModel {
                   ?.millisecondsSinceEpoch ?? 0,
       imageUrl: map['image_url']?.toString(),
       activeBubble: map['active_bubble']?.toString(),
+      giftPayload: payloadRaw is Map
+          ? Map<String, dynamic>.from(payloadRaw)
+          : null,
     );
   }
 
@@ -54,5 +60,6 @@ class MessageModel {
             : null,
         'image_url': imageUrl,
         'active_bubble': activeBubble,
+        if (giftPayload != null) 'gift_payload': giftPayload,
       };
 }

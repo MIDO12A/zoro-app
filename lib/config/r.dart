@@ -19,6 +19,7 @@ AssetType detectAssetType(String url) {
       case 'mp4': return AssetType.mp4;
       case 'webp': return AssetType.webp;
       case 'gif': return AssetType.gif;
+      case 'apng': return AssetType.gif;
       case 'png': return AssetType.png;
     }
   }
@@ -28,6 +29,7 @@ AssetType detectAssetType(String url) {
   if (clean.endsWith('.mp4')) return AssetType.mp4;
   if (clean.endsWith('.webp')) return AssetType.webp;
   if (clean.endsWith('.gif')) return AssetType.gif;
+  if (clean.endsWith('.apng')) return AssetType.gif;
   if (clean.endsWith('.png')) return AssetType.png;
   if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return AssetType.png;
   if (clean.contains('.svga')) return AssetType.svga;

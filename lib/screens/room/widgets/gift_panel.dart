@@ -9,7 +9,6 @@ import '../../../models/gift_category_model.dart';
 import '../../../providers/user_provider.dart';
 import '../../../services/supabase_service.dart';
 import '../../../services/media_prefetch_service.dart';
-import '../../../features/lucky_gift/services/lucky_gift_service.dart';
 import 'svga_player.dart';
 import 'vap_player.dart';
 
@@ -516,25 +515,37 @@ class _GiftPanelState extends State<GiftPanel> {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.currentUser;
 
+    final isLuckyGift = gift.isLucky ||
+        (gift.categoryId != null &&
+            (gift.categoryId!.toLowerCase().contains('lucky') ||
+                gift.categoryId!.contains('حظ') ||
+                _categories.any((c) =>
+                    c.id == gift.categoryId &&
+                    (c.name.contains('حظ') ||
+                        c.name.toLowerCase().contains('lucky')))));
+
     if (widget.onSend != null) {
       widget.onSend!();
     }
-    final anim = gift.animationAsset;
-    final defImg = gift.defaultImage;
-    final effectiveAsset = (anim != null && anim.isNotEmpty) ? anim : gift.iconAsset;
-    widget.onSendGift?.call(effectiveAsset);
-    widget.onSendGiftExtended?.call({
-      'animationAsset': effectiveAsset,
-      'nameKey': gift.nameKey,
-      'photoKey': gift.photoKey,
-      'defaultImage': (defImg != null && defImg.isNotEmpty) ? defImg : gift.iconAsset,
-      'senderName': currentUser?.name ?? '',
-      'senderPhotoUrl': currentUser?.photoUrl ?? '',
-      'receiverId': _selectedUserId,
-      'giftValue': gift.value,
-      'giftCount': widget.selectedCount,
-      'categoryId': gift.categoryId,
-    });
+    // هدايا الحظ تُعرض عبر نظام البث اللحظي (lucky_gift)، لذا لا نشغّل أنيميشن الهدية العادي هنا
+    if (!isLuckyGift) {
+      final anim = gift.animationAsset;
+      final defImg = gift.defaultImage;
+      final effectiveAsset = (anim != null && anim.isNotEmpty) ? anim : gift.iconAsset;
+      widget.onSendGift?.call(effectiveAsset);
+      widget.onSendGiftExtended?.call({
+        'animationAsset': effectiveAsset,
+        'nameKey': gift.nameKey,
+        'photoKey': gift.photoKey,
+        'defaultImage': (defImg != null && defImg.isNotEmpty) ? defImg : gift.iconAsset,
+        'senderName': currentUser?.name ?? '',
+        'senderPhotoUrl': currentUser?.photoUrl ?? '',
+        'receiverId': _selectedUserId,
+        'giftValue': gift.value,
+        'giftCount': widget.selectedCount,
+        'categoryId': gift.categoryId,
+      });
+    }
 
     var allOk = true;
     if (widget.roomId.isNotEmpty && currentUser != null) {
@@ -542,53 +553,56 @@ class _GiftPanelState extends State<GiftPanel> {
       final receivers = _selectedUserId != null
           ? [{'id': _selectedUserId, 'name': _selectedUserName ?? ''}]
           : widget.targetUsers;
-      
-      for (final r in receivers) {
-        final ok = await fb.sendGift(
-          roomId: widget.roomId,
-          giftId: gift.id,
-          giftName: gift.name,
-          animationAsset: gift.animationAsset,
-          senderId: currentUser.uid,
-          senderName: currentUser.name,
-          senderPhotoUrl: currentUser.photoUrl,
-          receiverId: r['id']?.toString() ?? '',
-          receiverName: r['name']?.toString() ?? '',
-          value: gift.value,
-          count: widget.selectedCount,
-        );
-        if (!ok) allOk = false;
-        final isLuckyGift = gift.isLucky ||
-            (gift.categoryId != null &&
-                (gift.categoryId!.toLowerCase().contains('lucky') ||
-                    gift.categoryId!.contains('حظ') ||
-                    _categories.any((c) =>
-                        c.id == gift.categoryId &&
-                        (c.name.contains('حظ') ||
-                            c.name.toLowerCase().contains('lucky')))));
 
-        if (ok && isLuckyGift) {
-          LuckyGiftService().executeLuckyGiftDraw(
-            context: context,
+      for (final r in receivers) {
+        final receiverId = r['id']?.toString() ?? '';
+        final receiverName = r['name']?.toString() ?? '';
+        bool ok;
+        if (isLuckyGift) {
+          final cover = gift.defaultImage ?? gift.iconAsset;
+          final res = await fb.sendLuckyGift(
             roomId: widget.roomId,
             giftId: gift.id,
             giftName: gift.name,
-            coinPrice: gift.value,
-            iconAsset: gift.iconAsset,
+            giftNameAr: gift.name,
+            giftIconUrl: gift.iconAsset,
+            giftCoverUrl: cover,
+            giftBgUrl: cover,
+            svgaAnimUrl: gift.animationAsset,
             senderId: currentUser.uid,
             senderName: currentUser.name,
-            senderAvatar: currentUser.photoUrl ?? '',
-            receiverName: r['name']?.toString() ?? '',
+            senderPhotoUrl: currentUser.photoUrl,
+            receiverId: receiverId,
+            receiverName: receiverName,
+            value: gift.value,
+            count: widget.selectedCount,
+            comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
+            comboCount: widget.selectedCount,
+          );
+          ok = res != null;
+        } else {
+          ok = await fb.sendGift(
+            roomId: widget.roomId,
+            giftId: gift.id,
+            giftName: gift.name,
+            animationAsset: gift.animationAsset,
+            senderId: currentUser.uid,
+            senderName: currentUser.name,
+            senderPhotoUrl: currentUser.photoUrl,
+            receiverId: receiverId,
+            receiverName: receiverName,
+            value: gift.value,
             count: widget.selectedCount,
           );
         }
+        if (!ok) allOk = false;
         if (ok && gift.isCpGift) {
           await CpService.sendGiftAndLink(
             giftId: gift.id,
             senderId: currentUser.uid,
             senderName: currentUser.name,
-            receiverId: r['id']?.toString() ?? '',
-            receiverName: r['name']?.toString() ?? '',
+            receiverId: receiverId,
+            receiverName: receiverName,
             giftName: gift.name,
             giftValue: gift.value,
           );
@@ -789,7 +803,7 @@ class GiftSvgaOverlay extends StatelessWidget {
     final screenSize = MediaQuery.of(context).size;
     final aa = animationAsset;
 
-    final isImg = aa != null && (aa.endsWith('.png') || aa.endsWith('.webp') || aa.endsWith('.jpg') || aa.endsWith('.jpeg'));
+    final isImg = aa != null && isImageType(aa);
     final displayImg = isImg ? aa : (defaultImageUrl != null && defaultImageUrl!.isNotEmpty ? defaultImageUrl : null);
 
     return Positioned.fill(
@@ -884,6 +898,8 @@ class _ImageGiftOverlayState extends State<_ImageGiftOverlay>
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final giftSize = (screenSize.width * 0.5).clamp(160.0, 340.0);
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (context, child) {
@@ -892,21 +908,25 @@ class _ImageGiftOverlayState extends State<_ImageGiftOverlay>
           child: Transform.scale(
             scale: _scale.value,
             child: Container(
-              width: 220,
-              height: 220,
+              width: giftSize,
+              height: giftSize,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.amber.withValues(alpha: 0.4),
                     blurRadius: 30,
-                    spreadRadius: 10,
+                    spreadRadius: 6,
                   ),
                 ],
               ),
+              clipBehavior: Clip.antiAlias,
               child: Image(
                 image: R.cachedImage(widget.imageUrl),
                 fit: BoxFit.contain,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.card_giftcard, size: 96, color: Colors.amber),
               ),
             ),
           ),

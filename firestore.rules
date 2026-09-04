@@ -116,5 +116,11 @@ service cloud.firestore {
       allow create: if signedIn();
       allow read, delete: if isAdmin();
     }
+
+    // ── حظر لوحة التحكم (سجل/إدارة الحظر على مستوى المنصة) ───────────
+    match /dashboard_bans/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
   }
 }
