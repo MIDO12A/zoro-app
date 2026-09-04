@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../config/database';
 import { authenticate } from '../middleware/auth';
 import { evaluateHostTargets } from './hostTargets';
+import type { DocumentReference } from '@google-cloud/firestore';
 
 const router = Router();
 
@@ -40,11 +41,36 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
   try {
     const giftRef = db.collection('gifts').doc(giftIdStr);
     const senderRef = db.collection('users').doc(senderId);
+    const receiverRef = db.collection('users').doc(receiverIdStr);
+    const roomRef = db.collection('rooms').doc(roomIdStr);
+    const walletRef = db.collection('user_wallets').doc(receiverIdStr);
+
+    // Resolve the receiver's agency membership query OUTSIDE the transaction
+    // (queries can NOT run inside a transaction), then read its doc via txn.get.
+    let agencyMemberRef: DocumentReference | null = null;
+    try {
+      const memberQs = await db.collection('host_agency_members')
+        .where('user_id', '==', receiverIdStr)
+        .where('status', '==', 'active')
+        .limit(1)
+        .get();
+      if (!memberQs.empty) agencyMemberRef = memberQs.docs[0].ref;
+    } catch (e) {
+      console.error('[gifts] agency member lookup failed:', e);
+    }
 
     const result = await db.runTransaction(async (txn) => {
-      const [giftSnap, senderSnap] = await Promise.all([
+      // ── ALL READS FIRST ──
+      // Firestore transactions forbid ANY read after the first write. Doing
+      // reads after writes silently cancelled every gift transaction, so coins
+      // were never deducted (same bug that hit the legacy client send).
+      const [giftSnap, senderSnap, receiverSnap, roomSnap, wSnap, mSnap] = await Promise.all([
         txn.get(giftRef),
         txn.get(senderRef),
+        txn.get(receiverRef),
+        txn.get(roomRef),
+        txn.get(walletRef),
+        agencyMemberRef ? txn.get(agencyMemberRef) : Promise.resolve(null),
       ]);
 
       if (!giftSnap.exists) throw new Error('gift_not_found');
@@ -61,11 +87,16 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
       const coins = asInt(senderData.coins);
       if (coins < totalCost) throw new Error('insufficient_coins');
 
+      const receiverData = receiverSnap.exists ? (receiverSnap.data() ?? {}) : {};
+      const roomData = roomSnap.exists ? (roomSnap.data() ?? {}) : {};
+      const wData = wSnap && wSnap.exists ? (wSnap.data() ?? {}) : ({} as Record<string, any>);
+
       const id = `${Date.now()}_${senderId}_${giftIdStr}`;
       const giftName = String(gift.name ?? '');
       const giftNameAr = String(gift.name_ar ?? gift.name ?? '');
       const iconUrl = String(gift.icon_url ?? gift.animation_asset ?? '');
 
+      // ── THEN ALL WRITES ──
       txn.set(db.collection('sent_gifts').doc(id), {
         id,
         gift_id: giftIdStr,
@@ -98,45 +129,30 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
         total_gifts_sent: asInt(senderData.total_gifts_sent) + totalCost,
       });
 
-      const receiverRef = db.collection('users').doc(receiverIdStr);
-      const receiverSnap = await txn.get(receiverRef);
       if (receiverSnap.exists) {
-        const rd = receiverSnap.data() ?? {};
         txn.update(receiverRef, {
-          diamonds: asInt(rd.diamonds) + totalCost,
-          total_gifts_received: asInt(rd.total_gifts_received) + totalCost,
+          diamonds: asInt(receiverData.diamonds) + totalCost,
+          total_gifts_received: asInt(receiverData.total_gifts_received) + totalCost,
         });
       }
 
-      const roomRef = db.collection('rooms').doc(roomIdStr);
-      const roomSnap = await txn.get(roomRef);
       if (roomSnap.exists) {
-        const rm = roomSnap.data() ?? {};
         txn.update(roomRef, {
-          total_gifts: asInt(rm.total_gifts) + totalCost,
-          hot_value: asInt(rm.hot_value) + totalCost,
+          total_gifts: asInt(roomData.total_gifts) + totalCost,
+          hot_value: asInt(roomData.hot_value) + totalCost,
         });
       }
 
-      const walletRef = db.collection('user_wallets').doc(receiverIdStr);
-      const wSnap = await txn.get(walletRef);
       if (wSnap.exists) {
-        const wd = wSnap.data() ?? {};
-        txn.update(walletRef, { diamond_balance: asInt(wd.diamond_balance) + totalCost });
+        txn.update(walletRef, { diamond_balance: asInt(wData.diamond_balance) + totalCost });
       } else {
         txn.set(walletRef, { user_id: receiverIdStr, diamond_balance: totalCost, gold_balance: 0 });
       }
 
       // Host agency member credit (mirrors legacy client behaviour).
-      const memberQs = await db.collection('host_agency_members')
-        .where('user_id', '==', receiverIdStr)
-        .where('status', '==', 'active')
-        .limit(1)
-        .get();
-      if (!memberQs.empty) {
-        const mRef = memberQs.docs[0].ref;
-        const md = memberQs.docs[0].data() ?? {};
-        txn.update(mRef, {
+      if (agencyMemberRef && mSnap && mSnap.exists) {
+        const md = mSnap.data() ?? {};
+        txn.update(agencyMemberRef, {
           diamonds_available: asInt(md.diamonds_available) + totalCost,
           diamonds_earned_monthly: asInt(md.diamonds_earned_monthly) + totalCost,
           diamonds_earned_cumulative: asInt(md.diamonds_earned_cumulative) + totalCost,

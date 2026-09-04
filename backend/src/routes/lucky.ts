@@ -129,11 +129,17 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
   try {
     const giftRef = db.collection('gifts').doc(String(giftId));
     const senderRef = db.collection('users').doc(senderId);
+    const roomRef = db.collection('rooms').doc(String(roomId));
 
     const result = await db.runTransaction(async (txn) => {
-      const [senderSnap, giftSnap] = await Promise.all([
+      // ── ALL READS FIRST ──
+      // Firestore transactions forbid ANY read after the first write.
+      // Reading roomSnap after the writes below cancelled the whole
+      // transaction (rolled back), so coins were never deducted/credited.
+      const [senderSnap, giftSnap, roomSnap] = await Promise.all([
         txn.get(senderRef),
         txn.get(giftRef),
+        txn.get(roomRef),
       ]);
 
       if (!giftSnap.exists) throw new Error('gift_not_found');
@@ -250,8 +256,6 @@ router.post('/draw', authenticate, async (req: Request, res: Response) => {
         total_gifts_sent: asInt(senderSnapData.total_gifts_sent) + totalCost,
       });
 
-      const roomRef = db.collection('rooms').doc(String(roomId));
-      const roomSnap = await txn.get(roomRef);
       if (roomSnap.exists) {
         const roomData = roomSnap.data() ?? {};
         txn.update(roomRef, {

@@ -87,6 +87,14 @@ export async function evaluateHostTargets(hostUserId: string): Promise<string[]>
 
     // Run the whole reward in one transaction to stay consistent.
     await db.runTransaction(async (txn) => {
+      // ── ALL READS FIRST ──
+      // Firestore transactions forbid ANY read after the first write.
+      // Reading the agency AFTER txn.set below cancelled the transaction.
+      let agencySnap: any = null;
+      if (commissionRate > 0 && agencyId.length > 0) {
+        agencySnap = await txn.get(db.collection('host_agencies').doc(agencyId));
+      }
+
       txn.set(achievedRef, {
         user_id: hostUserId,
         agency_id: agencyId,
@@ -100,8 +108,7 @@ export async function evaluateHostTargets(hostUserId: string): Promise<string[]>
 
       // Agency owner commission.
       if (commissionRate > 0 && agencyId.length > 0) {
-        const agencySnap = await txn.get(db.collection('host_agencies').doc(agencyId));
-        if (agencySnap.exists) {
+        if (agencySnap && agencySnap.exists) {
           const ownerId = String(agencySnap.data()?.owner_id ?? '');
           if (ownerId.length > 0) {
             const profit = Math.trunc(targetDiamonds * commissionRate);
