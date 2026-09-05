@@ -4,7 +4,7 @@ import {
   Building2, Crown, BarChart3, Award, Handshake,
   TrendingUp, Image, Palette, Bug,
   Bell, Settings, Shield, ChevronLeft, LogOut,   SlidersHorizontal, Grid, Gift as GiftIcon,
-  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket, Phone,
+  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket, Phone, CheckSquare,
 } from 'lucide-react';
 import { logout } from '../lib/auth';
 import { useContext } from 'react';
@@ -17,6 +17,7 @@ const navItems = [
   { to: '/store', icon: Store, label: 'nav.store' },
   { to: '/rooms', icon: DoorOpen, label: 'nav.rooms' },
   { to: '/lucky-gifts', icon: Sparkles, label: 'nav.luckyGifts' },
+  { to: '/tasks-manager', icon: CheckSquare, label: 'مركز المهام والمكافآت' },
   { to: '/unions', icon: Building2, label: 'nav.unions' },
   { to: '/vip', icon: Crown, label: 'nav.vip' },
   { to: '/vip-gifting', icon: GiftIcon, label: 'nav.vipGifting' },

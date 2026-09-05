@@ -42,6 +42,7 @@ import Reports from './pages/Reports';
 import Emojis from './pages/Emojis';
 import RoomBackgrounds from './pages/RoomBackgrounds';
 import LuckyGiftsManager from './pages/LuckyGiftsManager';
+import TasksManager from './pages/TasksManager';
 import t from './lib/i18n';
 
 export default function App() {
@@ -98,6 +99,7 @@ export default function App() {
             <Route path="/store" element={<Store />} />
             <Route path="/rooms" element={<Rooms />} />
             <Route path="/lucky-gifts" element={<LuckyGiftsManager />} />
+            <Route path="/tasks-manager" element={<TasksManager />} />
             <Route path="/unions" element={<Unions />} />
             <Route path="/vip" element={<VIP />} />
             <Route path="/vip-gifting" element={<VIPGifting />} />
