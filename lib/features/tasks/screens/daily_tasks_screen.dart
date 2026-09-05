@@ -220,7 +220,7 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
 
   Widget _buildUserHeader(dynamic user) {
     final coins = user?.coins ?? 0;
-    final exp = user?.exp ?? 0;
+    final exp = user?.experience ?? 0;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
