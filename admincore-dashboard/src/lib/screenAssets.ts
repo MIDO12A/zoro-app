@@ -234,6 +234,23 @@ export const SCREEN_ASSETS: Record<string, { label: string; assets: ScreenAssetE
       { constant: 'splashImgLogo', path: 'assets/mipmap-xxhdpi/splash_img_logo.webp', fullKey: 'assets_mipmap-xxhdpi_splash_img_logo_webp' },
     ],
   },
+  'CP والعلاقات': {
+    label: '💑 CP والعلاقات',
+    assets: [
+      { constant: 'cpRankingTopBg', path: 'assets/cp/cp_ranking_top_bg.webp', fullKey: 'assets_cp_cp_ranking_top_bg_webp' },
+      { constant: 'cpRankingHeartTop1', path: 'assets/cp/ic_cp_ranking_heart_top1.webp', fullKey: 'assets_cp_ic_cp_ranking_heart_top1_webp' },
+      { constant: 'cpRankingMinePanel', path: 'assets/cp/ic_cp_ranking_mine_panel.webp', fullKey: 'assets_cp_ic_cp_ranking_mine_panel_webp' },
+      { constant: 'cpAgencyCharmItemBg', path: 'assets/cp/ic_agency_charm_item_bg.webp', fullKey: 'assets_cp_ic_agency_charm_item_bg_webp' },
+      { constant: 'cpSpaceTabSelectedBg', path: 'assets/cp/ic_cp_space_tab_selected_bg.webp', fullKey: 'assets_cp_ic_cp_space_tab_selected_bg_webp' },
+      { constant: 'cpSpaceTabUnselectedBg', path: 'assets/cp/ic_cp_space_tab_unselected_bg.webp', fullKey: 'assets_cp_ic_cp_space_tab_unselected_bg_webp' },
+      { constant: 'cpSpaceRecordTabSelectedIcon', path: 'assets/cp/ic_cp_space_record_tab_selected_icon.webp', fullKey: 'assets_cp_ic_cp_space_record_tab_selected_icon_webp' },
+      { constant: 'cpSpaceEntranceIcon', path: 'assets/cp/ic_cp_space_entrance_icon.webp', fullKey: 'assets_cp_ic_cp_space_entrance_icon_webp' },
+      { constant: 'cpAddCp', path: 'assets/cp/ic_add_cp.webp', fullKey: 'assets_cp_ic_add_cp_webp' },
+      { constant: 'cpAcceptInvitationDialogBg', path: 'assets/cp/ic_accept_cp_invitation_dialog_bg.webp', fullKey: 'assets_cp_ic_accept_cp_invitation_dialog_bg_webp' },
+      { constant: 'cpRankingDefaultHeader', path: 'assets/cp/ic_cp_ranking_default_header.webp', fullKey: 'assets_cp_ic_cp_ranking_default_header_webp' },
+      { constant: 'cpTabNo', path: 'assets/cp/ic_cp_tab_no.webp', fullKey: 'assets_cp_ic_cp_tab_no_webp' },
+    ],
+  },
 };
 
-export const SCREEN_ORDER = ['الغرفة', 'الشات', 'الاستكشاف', 'حسابي', 'عام', 'التبويبات', 'SVGA', 'Lottie', 'تسجيل الدخول'];
+export const SCREEN_ORDER = ['الغرفة', 'الشات', 'الاستكشاف', 'حسابي', 'CP والعلاقات', 'عام', 'التبويبات', 'SVGA', 'Lottie', 'تسجيل الدخول'];

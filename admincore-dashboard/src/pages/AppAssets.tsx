@@ -230,8 +230,17 @@ export default function AppAssetsPage() {
                     ) : isJson ? (
                       <div className="w-full h-20 flex items-center justify-center bg-black/20 text-[9px] text-slate-500">Lottie Default</div>
                     ) : !entry.path.endsWith('.xml') ? (
-                      <img src={`/${entry.path}`} className="w-full h-20 object-contain bg-black/20"
-                        onError={e => { (e.target as HTMLImageElement).src = ''; }} />
+                      <img
+                        src={`/${entry.path}`}
+                        className="w-full h-20 object-contain bg-black/20"
+                        onError={e => {
+                          const target = e.target as HTMLImageElement;
+                          const fallback = `https://raw.githubusercontent.com/MIDO12A/zoro-app/main/${entry.path}`;
+                          if (target.src !== fallback) {
+                            target.src = fallback;
+                          }
+                        }}
+                      />
                     ) : (
                       <div className="w-full h-20 flex items-center justify-center bg-black/20 text-[9px] text-slate-500">XML Vector</div>
                     )}

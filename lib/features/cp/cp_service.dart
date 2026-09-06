@@ -149,6 +149,7 @@ class CpService {
   static Future<Map<String, dynamic>> sendRequest(
     String receiverId, {
     String? message,
+    int durationHours = 24,
   }) async {
     final sender = _uid;
     if (sender == null) return <String, dynamic>{'error': 'Not authenticated'};
@@ -174,6 +175,7 @@ class CpService {
       'sender_uid': sender,
       'receiver_uid': receiverId,
       'message': message,
+      'duration_hours': durationHours,
       'status': 'pending',
       'created_at': _now(),
     });
@@ -202,6 +204,8 @@ class CpService {
 
     if (accept) {
       final senderUid = req['sender_uid'] as String;
+      final durationHours = (req['duration_hours'] as num?)?.toInt() ?? 24;
+      final expireTime = DateTime.now().add(Duration(hours: durationHours)).toIso8601String();
       await _endActiveCouplesFor(senderUid);
       await _endActiveCouplesFor(receiver);
 
@@ -209,7 +213,9 @@ class CpService {
         'user1_uid': senderUid,
         'user2_uid': receiver,
         'started_at': _now(),
-        'countdown_end': DateTime.now().add(const Duration(days: 30)).toIso8601String(),
+        'countdown_end': expireTime,
+        'expires_at': expireTime,
+        'duration_hours': durationHours,
         'total_score': 0,
         'week_score': 0,
         'month_score': 0,
@@ -310,16 +316,32 @@ class CpService {
       };
     }
 
+    final extraHours = (gift['duration_hours'] as num?)?.toInt() ??
+        ((gift['duration_days'] as num?)?.toInt() != null
+            ? (gift['duration_days'] as num).toInt() * 24
+            : 0);
+
     final batch = _db.batch();
     batch.update(_db.collection('users').doc(sender), <String, dynamic>{
       'coins': FieldValue.increment(-giftValue),
     });
-    batch.update(_db.collection('cp_couples').doc(couple['id']), <String, dynamic>{
+
+    final coupleUpdates = <String, dynamic>{
       'total_score': FieldValue.increment(giftValue),
       'week_score': FieldValue.increment(giftValue),
       'month_score': FieldValue.increment(giftValue),
       'updated_at': _now(),
-    });
+    };
+
+    if (extraHours > 0) {
+      final curExp = _parseDate(couple['expires_at'] ?? couple['countdown_end']) ?? DateTime.now();
+      final baseDate = curExp.isAfter(DateTime.now()) ? curExp : DateTime.now();
+      final newExp = baseDate.add(Duration(hours: extraHours)).toIso8601String();
+      coupleUpdates['countdown_end'] = newExp;
+      coupleUpdates['expires_at'] = newExp;
+    }
+
+    batch.update(_db.collection('cp_couples').doc(couple['id']), coupleUpdates);
     await batch.commit();
 
     await _db.collection('cp_gift_logs').add(<String, dynamic>{
@@ -598,16 +620,25 @@ class CpService {
     return DateTime.tryParse(raw.toString());
   }
 
-  /// Active couple (ended_at is null) where [uid] is a member.
+  /// Active couple (ended_at is null and not expired) where [uid] is a member.
   static Future<Map<String, dynamic>?> _findActiveCoupleFor(String uid) async {
     final results = await Future.wait([
       _db.collection('cp_couples').where('user1_uid', isEqualTo: uid).limit(10).get(),
       _db.collection('cp_couples').where('user2_uid', isEqualTo: uid).limit(10).get(),
     ]);
+    final now = DateTime.now();
     for (final snap in results) {
       for (final doc in snap.docs) {
         final d = doc.data();
         if (d['ended_at'] == null) {
+          final exp = _parseDate(d['expires_at'] ?? d['countdown_end']);
+          if (exp != null && exp.isBefore(now)) {
+            doc.reference.update(<String, dynamic>{
+              'ended_at': _now(),
+              'updated_at': _now(),
+            }).catchError((_) {});
+            continue;
+          }
           d['id'] = doc.id;
           return d;
         }

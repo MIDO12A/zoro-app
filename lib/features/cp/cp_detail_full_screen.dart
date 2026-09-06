@@ -30,6 +30,8 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
   List<Map<String, dynamic>> _rankRewards = [];
   String _rankPeriod = 'daily';
 
+  Map<String, dynamic>? _myCpData;
+
   @override
   void initState() {
     super.initState();
@@ -70,13 +72,16 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
       final results = await Future.wait([
         CpService.getRanking(period: _rankPeriod, limit: 50),
         CpService.getRankRewards(period: _rankPeriod),
+        CpService.getMyData(),
       ]);
       final rankingList = results[0] as List;
       final rewardsList = results[1] as List;
+      final myData = results[2] as Map<String, dynamic>;
       if (mounted) {
         setState(() {
           _ranking = rankingList.cast<Map<String, dynamic>>();
           _rankRewards = rewardsList.cast<Map<String, dynamic>>();
+          _myCpData = myData;
           _isLoading = false;
         });
       }
@@ -94,11 +99,13 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
       final results = await Future.wait([
         CpService.getRanking(period: _rankPeriod, limit: 50),
         CpService.getRankRewards(period: _rankPeriod),
+        CpService.getMyData(),
       ]);
       if (mounted) {
         setState(() {
           _ranking = (results[0] as List).cast<Map<String, dynamic>>();
           _rankRewards = (results[1] as List).cast<Map<String, dynamic>>();
+          _myCpData = results[2] as Map<String, dynamic>;
         });
       }
     } catch (_) {}
@@ -166,22 +173,7 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.more_vert, color: Colors.white),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const CcDisplayScreen()),
-                ),
-                padding: EdgeInsets.zero,
-              ),
-            ),
+            const SizedBox(width: 40),
             const Spacer(),
             const Text(
               'ترتيب',
@@ -617,15 +609,12 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
   Widget _buildTopIcons() {
     return Stack(
       children: [
-        // Left: Tasks
+        // Left: Rules (القواعد)
         Positioned(
           top: MediaQuery.of(context).padding.top + 60,
           left: 12,
           child: GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CpTasksScreen()),
-            ),
+            onTap: _showRulesDialog,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -634,37 +623,6 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
                   width: 48,
                   height: 48,
                   fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'المهام',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Center-right: Rules
-        Positioned(
-          top: MediaQuery.of(context).padding.top + 60,
-          right: 68,
-          child: GestureDetector(
-            onTap: _showRulesDialog,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.rule, color: Colors.white, size: 24),
                 ),
                 const SizedBox(height: 4),
                 const Text(
@@ -679,7 +637,7 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
             ),
           ),
         ),
-        // Right: Rewards
+        // Right: Rewards (المكافآت)
         Positioned(
           top: MediaQuery.of(context).padding.top + 60,
           right: 12,
@@ -717,9 +675,12 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
   Widget _buildBottomPanel(dynamic user) {
     final avatarUrl = user?.photoUrl ?? '';
     final userName = user?.name ?? '---';
-    final cpDays = 0;
-    final partnerAvatar = '';
-    final partnerName = '---';
+    final couple = _myCpData?['couple'] as Map<String, dynamic>?;
+    final hasCp = _myCpData?['has_cp'] == true && couple != null;
+    final partner = couple?['partner'] as Map<String, dynamic>?;
+    final partnerAvatar = hasCp ? (partner?['avatar'] as String? ?? '') : '';
+    final partnerName = hasCp ? (partner?['name'] as String? ?? '---') : 'إضافة CP';
+    final cpDays = hasCp ? (couple?['days_together'] as int? ?? 0) : 0;
 
     return Positioned(
       bottom: 0,
@@ -799,19 +760,26 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
                   GestureDetector(
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const CpSettingsScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => hasCp ? const CpSettingsScreen() : const CcInvitationListScreen(),
+                      ),
                     ),
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
-                        CircleAvatar(
-                          radius: 36,
-                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                          backgroundImage: partnerAvatar.isNotEmpty
-                              ? EncryptedImageProvider(partnerAvatar) as ImageProvider
-                              : const AssetImage('assets/cp/ic_cp_ranking_default_header.webp'),
-                        ),
-                        if (_partnerFrameSvg.isNotEmpty)
+                        partnerAvatar.isNotEmpty
+                            ? CircleAvatar(
+                                radius: 36,
+                                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                                backgroundImage: EncryptedImageProvider(partnerAvatar) as ImageProvider,
+                              )
+                            : Image.asset(
+                                'assets/cp/ic_add_cp.webp',
+                                width: 72,
+                                height: 72,
+                                fit: BoxFit.contain,
+                              ),
+                        if (partnerAvatar.isNotEmpty && _partnerFrameSvg.isNotEmpty)
                           SvgaFrame(svgaPath: _partnerFrameSvg, size: 72),
                       ],
                     ),
