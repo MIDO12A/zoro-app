@@ -57,7 +57,8 @@ dependencies:
   webview_flutter: ^4.10.0
   restart_app: ^1.8.3
   wakelock_plus: ^1.4.0
-  flutter_vap_plugin: ^0.1.6
+  flutter_vap_plugin:
+    path: plugins/flutter_vap_plugin
   path_provider: ^2.1.5
   file_picker: ^8.0.0
   google_fonts: ^6.2.1
