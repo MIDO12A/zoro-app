@@ -160,6 +160,18 @@ class RoomAudioService {
     debugPrint('[RoomAudioService] Publishing state reset');
   }
 
+  /// إيقاف البث فقط لو كان مفعّلاً فعلاً — يمنع نداء native على محرك
+  /// Zego غير المُهيأ (null object reference) حين يخرج المستخدم من المقعد.
+  void stopPublishingIfActive() {
+    if (!_isPublishing) return;
+    try {
+      ZegoExpressEngine.instance.stopPublishingStream();
+    } catch (e) {
+      debugPrint('[RoomAudioService] stopPublishingIfActive failed: $e');
+    }
+    _isPublishing = false;
+  }
+
   /// Pause mic publishing when the app goes to the background to save battery
   /// and avoid Zego SIGSEGV on some devices. Remote audio (listening) keeps
   /// running so the minimized room stays audible.

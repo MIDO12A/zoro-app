@@ -19,7 +19,9 @@ function initApp(): App {
   }
 
   // Local dev: relies on GOOGLE_APPLICATION_CREDENTIALS or gcloud ADC.
-  return initializeApp();
+  // نحدد projectId صراحة حتى يشتغل auth.verifyIdToken (التحقق عبر المفاتيح
+  // العامة) حتى لو لم يُضبط service account في البيئة كاملة.
+  return initializeApp({ projectId: process.env.FIREBASE_PROJECT_ID || 'zeroappzero-e1b4a' });
 }
 
 const app = initApp();

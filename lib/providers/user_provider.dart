@@ -126,14 +126,20 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> _checkExpiredBackpackItems(String uid) async {
     try {
+      // نقرأ بأدنى شروط (user_id فقط) ثم نفلتر المنتهي محلياً — تجنباً لمؤشر
+      // مركب (composite index) لم يُنشأ بعد على user_backpack.
       final qs = await FirebaseFirestore.instance.collection('user_backpack')
           .where('user_id', isEqualTo: uid)
-          .where('expires_at', isLessThan: DateTime.now().toIso8601String())
           .get();
-          
-      if (qs.docs.isNotEmpty) {
+
+      final now = DateTime.now().toIso8601String();
+      final expired = qs.docs
+          .where((d) => (d['expires_at']?.toString() ?? '').compareTo(now) <= 0)
+          .toList();
+
+      if (expired.isNotEmpty) {
         bool frameExpired = false;
-        for (var d in qs.docs) {
+        for (var d in expired) {
           if (d['item_type'] == 'frame' && d['item_id'] == _currentUser?.activeFrame) {
             frameExpired = true;
           }

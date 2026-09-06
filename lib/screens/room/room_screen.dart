@@ -25,7 +25,6 @@ import '../../services/cloudinary_service.dart';
 import '../../services/room_audio_service.dart';
 import '../../services/room_state_service.dart';
 import 'package:uuid/uuid.dart';
-import 'package:zego_express_engine/zego_express_engine.dart';
 import '../../core/supabase_compat.dart';
 import '../../providers/user_provider.dart';
 import 'models/seat_model.dart' hide SeatStyle;
@@ -774,10 +773,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _roomAudio.startPublishing();
       _roomAudio.toggleMic(!currentUserMuted);
     } else {
-      final engine = ZegoExpressEngine.instance;
-      if (engine != null) {
-        engine.stopPublishingStream();
-      }
+      _roomAudio.stopPublishingIfActive();
       _roomAudio.resetPublishingState();
     }
     if (mounted) setState(() {});
