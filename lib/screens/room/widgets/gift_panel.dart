@@ -698,54 +698,102 @@ class _GiftPanelState extends State<GiftPanel> {
               ),
               GestureDetector(
                 onTap: canAfford ? _sendGift : null,
-                child: Container(
-                  width: _comboSeconds > 0 ? 92 : 72,
-                  height: 32,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    gradient: canAfford
-                        ? (_comboSeconds > 0
-                            ? const LinearGradient(
-                                colors: [Color(0xFFFF8800), Color(0xFFFF2255)],
-                              )
-                            : AppColors.giftBtnGradient)
-                        : const LinearGradient(
-                            colors: [Color(0xFF666666), Color(0xFF444444)],
-                          ),
-                    borderRadius: const BorderRadius.only(
-                      topRight: Radius.circular(8),
-                      bottomRight: Radius.circular(8),
-                    ),
-                    boxShadow: _comboSeconds > 0
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFFFF4400).withValues(alpha: 0.5),
-                              blurRadius: 8,
-                              spreadRadius: 1,
+                child: _comboSeconds > 0
+                    ? Container(
+                        width: 76,
+                        height: 76,
+                        margin: const EdgeInsets.only(bottom: 24),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // الزر المتغير: عند ضغط الإرسال تظهر صورة الإطلاق، وفي وضع الاستعداد تظهر صورة العداد
+                            Image.asset(
+                              _sending ? R.comboFire : R.comboIdle,
+                              width: 76,
+                              height: 76,
+                              fit: BoxFit.contain,
+                              gaplessPlayback: true,
                             ),
-                          ]
-                        : null,
-                  ),
-                  child: _sending
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Text(
-                          _comboSeconds > 0
-                              ? 'COMBO x$_comboMultiplier (${_comboSeconds}s)'
-                              : 'إرسال',
-                          style: TextStyle(
-                            fontSize: _comboSeconds > 0 ? 10 : 12,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            // رقم العداد التنازلي التبادلي (10s) ورقم الكومبو
+                            Positioned(
+                              bottom: 14,
+                              child: Text(
+                                '${_comboSeconds}s',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black,
+                                      blurRadius: 4,
+                                      offset: Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              top: 6,
+                              right: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFF2255),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black45,
+                                      blurRadius: 3,
+                                    ),
+                                  ],
+                                ),
+                                child: Text(
+                                  'x$_comboMultiplier',
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Container(
+                        width: 72,
+                        height: 32,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          gradient: canAfford
+                              ? AppColors.giftBtnGradient
+                              : const LinearGradient(
+                                  colors: [Color(0xFF666666), Color(0xFF444444)],
+                                ),
+                          borderRadius: const BorderRadius.only(
+                            topRight: Radius.circular(8),
+                            bottomRight: Radius.circular(8),
                           ),
                         ),
-                ),
+                        child: _sending
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'إرسال',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
               ),
               const Spacer(),
               Row(

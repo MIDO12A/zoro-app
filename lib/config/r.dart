@@ -112,6 +112,8 @@ class R {
   static const String commonGoldIc4 = '$_m/common_gold_ic_4.webp';
 
   // Gift notice / combo
+  static const String comboFire = '$_m/combo_fire.webp';
+  static const String comboIdle = '$_m/combo_idle.webp';
   static const String roomGiftNoticeBg2 = '$_m/room_gift_notice_bg.webp';
   static const String roomGiftLuckyBg = '$_m/room_gift_lucky_bg.webp';
   static const String roomGiftComboTimeIc = '$_m/room_gift_combo_time_ic.webp';

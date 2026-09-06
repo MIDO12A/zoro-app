@@ -53,6 +53,7 @@ import '../report/report_room_screen.dart';
 import '../report/report_user_screen.dart';
 import '../../features/lucky_gift/services/lucky_gift_service.dart';
 import '../../features/lucky_gift/models/lucky_gift_model.dart';
+import '../../features/lucky_gift/widgets/gift_seat_flight_overlay.dart';
 
 /// Helper to navigate to a room, exiting any minimized room first
 Future<void> navigateToRoom(
@@ -223,6 +224,60 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String _giftBannerNumberKey = 'number';
   String _giftBannerGiftKey = 'gift';
   List<GiftBannerConfig> _bannerConfigs = [];
+
+  // Flight overlay state for animated gifts arriving at seats
+  bool _showGiftFlight = false;
+  String _giftFlightIconUrl = '';
+  List<Offset> _giftFlightTargets = [];
+
+  void _triggerGiftFlight({
+    required String iconUrl,
+    String? receiverId,
+  }) {
+    final screenSize = MediaQuery.of(context).size;
+    final startOffset = Offset(screenSize.width * 0.75, screenSize.height - 40);
+    final targets = <Offset>[];
+
+    const double headerHeight = 90.0;
+    const double rowHeight = 94.0;
+    const double seatWidth = 76.0;
+
+    if (receiverId != null && receiverId.isNotEmpty) {
+      final seatIdx = _seats.indexWhere((s) => s.user?.id == receiverId);
+      if (seatIdx >= 0) {
+        final row = seatIdx ~/ 5;
+        final col = seatIdx % 5;
+        final colWidth = screenSize.width / 5;
+        final targetX = (col * colWidth) + (colWidth / 2);
+        final targetY = headerHeight + (row * rowHeight) + (rowHeight / 2);
+        targets.add(Offset(targetX, targetY));
+      } else {
+        targets.add(Offset(screenSize.width / 2, headerHeight + 50));
+      }
+    } else {
+      for (int i = 0; i < _seats.length; i++) {
+        if (_seats[i].isOccupied && _seats[i].user != null) {
+          final row = i ~/ 5;
+          final col = i % 5;
+          final colWidth = screenSize.width / 5;
+          final targetX = (col * colWidth) + (colWidth / 2);
+          final targetY = headerHeight + (row * rowHeight) + (rowHeight / 2);
+          targets.add(Offset(targetX, targetY));
+        }
+      }
+      if (targets.isEmpty) {
+        targets.add(Offset(screenSize.width / 2, headerHeight + 50));
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _giftFlightIconUrl = iconUrl;
+        _giftFlightTargets = targets;
+        _showGiftFlight = true;
+      });
+    }
+  }
 
   // Cached gift definitions for looking up dynamic keys
   final Map<String, gm.GiftModel> _cachedGiftItems = {};
@@ -1693,6 +1748,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         },
                         onSendGiftExtended: (data) {
                           if (data != null) {
+                            final iconUrl = data['defaultImage']?.toString() ?? data['animationAsset']?.toString() ?? '';
+                            if (iconUrl.isNotEmpty) {
+                              _triggerGiftFlight(
+                                iconUrl: iconUrl,
+                                receiverId: data['receiverId']?.toString(),
+                              );
+                            }
                             setState(() {
                               _giftTextReplacement = data['nameKey'] != null && data['nameKey'].toString().isNotEmpty && data['senderName'].toString().isNotEmpty
                                   ? <String, String>{data['nameKey'].toString(): data['senderName'].toString()}
@@ -1915,6 +1977,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 _giftImageReplacement = null;
                 _giftDefaultImage = null;
               }),
+            ),
+          // ── أنيميشن طيران الهدية إلى المقعد المحدد أو جميع المقاعد ──
+          if (_showGiftFlight && _giftFlightIconUrl.isNotEmpty && _giftFlightTargets.isNotEmpty)
+            GiftSeatFlightOverlay(
+              giftIconUrl: _giftFlightIconUrl,
+              startOffset: Offset(MediaQuery.of(context).size.width * 0.75, MediaQuery.of(context).size.height - 40),
+              targetOffsets: _giftFlightTargets,
+              onFinished: () {
+                if (mounted) {
+                  setState(() {
+                    _showGiftFlight = false;
+                    _giftFlightIconUrl = '';
+                    _giftFlightTargets = [];
+                  });
+                }
+              },
             ),
           // ── Gift banner strip (high-value gifts) ──
           if (_showGiftBanner && _giftBannerAsset != null)

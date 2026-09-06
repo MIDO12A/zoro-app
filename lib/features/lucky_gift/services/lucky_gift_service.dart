@@ -80,14 +80,10 @@ class LuckyGiftService {
       );
     }
 
-    // 4. عرض واجهة الكروت ثلاثية الأبعاد إذا وُجدت كروت
-    if (nextData.cards.isNotEmpty) {
-      _showCardFlipOverlay(context, nextData);
-    } else {
-      _isPlayingAnim = false;
-      _queueWatchdog?.cancel();
-      _processNextInQueue(context);
-    }
+    // 4. إنهاء الحدث فوراً وتمرير الطابور للحدث التالي بسلاسة دون كروت مربعة
+    _isPlayingAnim = false;
+    _queueWatchdog?.cancel();
+    _processNextInQueue(context);
   }
 
   OverlayEntry? _roomWinOverlay;
