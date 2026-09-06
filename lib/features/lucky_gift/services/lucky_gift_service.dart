@@ -17,6 +17,7 @@ class LuckyGiftService {
   // طابور الرسائل والأحداث
   final List<LuckyGiftBroadcastData> _broadcastQueue = [];
   bool _isPlayingAnim = false;
+  Timer? _queueWatchdog;
   OverlayEntry? _currentOverlay;
   OverlayEntry? _bannerOverlay;
 
@@ -32,11 +33,23 @@ class LuckyGiftService {
   void _processNextInQueue(BuildContext context) {
     if (_broadcastQueue.isEmpty) {
       _isPlayingAnim = false;
+      _queueWatchdog?.cancel();
       return;
     }
 
     _isPlayingAnim = true;
     final nextData = _broadcastQueue.removeAt(0);
+
+    // مهلة أمان: لو فشل/علق العارض الحالي لأي سبب، نتجاوزه بعد 15 ثانية
+    // حتى لا تعلق الشاشة بطبقة الحظ (كان سبب تجمد الشاشة عند هدية الحظ).
+    _queueWatchdog?.cancel();
+    _queueWatchdog = Timer(const Duration(seconds: 15), () {
+      if (_isPlayingAnim && !_broadcastQueue.isEmpty) {
+        _processNextInQueue(context);
+      } else if (_isPlayingAnim) {
+        _isPlayingAnim = false;
+      }
+    });
 
     // 1. تشغيل أنيميشن الرقم SVGA في منتصف الشاشة إذا كان الرقم مخصصاً
     if (LuckyComboSvgaOverlay.hasSvgaForCount(nextData.comboCount)) {
@@ -118,12 +131,14 @@ class LuckyGiftService {
 
   void _showCardFlipOverlay(BuildContext context, LuckyGiftBroadcastData data) {
     final overlay = Overlay.of(context, rootOverlay: true);
+    _currentOverlay?.remove();
     _currentOverlay = OverlayEntry(
       builder: (ctx) => LuckyCardFlipLayout(
         data: data,
         onFinished: () {
           _currentOverlay?.remove();
           _currentOverlay = null;
+          _queueWatchdog?.cancel();
           _processNextInQueue(context);
         },
       ),
@@ -210,11 +225,17 @@ class LuckyGiftService {
   }
 
   void dispose() {
+    _queueWatchdog?.cancel();
     _globalSub?.cancel();
     _currentOverlay?.remove();
     _bannerOverlay?.remove();
     _comboSvgaOverlay?.remove();
     _roomWinOverlay?.remove();
     _flightOverlay?.remove();
+    _currentOverlay = null;
+    _bannerOverlay = null;
+    _comboSvgaOverlay = null;
+    _roomWinOverlay = null;
+    _flightOverlay = null;
   }
 }

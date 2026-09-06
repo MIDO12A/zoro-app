@@ -294,6 +294,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   StreamSubscription? _msgSub;
   StreamSubscription? _entranceSub;
   Timer? _seatsRefreshTimer;
+  Timer? _bannerHideTimer;
   final RoomAudioService _roomAudio = RoomAudioService();
 
   @override
@@ -884,6 +885,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _giftSub?.cancel();
     _seatsSub?.cancel();
     _seatsRefreshTimer?.cancel();
+    _bannerHideTimer?.cancel();
     _roomSub?.cancel();
     _storeSub?.cancel();
     _giftCacheSub?.cancel();
@@ -966,6 +968,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _checkGiftBanner(Map<String, dynamic> data) {
+    // لا نستبدل شريطة ما زالت تُعرض بشريطة جديدة (يمنع تبادل الشرائط
+    // المتتالي الذي سبب تشوه العرض). تُستبدل فقط بعد انتهاء العرض.
+    if (_showGiftBanner) return;
+
     final giftValue = data['giftValue'] as int? ?? 0;
     final giftCount = data['giftCount'] as int? ?? 1;
     final categoryId = data['categoryId'] as String?;
@@ -1007,6 +1013,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _giftBannerGiftKey = cfg.giftKey;
         _showGiftBanner = true;
       });
+      // إخفاء إجباري حتى لو لم يُستدع onFinished (حماية من شريطة عالقة)
+      _bannerHideTimer?.cancel();
+      _bannerHideTimer = Timer(const Duration(seconds: 8), () {
+        if (mounted && _showGiftBanner) {
+          setState(() {
+            _showGiftBanner = false;
+            _giftBannerAsset = null;
+          });
+        }
+      });
       return;
     }
 
@@ -1022,6 +1038,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _giftBannerNumberKey = 'number';
       _giftBannerGiftKey = 'gift';
       _showGiftBanner = true;
+    });
+    _bannerHideTimer?.cancel();
+    _bannerHideTimer = Timer(const Duration(seconds: 8), () {
+      if (mounted && _showGiftBanner) {
+        setState(() {
+          _showGiftBanner = false;
+          _giftBannerAsset = null;
+        });
+      }
     });
   }
 
@@ -1908,6 +1933,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               numberKey: _giftBannerNumberKey,
               giftKey: _giftBannerGiftKey,
               onFinished: () => setState(() {
+                _bannerHideTimer?.cancel();
                 _showGiftBanner = false;
                 _giftBannerAsset = null;
                 _giftBannerSenderPhoto = null;

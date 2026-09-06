@@ -43,6 +43,9 @@ class _CpWebViewScreenState extends State<CpWebViewScreen> {
     _lang = localeProvider.locale?.languageCode ?? 'en';
     final session = await _getSessionToken();
     _token = session ?? '';
+    // نسمح فقط بالتنقل ضمن النطاق الموثوق المُهيأ من اللوحة، ونمنع إعادة
+    // التوجيه إلى أي نطاق آخر (يمنع التصيد/حقن النصوص الخبيثة في WebView).
+    final allowedHost = Uri.tryParse(baseUrl)?.host ?? '';
 
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
@@ -53,6 +56,27 @@ class _CpWebViewScreenState extends State<CpWebViewScreen> {
           },
           onPageFinished: (_) {
             if (mounted) setState(() => _loading = false);
+          },
+          shouldOverrideUrlLoading: (request) {
+            final url = request.url;
+            final uri = Uri.tryParse(url);
+            final schemeAllowed = uri?.scheme == 'https';
+            final hostAllowed = uri?.host == allowedHost;
+            if (allowedHost.isEmpty || (schemeAllowed && hostAllowed)) {
+              return NavigationDecision.navigate;
+            }
+            if (!schemeAllowed) {
+              // ترقية http إلى https إذا كان نفس النطاق
+              final upgraded = uri != null && uri.host == allowedHost
+                  ? url.replaceFirst('http://', 'https://')
+                  : url;
+              if (upgraded != url) {
+                _controller.loadRequest(Uri.parse(upgraded));
+                return NavigationDecision.prevent;
+              }
+            }
+            print('[cp-webview] blocking navigation to: $url (allowed: $allowedHost)');
+            return NavigationDecision.prevent;
           },
         ),
       )

@@ -1,12 +1,23 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "vite",
-  "installCommand": "npx -y pnpm@10 install --dir admincore-dashboard && cd backend && npm install --omit=dev",
-  "buildCommand": "cd admincore-dashboard && npm run build",
-  "outputDirectory": "admincore-dashboard/dist",
+  "services": {
+    "web": {
+      "root": ".",
+      "framework": "vite",
+      "installCommand": "npx -y pnpm@10 install --dir admincore-dashboard",
+      "buildCommand": "cd admincore-dashboard && npm run build",
+      "outputDirectory": "admincore-dashboard/dist"
+    },
+    "api": {
+      "root": "api",
+      "framework": "express",
+      "entrypoint": "index.ts",
+      "installCommand": "cd ../backend && npm install --omit=dev"
+    }
+  },
   "rewrites": [
-    { "source": "/api/v1/(.*)", "destination": "/api/index" },
-    { "source": "/api/health", "destination": "/api/index" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/api/v1/(.*)", "destination": { "service": "api" } },
+    { "source": "/api/health", "destination": { "service": "api" } },
+    { "source": "/api/(.*)", "destination": { "service": "api" } },
+    { "source": "/(.*)", "destination": { "service": "web" } }
   ]
 }

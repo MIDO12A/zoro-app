@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../config/r.dart';
 import '../models/lucky_gift_model.dart';
 import 'lucky_card_flip_layout.dart';
 import 'room_burst_settlement_dialog.dart';
@@ -214,8 +215,8 @@ class _RoomBurstDialogState extends State<RoomBurstDialog>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Image.network(
-                          widget.gift.giftIconUrl,
+                        Image(
+                          image: R.cachedImage(widget.gift.giftIconUrl),
                           width: 56,
                           height: 56,
                           errorBuilder: (_, __, ___) => const Icon(

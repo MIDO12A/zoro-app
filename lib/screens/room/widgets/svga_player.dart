@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -79,11 +80,20 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
   SVGAAnimationController? animationController;
   bool isLoading = true;
   bool hasError = false;
+  Timer? _loadTimeout;
+  bool _finishedOnce = false;
 
   @override
   void initState() {
     super.initState();
     animationController = SVGAAnimationController(vsync: this);
+    // مهلة أمان: لو تعطل التحميل/الحقن الديناميكي لا تبقى الشاشة على الـ spinner
+    // إلى الأبد (كانت المشكلة: تهنيج الشاشة عند إرسال هدية SVGA).
+    _loadTimeout = Timer(const Duration(seconds: 8), () {
+      if (mounted && isLoading) {
+        _finishOrFallback();
+      }
+    });
     _loadAnimation();
   }
 
@@ -97,12 +107,43 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
         !mapEquals(old.textReplacement, widget.textReplacement) ||
         !mapEquals(old.imageReplacement, widget.imageReplacement)) {
       setState(() { isLoading = true; hasError = false; });
+      _loadTimeout?.cancel();
+      _loadTimeout = Timer(const Duration(seconds: 8), () {
+        if (mounted && isLoading) {
+          _finishOrFallback();
+        }
+      });
       _loadAnimation();
+    }
+  }
+
+  void _finishOnce() {
+    if (_finishedOnce) return;
+    _finishedOnce = true;
+    _loadTimeout?.cancel();
+    widget.onFinished?.call();
+  }
+
+  void _finishOrFallback() {
+    if (!mounted) return;
+    _loadTimeout?.cancel();
+    if (isLoading) {
+      // تحميل عالق: نعرض خطأ بدلاً من spinner دائم، ثم نكمل.
+      setState(() {
+        isLoading = false;
+        hasError = true;
+      });
+      Future.delayed(const Duration(milliseconds: 1200), () {
+        if (mounted) _finishOnce();
+      });
+    } else {
+      _finishOnce();
     }
   }
 
   @override
   void dispose() {
+    _loadTimeout?.cancel();
     animationController?.dispose();
     animationController = null;
     super.dispose();
@@ -116,6 +157,7 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
           : await SVGAParser.shared.decodeFromAssets(widget.assetPath);
       await _injectDynamicContent(videoItem);
       if (mounted) {
+        _loadTimeout?.cancel();
         setState(() {
           isLoading = false;
           animationController?.videoItem = videoItem;
@@ -123,7 +165,7 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
             animationController?.repeat();
           } else {
             animationController?.forward().then((_) {
-              widget.onFinished?.call();
+              _finishOnce();
             });
           }
         });
@@ -136,7 +178,7 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
           hasError = true;
         });
         Future.delayed(const Duration(seconds: 1), () {
-          widget.onFinished?.call();
+          if (mounted) _finishOnce();
         });
       }
     }

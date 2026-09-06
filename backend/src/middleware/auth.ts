@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
+import crypto from 'crypto';
 import { config } from '../config';
 import { db } from '../config/database';
 import { auth } from '../config/firebase';
@@ -13,13 +14,68 @@ declare global {
   }
 }
 
+// ── تحقق من Firebase ID tokens دون الاعتماد على service account ────────────
+// يتحقق من توقيع التوكن عبر المفاتيح العامة الصادرة من Google
+// (securetoken@system.gserviceaccount.com). لا يتطلب أي private key،
+// وبنفس مستوى أمان firebase-admin.verifyIdToken.
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'zeroappzero-e1b4a';
+let tokenPublicKeys: Record<string, string> = {};
+let keysFetchedAt = 0;
+
+async function getTokenPublicKeys(): Promise<Record<string, string>> {
+  if (Object.keys(tokenPublicKeys).length && Date.now() - keysFetchedAt < 3600_000) {
+    return tokenPublicKeys;
+  }
+  try {
+    const res = await fetch(
+      'https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com',
+      { headers: { 'Cache-Control': 'max-age=3600' } }
+    );
+    if (!res.ok) return tokenPublicKeys;
+    const data = (await res.json()) as Record<string, string>;
+    tokenPublicKeys = data;
+    keysFetchedAt = Date.now();
+  } catch (e) {
+    console.error('[auth] fetch token keys failed:', (e as Error).message);
+  }
+  return tokenPublicKeys;
+}
+
+async function verifyFirebaseTokenWithPublicKey(token: string): Promise<AuthPayload | null> {
+  try {
+    if (token.split('.').length !== 3) return null;
+    const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8')) as { kid?: string };
+    if (!header.kid) return null;
+    const keys = await getTokenPublicKeys();
+    const cert = keys[header.kid];
+    if (!cert) return null;
+    // X509 certificates must be converted to a raw public key object
+    // before being passed to jsonwebtoken (it rejects certificate PEMs).
+    const publicKey = crypto.createPublicKey(cert);
+    const payload = jwt.verify(token, publicKey, {
+      algorithms: ['RS256'],
+      audience: FIREBASE_PROJECT_ID,
+      issuer: `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`,
+    }) as JwtPayload;
+    if (!payload?.sub) return null;
+    return { uid: payload.sub, role: 'user' };
+  } catch (e) {
+    console.error('[auth] public-key verify failed:', (e as Error).message);
+    return null;
+  }
+}
+
 async function verifyFirebaseIdToken(token: string): Promise<AuthPayload | null> {
   try {
     const decoded = await auth.verifyIdToken(token);
     if (!decoded?.uid) return null;
     return { uid: decoded.uid, role: 'user' };
-  } catch {
-    return null;
+  } catch (e) {
+    // سجل السبب الدقيق (خطأ في متغير FIREBASE_SERVICE_ACCOUNT_B64،
+    // تطابق المشروع، أو توكن منتهٍ) ليتضح في سجلات Vercel/Functions.
+    console.error('[auth] verifyIdToken failed:', (e as Error).message);
+    // fallback: التحقق عبر المفاتيح العامة (بدون service account)
+    return verifyFirebaseTokenWithPublicKey(token);
   }
 }
 

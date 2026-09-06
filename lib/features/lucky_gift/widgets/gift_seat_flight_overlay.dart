@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../../../config/r.dart';
 import '../../../../screens/room/widgets/svga_player.dart';
 
 /// ويدجت طيران الهدية إلى مقعد المستخدم المستلم في الغرفة (Gift Seat Flight Animation)
@@ -33,10 +35,22 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
   late AnimationController _burstController;
   late Animation<double> _burstScale;
   bool _hasArrived = false;
+  bool _wasFinished = false;
+  Timer? _safetyTimer;
+
+  void _finishOnce() {
+    if (_wasFinished) return;
+    _wasFinished = true;
+    _safetyTimer?.cancel();
+    if (mounted) widget.onFinished();
+  }
 
   @override
   void initState() {
     super.initState();
+    // مهلة أمان: تمنع بقاء طبقة الطيران فوق الشاشة للأبد لو تعطلت الأنيميشن.
+    _safetyTimer = Timer(const Duration(seconds: 6), _finishOnce);
+
     _flightController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 750),
@@ -57,13 +71,14 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
     );
 
     _flightController.forward().then((_) {
+      if (!mounted) return;
       setState(() {
         _hasArrived = true;
       });
       _burstController.forward().then((_) {
         // الانتظار قليلاً لانتهاء مؤثر وصول الهدية
         Future.delayed(const Duration(milliseconds: 600), () {
-          if (mounted) widget.onFinished();
+          _finishOnce();
         });
       });
     });
@@ -71,6 +86,7 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
 
   @override
   void dispose() {
+    _safetyTimer?.cancel();
     _flightController.dispose();
     _burstController.dispose();
     super.dispose();
@@ -128,8 +144,8 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
                       // أيقونة الهدية الطائرة
                       ClipOval(
                         child: widget.giftIconUrl.startsWith('http')
-                            ? Image.network(
-                                widget.giftIconUrl,
+                            ? Image(
+                                image: R.cachedImage(widget.giftIconUrl),
                                 width: 48,
                                 height: 48,
                                 fit: BoxFit.cover,

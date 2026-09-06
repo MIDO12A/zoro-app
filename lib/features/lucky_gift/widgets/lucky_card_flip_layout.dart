@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../../config/r.dart';
 import '../models/lucky_gift_model.dart';
 
 /// واجهة كروت الحظ ثلاثية الأبعاد (3D Flip Card Layout)
@@ -23,10 +25,25 @@ class _LuckyCardFlipLayoutState extends State<LuckyCardFlipLayout>
   late List<AnimationController> _controllers;
   late List<Animation<double>> _flipAnimations;
   int _currentFlippingIndex = 0;
+  bool _wasFinished = false;
+  Timer? _safetyTimer;
+
+  void _finishOnce() {
+    if (_wasFinished) return;
+    _wasFinished = true;
+    _safetyTimer?.cancel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onFinished();
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    // مهلة أمان: مهما حدث (بيانات ناقصة، استثناء، إلغاء) نحرر الطابور
+    // حتى لا تعلق الشاشة بطبقة الحظ إلى الأبد (كان سبب التجميد).
+    _safetyTimer = Timer(const Duration(seconds: 12), _finishOnce);
+
     final cardCount = min(widget.data.cards.length, 8);
     _controllers = List.generate(
       cardCount,
@@ -46,27 +63,34 @@ class _LuckyCardFlipLayoutState extends State<LuckyCardFlipLayout>
   }
 
   void _startSequentialFlipping() async {
-    await Future.delayed(const Duration(milliseconds: 300));
-    for (int i = 0; i < _controllers.length; i++) {
-      if (!mounted) return;
-      setState(() => _currentFlippingIndex = i);
-      await _controllers[i].forward();
-      widget.data.cards[i].isFlipped = true;
-      await Future.delayed(const Duration(milliseconds: 150));
-    }
+    try {
+      await Future.delayed(const Duration(milliseconds: 300));
+      for (int i = 0; i < _controllers.length; i++) {
+        if (!mounted) return;
+        setState(() => _currentFlippingIndex = i);
+        await _controllers[i].forward();
+        widget.data.cards[i].isFlipped = true;
+        await Future.delayed(const Duration(milliseconds: 150));
+      }
 
-    // الانتظار بعد كشف جميع الكروت ثم الإغلاق التلقائي
-    await Future.delayed(const Duration(milliseconds: 2500));
-    if (mounted) {
-      widget.onFinished();
+      // الانتظار بعد كشف جميع الكروت ثم الإغلاق التلقائي
+      await Future.delayed(const Duration(milliseconds: 2500));
+      if (mounted) {
+        _finishOnce();
+      }
+    } catch (_) {
+      // أي خطأ: لا نترك الشاشة معلقة
+      _finishOnce();
     }
   }
 
   @override
   void dispose() {
-    for (final ctrl in _controllers) {
+    _safetyTimer?.cancel();
+    _controllers.forEach((ctrl) {
+      if (ctrl.isAnimating) ctrl.stop();
       ctrl.dispose();
-    }
+    });
     super.dispose();
   }
 
@@ -293,8 +317,8 @@ class _LuckyCardFlipLayoutState extends State<LuckyCardFlipLayout>
               ),
             ),
             const SizedBox(height: 4),
-            Image.network(
-              card.giftIcon.isNotEmpty ? card.giftIcon : widget.data.gift.giftIconUrl,
+            Image(
+              image: R.cachedImage(card.giftIcon.isNotEmpty ? card.giftIcon : widget.data.gift.giftIconUrl),
               width: 38,
               height: 38,
               errorBuilder: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.amber, size: 36),
