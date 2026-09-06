@@ -19,6 +19,7 @@ import '../models/gift_category_model.dart';
 import '../models/gift_banner_config_model.dart';
 import 'level_service.dart';
 import 'cloudinary_service.dart';
+import 'agency_target_evaluator.dart';
 
 /// Firebase (Firestore) implementation of the app's data layer.
 ///
@@ -545,6 +546,19 @@ class FirebaseService {
             'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
             'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
           });
+
+          final agencyId = md['agency_id']?.toString();
+          if (agencyId != null && agencyId.isNotEmpty) {
+            final agencyRef = _db.collection('host_agencies').doc(agencyId);
+            final aSnap = await txn.get(agencyRef);
+            if (aSnap.exists) {
+              final ad = aSnap.data() as Map<String, dynamic>? ?? {};
+              txn.update(agencyRef, {
+                'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
+                'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
+              });
+            }
+          }
         }
       });
     } catch (e) {
@@ -552,8 +566,12 @@ class FirebaseService {
       return false;
     }
 
-    // Host target evaluation is handled server-side (V2.7) in POST
-    // /api/v1/gifts/send — the client no longer awards cross-account rewards.
+    // Host target evaluation and milestone awards
+    try {
+      await AgencyTargetEvaluator.evaluateHostTargets(receiverId);
+    } catch (e) {
+      debugPrint('sendGift: target evaluation error: $e');
+    }
 
     // Real-time notification for the receiver (non-fatal)
     try {
