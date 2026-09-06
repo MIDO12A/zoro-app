@@ -46,6 +46,14 @@ export default function CpFeaturesPage() {
   const isAr = lang === 'ar';
   const [activeTab, setActiveTab] = useState('gifts');
 
+  // Loading & notification states
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState<string | null>(null);
+  const showMsg = (m: string) => {
+    setMsg(m);
+    setTimeout(() => setMsg(null), 3000);
+  };
+
   // Gifts state
   const [gifts, setGifts] = useState<CpGiftModel[]>([]);
   const [giftForm, setGiftForm] = useState(defaultGiftForm);
@@ -58,12 +66,60 @@ export default function CpFeaturesPage() {
   const [editingCar, setEditingCar] = useState<string | null>(null);
   const [showAddCar, setShowAddCar] = useState(false);
 
+  // Rewards state
+  const [rewards, setRewards] = useState<CpRankRewardModel[]>([]);
+  const [rewardsPeriod, setRewardsPeriod] = useState('all');
+  const [rewardForm, setRewardForm] = useState({
+    period: 'daily',
+    rank_position: 1,
+    sort_order: 0,
+    reward_type: 'frame_svga',
+    label_ar: '',
+    label_en: '',
+    svga_url: '',
+    image_url: '',
+  });
+  const [editingReward, setEditingReward] = useState<string | null>(null);
+  const [showAddReward, setShowAddReward] = useState(false);
+
+  // Auto-distribution state
+  const [rewardConfig, setRewardConfig] = useState<any>(null);
+  const [activeRewardsCount, setActiveRewardsCount] = useState(0);
+  const [history, setHistory] = useState<any[]>([]);
+
   // Settings state
   const [cpSettings, setCpSettings] = useState<Record<string, string>>({});
   const [savingSettings, setSavingSettings] = useState(false);
   const [bondGiftIds, setBondGiftIds] = useState<string[]>([]);
   const [mainGifts, setMainGifts] = useState<GiftModel[]>([]);
   const [settingsLoadingGifts, setSettingsLoadingGifts] = useState(false);
+
+  const loadGifts = async () => {
+    try {
+      const g = await getCpGifts();
+      setGifts(g);
+    } catch (e) {
+      console.warn('loadGifts error:', e);
+    }
+  };
+
+  const loadCars = async () => {
+    try {
+      const c = await getCpCars();
+      setCars(c);
+    } catch (e) {
+      console.warn('loadCars error:', e);
+    }
+  };
+
+  const loadRewards = async () => {
+    try {
+      const r = await getCpRankRewards();
+      setRewards(r);
+    } catch (e) {
+      console.warn('loadRewards error:', e);
+    }
+  };
 
   const loadSettings = () => Promise.all([
     getCpSettings(),
@@ -103,7 +159,9 @@ export default function CpFeaturesPage() {
   };
 
   useEffect(() => {
-    Promise.all([loadGifts(), loadCars(), loadRewards(), loadSettings(), loadAutoDist()]).then(() => setLoading(false));
+    setLoading(true);
+    Promise.all([loadGifts(), loadCars(), loadRewards(), loadSettings(), loadAutoDist()])
+      .finally(() => setLoading(false));
   }, []);
 
   const resetGiftForm = () => { setGiftForm(defaultGiftForm); setEditingGift(null); setShowAddGift(false); };
