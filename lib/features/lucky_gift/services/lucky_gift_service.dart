@@ -80,8 +80,14 @@ class LuckyGiftService {
       );
     }
 
-    // 4. عرض واجهة الكروت ثلاثية الأبعاد
-    _showCardFlipOverlay(context, nextData);
+    // 4. عرض واجهة الكروت ثلاثية الأبعاد إذا وُجدت كروت
+    if (nextData.cards.isNotEmpty) {
+      _showCardFlipOverlay(context, nextData);
+    } else {
+      _isPlayingAnim = false;
+      _queueWatchdog?.cancel();
+      _processNextInQueue(context);
+    }
   }
 
   OverlayEntry? _roomWinOverlay;

@@ -820,6 +820,9 @@ class GiftSvgaOverlay extends StatelessWidget {
                         loops: false,
                         onFinished: onFinished,
                         fit: BoxFit.cover,
+                        textReplacement: textReplacement,
+                        imageReplacement: imageReplacement,
+                        defaultImageUrl: defaultImageUrl,
                       )
                     : SvgaPlayer(
                         assetPath: aa,
@@ -1026,4 +1029,3 @@ class GiftBannerOverlay extends StatelessWidget {
     );
   }
 }
-

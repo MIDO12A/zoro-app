@@ -38,12 +38,14 @@ AssetType detectAssetType(String url) {
   return AssetType.other;
 }
 
-bool isVideoType(String url) {
+bool isVideoType(String? url) {
+  if (url == null || url.isEmpty) return false;
   final t = detectAssetType(url);
   return t == AssetType.vap || t == AssetType.mp4;
 }
 
-bool isImageType(String url) {
+bool isImageType(String? url) {
+  if (url == null || url.isEmpty) return false;
   final t = detectAssetType(url);
   return t == AssetType.webp || t == AssetType.gif || t == AssetType.png;
 }
