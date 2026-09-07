@@ -499,10 +499,9 @@ packages:
   flutter_vap_plugin:
     dependency: "direct main"
     description:
-      name: flutter_vap_plugin
-      sha256: "9625070569ec3fdeed1b470038f41d8554e98cd8d0839d56ede2d33312775cc2"
-      url: "https://pub.dev"
-    source: hosted
+      path: "plugins/flutter_vap_plugin"
+      relative: true
+    source: path
     version: "0.1.6"
   flutter_web_plugins:
     dependency: transitive

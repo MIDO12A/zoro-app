@@ -15,29 +15,29 @@ export default function StorePage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<StoreItemModel | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: '', category: 'frame' as StoreItemModel['category'], iconAsset: '', price: 0, svgaAsset: '', videoAsset: '', isPremium: false, nameKey: '', photoKey: '', defaultImage: '' });
+  const [form, setForm] = useState({ name: '', category: 'frame' as StoreItemModel['category'], iconAsset: '', price: 0, svgaAsset: '', videoAsset: '', isPremium: false, isHidden: false, nameKey: '', photoKey: '', defaultImage: '' });
   const { t } = useContext(I18nContext);
 
   const load = async () => { const d = await getStoreItems(); setItems(d); setLoading(false); };
   useEffect(() => { load(); }, []);
 
-  const resetForm = () => setForm({ name: '', category: 'frame', iconAsset: '', price: 0, svgaAsset: '', videoAsset: '', isPremium: false, nameKey: '', photoKey: '', defaultImage: '' });
+  const resetForm = () => setForm({ name: '', category: 'frame', iconAsset: '', price: 0, svgaAsset: '', videoAsset: '', isPremium: false, isHidden: false, nameKey: '', photoKey: '', defaultImage: '' });
 
   const handleEdit = (item: StoreItemModel) => {
     setEditing(item);
-    setForm({ name: item.name, category: item.category, iconAsset: item.iconAsset, price: item.price, svgaAsset: item.svgaAsset || '', videoAsset: item.videoAsset || '', isPremium: item.isPremium, nameKey: item.nameKey || '', photoKey: item.photoKey || '', defaultImage: item.defaultImage || '' });
+    setForm({ name: item.name, category: item.category, iconAsset: item.iconAsset, price: item.price, svgaAsset: item.svgaAsset || '', videoAsset: item.videoAsset || '', isPremium: item.isPremium, isHidden: item.isHidden || false, nameKey: item.nameKey || '', photoKey: item.photoKey || '', defaultImage: item.defaultImage || '' });
     setShowAdd(false);
   };
 
   const handleSave = async () => {
     if (!editing) return;
-    await updateStoreItem(editing.itemId, { ...form, svgaAsset: form.svgaAsset || null, videoAsset: form.videoAsset || null, nameKey: form.nameKey || null, photoKey: form.photoKey || null, defaultImage: form.defaultImage || null });
+    await updateStoreItem(editing.itemId, { ...form, svgaAsset: form.svgaAsset || null, videoAsset: form.videoAsset || null, nameKey: form.nameKey || null, photoKey: form.photoKey || null, defaultImage: form.defaultImage || null, isHidden: form.isHidden });
     setEditing(null); resetForm(); load();
   };
   const handleDelete = async (item: StoreItemModel) => { if (confirm(`Delete ${item.name}?`)) { await deleteStoreItem(item.itemId); load(); } };
   const handleAdd = async () => {
     const id = `store_${Date.now()}`;
-    await addStoreItem(id, { ...form, itemId: id, svgaAsset: form.svgaAsset || null, videoAsset: form.videoAsset || null, nameKey: form.nameKey || null, photoKey: form.photoKey || null, defaultImage: form.defaultImage || null });
+    await addStoreItem(id, { ...form, itemId: id, svgaAsset: form.svgaAsset || null, videoAsset: form.videoAsset || null, nameKey: form.nameKey || null, photoKey: form.photoKey || null, defaultImage: form.defaultImage || null, isHidden: form.isHidden });
     setShowAdd(false); resetForm(); load();
   };
   const updateField = (f: string, v: unknown) => setForm(p => ({ ...p, [f]: v }));
@@ -125,10 +125,14 @@ export default function StorePage() {
               </>
             )}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             <label className="flex items-center gap-1.5 text-xs text-slate-400">
               <input type="checkbox" checked={form.isPremium} onChange={e => updateField('isPremium', e.target.checked)} className="accent-indigo-500" />
               {t('store.premium')}
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-amber-300 font-semibold cursor-pointer">
+              <input type="checkbox" checked={form.isHidden} onChange={e => updateField('isHidden', e.target.checked)} className="accent-amber-500" />
+              🔒 إخفاء من المتجر العام (حصري للأحداث ومكافآت الـ CP فقط)
             </label>
           </div>
           <div className="flex gap-2">
@@ -147,6 +151,7 @@ export default function StorePage() {
           { key: 'category', label: t('store.category'), sortable: true, render: i => <span className="text-indigo-400 text-[10px] uppercase">{i.category}</span> },
           { key: 'price', label: t('store.price'), sortable: true, render: i => <span className="flex items-center gap-1 text-amber-400"><Coins className="w-3 h-3" />{i.price}</span> },
           { key: 'isPremium', label: t('store.premium'), render: i => i.isPremium ? <span className="text-rose-400">✓</span> : '-' },
+          { key: 'isHidden', label: 'حالة العرض', render: i => i.isHidden ? <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">🔒 مخفي (أحداث/مكافآت)</span> : <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px]">🟢 معروض بالمتجر</span> },
         ]}
         data={items}
         searchKeys={['name', 'category']}

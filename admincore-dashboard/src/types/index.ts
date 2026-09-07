@@ -101,7 +101,7 @@ export interface SentGiftModel {
 export interface StoreItemModel {
   itemId: string;
   name: string;
-  category: 'frame' | 'bubble' | 'entrance' | 'car';
+  category: 'frame' | 'bubble' | 'entrance' | 'car' | 'cover' | 'necklace' | 'badge' | 'ring';
   iconAsset: string;
   price: number;
   svgaAsset: string | null;
@@ -110,6 +110,7 @@ export interface StoreItemModel {
   nameKey?: string;
   photoKey?: string;
   defaultImage?: string;
+  isHidden?: boolean;
 }
 
 export interface UnionModel {

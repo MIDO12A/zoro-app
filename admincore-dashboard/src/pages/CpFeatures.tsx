@@ -1,11 +1,11 @@
 import { useEffect, useState, useContext } from 'react';
 import { I18nContext } from '../lib/i18n';
-import { getCpGifts, addCpGift, updateCpGift, deleteCpGift, getCpCars, addCpCar, updateCpCar, deleteCpCar, getCpSettings, updateCpSetting, getCpRankRewards, upsertCpRankReward, deleteCpRankReward, distributeCpRewards, expireCpRewards, getCpRewardConfig, saveCpRewardConfig, getActiveRewards, getDistributionHistory, getGifts } from '../lib/db';
+import { getCpGifts, addCpGift, updateCpGift, deleteCpGift, getCpCars, addCpCar, updateCpCar, deleteCpCar, getCpSettings, updateCpSetting, getCpRankRewards, upsertCpRankReward, deleteCpRankReward, distributeCpRewards, expireCpRewards, getCpRewardConfig, saveCpRewardConfig, getActiveRewards, getDistributionHistory, getGifts, getStoreItems } from '../lib/db';
 import { uploadAppAsset } from '../lib/storage';
-import type { CpGiftModel, CpCarModel, CpRankRewardModel, GiftModel } from '../types';
+import type { CpGiftModel, CpCarModel, CpRankRewardModel, GiftModel, StoreItemModel } from '../types';
 import DataTable from '../components/DataTable';
 import ImageUpload from '../components/ImageUpload';
-import { Plus, Save, X, Gift, Car, Calendar, Settings, Award, Upload, RotateCcw, Zap, Trash2, RefreshCw, Heart } from 'lucide-react';
+import { Plus, Save, X, Gift, Car, Calendar, Settings, Award, Upload, RotateCcw, Zap, Trash2, RefreshCw, Heart, ShoppingBag } from 'lucide-react';
 
 const defaultGiftForm = {
   id: '',
@@ -184,9 +184,20 @@ export default function CpFeaturesPage() {
     setHistory(h);
   };
 
+  const [storeItems, setStoreItems] = useState<StoreItemModel[]>([]);
+
+  const loadStoreItems = async () => {
+    try {
+      const si = await getStoreItems();
+      setStoreItems(si);
+    } catch (e) {
+      console.warn('loadStoreItems error:', e);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadGifts(), loadCars(), loadRewards(), loadSettings(), loadAutoDist()])
+    Promise.all([loadGifts(), loadCars(), loadRewards(), loadSettings(), loadAutoDist(), loadStoreItems()])
       .finally(() => setLoading(false));
   }, []);
 
@@ -522,9 +533,39 @@ export default function CpFeaturesPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Male Partner Global Reward */}
             <div className="bg-[#141417] rounded-2xl border border-blue-500/20 p-6 space-y-4">
-              <div className="flex items-center gap-2 border-b border-white/5 pb-3">
-                <span className="text-xl">👦</span>
-                <h4 className="text-blue-400 font-bold text-sm">{isAr ? 'مكافأة الشاب / الذكر (الرابط)' : 'Boy / Male Partner Reward'}</h4>
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">👦</span>
+                  <h4 className="text-blue-400 font-bold text-sm">{isAr ? 'مكافأة الشاب / الذكر (الرابط)' : 'Boy / Male Partner Reward'}</h4>
+                </div>
+                {storeItems.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-blue-400" />
+                    <select
+                      onChange={e => {
+                        const item = storeItems.find(s => s.itemId === e.target.value);
+                        if (item) {
+                          setCpSettings(p => ({
+                            ...p,
+                            cp_link_male_reward_name: item.name,
+                            cp_link_male_reward_type: item.category === 'car' ? 'car' : item.category === 'entrance' ? 'entrance' : item.category === 'necklace' ? 'necklace' : item.category === 'badge' ? 'badge' : 'frame',
+                            cp_link_male_reward_icon: item.iconAsset || '',
+                            cp_link_male_reward_svga: item.svgaAsset || item.videoAsset || '',
+                          }));
+                        }
+                      }}
+                      defaultValue=""
+                      className="bg-[#161618] border border-blue-500/30 text-blue-300 text-[11px] rounded-lg py-1 px-2"
+                    >
+                      <option value="">{isAr ? '🛍️ اختيار من المتجر...' : '🛍️ Pick from Store...'}</option>
+                      {storeItems.map(item => (
+                        <option key={item.itemId} value={item.itemId}>
+                          {item.name} ({item.category}) {item.isHidden ? '🔒' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="space-y-3">
                 <div>
@@ -540,6 +581,7 @@ export default function CpFeaturesPage() {
                       <option value="necklace">{isAr ? 'قلادة (Necklace)' : 'Necklace'}</option>
                       <option value="ring">{isAr ? 'خاتم CP (Ring)' : 'Ring'}</option>
                       <option value="entrance">{isAr ? 'مآثر دخول (Entrance)' : 'Entrance'}</option>
+                      <option value="car">{isAr ? 'سيارة (Car)' : 'Car'}</option>
                       <option value="coins">{isAr ? 'عملات فقط (Coins)' : 'Coins'}</option>
                     </select>
                   </div>
@@ -561,9 +603,39 @@ export default function CpFeaturesPage() {
 
             {/* Female Partner Global Reward */}
             <div className="bg-[#141417] rounded-2xl border border-pink-500/20 p-6 space-y-4">
-              <div className="flex items-center gap-2 border-b border-white/5 pb-3">
-                <span className="text-xl">👧</span>
-                <h4 className="text-pink-400 font-bold text-sm">{isAr ? 'مكافأة الفتاة / الأنثى (المرتبط)' : 'Girl / Female Partner Reward'}</h4>
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">👧</span>
+                  <h4 className="text-pink-400 font-bold text-sm">{isAr ? 'مكافأة الفتاة / الأنثى (المرتبط)' : 'Girl / Female Partner Reward'}</h4>
+                </div>
+                {storeItems.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <ShoppingBag className="w-3.5 h-3.5 text-pink-400" />
+                    <select
+                      onChange={e => {
+                        const item = storeItems.find(s => s.itemId === e.target.value);
+                        if (item) {
+                          setCpSettings(p => ({
+                            ...p,
+                            cp_link_female_reward_name: item.name,
+                            cp_link_female_reward_type: item.category === 'car' ? 'car' : item.category === 'entrance' ? 'entrance' : item.category === 'necklace' ? 'necklace' : item.category === 'badge' ? 'badge' : 'frame',
+                            cp_link_female_reward_icon: item.iconAsset || '',
+                            cp_link_female_reward_svga: item.svgaAsset || item.videoAsset || '',
+                          }));
+                        }
+                      }}
+                      defaultValue=""
+                      className="bg-[#161618] border border-pink-500/30 text-pink-300 text-[11px] rounded-lg py-1 px-2"
+                    >
+                      <option value="">{isAr ? '🛍️ اختيار من المتجر...' : '🛍️ Pick from Store...'}</option>
+                      {storeItems.map(item => (
+                        <option key={item.itemId} value={item.itemId}>
+                          {item.name} ({item.category}) {item.isHidden ? '🔒' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
               <div className="space-y-3">
                 <div>
@@ -579,6 +651,7 @@ export default function CpFeaturesPage() {
                       <option value="necklace">{isAr ? 'قلادة (Necklace)' : 'Necklace'}</option>
                       <option value="ring">{isAr ? 'خاتم CP (Ring)' : 'Ring'}</option>
                       <option value="entrance">{isAr ? 'مآثر دخول (Entrance)' : 'Entrance'}</option>
+                      <option value="car">{isAr ? 'سيارة (Car)' : 'Car'}</option>
                       <option value="coins">{isAr ? 'عملات فقط (Coins)' : 'Coins'}</option>
                     </select>
                   </div>
@@ -690,7 +763,38 @@ export default function CpFeaturesPage() {
             <div className="bg-[#141417] rounded-2xl border border-indigo-500/20 p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-white font-semibold text-sm">{editingReward ? (isAr ? 'تعديل' : 'Edit') : (isAr ? 'مكافأة جديدة' : 'New Reward')}</h3>
-                <button onClick={resetRewardForm} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                <div className="flex items-center gap-3">
+                  {storeItems.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+                      <select
+                        onChange={e => {
+                          const item = storeItems.find(s => s.itemId === e.target.value);
+                          if (item) {
+                            setRewardForm(p => ({
+                              ...p,
+                              label_ar: item.name,
+                              label_en: item.name,
+                              reward_type: item.category === 'entrance' ? 'entrance_svga' : item.category === 'badge' ? 'badge' : item.category === 'necklace' ? 'necklace' : 'frame_svga',
+                              image_url: item.iconAsset || '',
+                              svga_url: item.svgaAsset || item.videoAsset || '',
+                            }));
+                          }
+                        }}
+                        defaultValue=""
+                        className="bg-[#161618] border border-amber-500/30 text-amber-300 text-[11px] rounded-lg py-1 px-2"
+                      >
+                        <option value="">{isAr ? '🛍️ اختيار من المتجر...' : '🛍️ Pick from Store...'}</option>
+                        {storeItems.map(item => (
+                          <option key={item.itemId} value={item.itemId}>
+                            {item.name} ({item.category}) {item.isHidden ? '🔒' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <button onClick={resetRewardForm} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
                 <div>

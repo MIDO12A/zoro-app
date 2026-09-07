@@ -10,6 +10,7 @@ class StoreItemModel {
   final String? nameKey;
   final String? photoKey;
   final String? defaultImage;
+  final bool isHidden;
 
   StoreItemModel({
     required this.itemId,
@@ -23,6 +24,7 @@ class StoreItemModel {
     this.nameKey,
     this.photoKey,
     this.defaultImage,
+    this.isHidden = false,
   });
 
   factory StoreItemModel.fromMap(Map<String, dynamic> map) {
@@ -38,6 +40,7 @@ class StoreItemModel {
       nameKey: map['name_key']?.toString(),
       photoKey: map['photo_key']?.toString(),
       defaultImage: map['default_image']?.toString(),
+      isHidden: map['is_hidden'] as bool? ?? map['hide_from_store'] as bool? ?? map['is_event_only'] as bool? ?? false,
     );
   }
 
@@ -57,5 +60,6 @@ class StoreItemModel {
         if (nameKey != null) 'name_key': nameKey,
         if (photoKey != null) 'photo_key': photoKey,
         if (defaultImage != null) 'default_image': defaultImage,
+        'is_hidden': isHidden,
       };
 }

@@ -54,6 +54,12 @@ class DynamicConfigService extends ChangeNotifier {
   Color _bottomNavActiveTextColor = const Color(0xFF894916);
   Color _bottomNavInactiveTextColor = const Color(0xFF894916);
   
+  // Gift Panel Overrides
+  String _giftPanelBgImage = '';
+  String _giftPanelHeaderBgImage = '';
+  Color _giftPanelBgColor = const Color(0xF51D1111);
+  Color _giftPanelTabColor = const Color(0xFFDE880F);
+
   // Typography & Shape
   String _fontFamily = 'system';
   int _borderRadius = 8;
@@ -371,6 +377,12 @@ class DynamicConfigService extends ChangeNotifier {
   Color get bottomNavGradientEnd => _bottomNavGradientEnd;
   Color get bottomNavActiveTextColor => _bottomNavActiveTextColor;
   Color get bottomNavInactiveTextColor => _bottomNavInactiveTextColor;
+
+  String get giftPanelBgImage => _giftPanelBgImage;
+  String get giftPanelHeaderBgImage => _giftPanelHeaderBgImage;
+  Color get giftPanelBgColor => _giftPanelBgColor;
+  Color get giftPanelTabColor => _giftPanelTabColor;
+
   String get fontFamily => _fontFamily;
   int get borderRadius => _borderRadius;
   String get discoverTitle => _discoverTitle;
@@ -919,6 +931,11 @@ class DynamicConfigService extends ChangeNotifier {
       _bottomNavGradientEnd = _parseColor(config['bottomNavGradientEnd'], _bottomNavGradientEnd);
       _bottomNavActiveTextColor = _parseColor(config['bottomNavActiveTextColor'], _bottomNavActiveTextColor);
       _bottomNavInactiveTextColor = _parseColor(config['bottomNavInactiveTextColor'], _bottomNavInactiveTextColor);
+
+      _giftPanelBgImage = config['giftPanelBgImage'] as String? ?? config['gift_panel_bg_image'] as String? ?? _giftPanelBgImage;
+      _giftPanelHeaderBgImage = config['giftPanelHeaderBgImage'] as String? ?? config['gift_panel_header_bg_image'] as String? ?? _giftPanelHeaderBgImage;
+      _giftPanelBgColor = _parseColor(config['giftPanelBgColor'] ?? config['gift_panel_bg_color'], _giftPanelBgColor);
+      _giftPanelTabColor = _parseColor(config['giftPanelTabColor'] ?? config['gift_panel_tab_color'], _giftPanelTabColor);
 
       _fontFamily = config['fontFamily'] as String? ?? _fontFamily;
       _borderRadius = (config['borderRadius'] as num?)?.toInt() ?? _borderRadius;

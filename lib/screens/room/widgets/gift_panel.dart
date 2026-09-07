@@ -46,8 +46,8 @@ class _GiftPanelState extends State<GiftPanel> {
   int _sel = -1;
   bool _sending = false;
   String? _errorMsg;
-  String? _selectedUserId;
-  String? _selectedUserName;
+  final Set<String> _selectedUserIds = {};
+  bool _isAllSelected = false;
   List<gm.GiftModel> _gifts = [];
   List<GiftCategory> _categories = [];
   String? _selectedCategoryId;
@@ -60,9 +60,23 @@ class _GiftPanelState extends State<GiftPanel> {
   @override
   void initState() {
     super.initState();
-    _selectedUserId = widget.receiverId;
-    _selectedUserName = widget.receiverName;
+    _initSelection();
     _loadGifts();
+  }
+
+  void _initSelection() {
+    _selectedUserIds.clear();
+    if (widget.receiverId != null && widget.receiverId!.isNotEmpty) {
+      _selectedUserIds.add(widget.receiverId!);
+      _isAllSelected = false;
+    } else {
+      _isAllSelected = true;
+      _selectedUserIds.addAll(
+        widget.targetUsers
+            .map((u) => u['id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty),
+      );
+    }
   }
 
   @override
@@ -77,8 +91,7 @@ class _GiftPanelState extends State<GiftPanel> {
   void didUpdateWidget(GiftPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.receiverId != oldWidget.receiverId) {
-      _selectedUserId = widget.receiverId;
-      _selectedUserName = widget.receiverName;
+      _initSelection();
     }
   }
 
@@ -113,29 +126,85 @@ class _GiftPanelState extends State<GiftPanel> {
     return _gifts.where((g) => g.categoryId == _selectedCategoryId).toList();
   }
 
+  void _toggleSelectAll() {
+    setState(() {
+      if (_isAllSelected) {
+        _isAllSelected = false;
+        _selectedUserIds.clear();
+      } else {
+        _isAllSelected = true;
+        _selectedUserIds.clear();
+        _selectedUserIds.addAll(
+          widget.targetUsers
+              .map((u) => u['id']?.toString() ?? '')
+              .where((id) => id.isNotEmpty),
+        );
+      }
+    });
+  }
+
+  void _toggleUser(String uid) {
+    if (uid.isEmpty) return;
+    setState(() {
+      if (_isAllSelected) {
+        _isAllSelected = false;
+        _selectedUserIds.clear();
+        _selectedUserIds.addAll(
+          widget.targetUsers
+              .map((u) => u['id']?.toString() ?? '')
+              .where((id) => id.isNotEmpty),
+        );
+        _selectedUserIds.remove(uid);
+      } else {
+        if (_selectedUserIds.contains(uid)) {
+          _selectedUserIds.remove(uid);
+        } else {
+          _selectedUserIds.add(uid);
+        }
+        if (_selectedUserIds.length == widget.targetUsers.length && widget.targetUsers.isNotEmpty) {
+          _isAllSelected = true;
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 370,
-      decoration: const BoxDecoration(
-        color: Color(0xF51D1111),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      child: Column(
-        children: [
-          _buildHeader(),
-          Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-          Expanded(child: _buildGrid()),
-          _buildBottomOperate(),
-        ],
-      ),
+    final dc = DynamicConfigService();
+
+    return ListenableBuilder(
+      listenable: dc,
+      builder: (context, _) {
+        return Container(
+          height: 370,
+          decoration: BoxDecoration(
+            color: dc.giftPanelBgColor,
+            image: dc.giftPanelBgImage.isNotEmpty
+                ? DecorationImage(
+                    image: R.cachedImage(dc.giftPanelBgImage),
+                    fit: BoxFit.cover,
+                  )
+                : null,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+          ),
+          child: Column(
+            children: [
+              _buildHeader(dc),
+              Container(height: 0.5, color: const Color(0x1AFFFFFF)),
+              Expanded(child: _buildGrid()),
+              _buildBottomOperate(dc),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(DynamicConfigService dc) {
     final users = widget.targetUsers;
     final allTabs = [
       const GiftCategory(id: 'all', name: 'الكل', sortOrder: -2),
+      const GiftCategory(id: 'backpack', name: '🎒 الحقيبة', sortOrder: -3),
       if (_gifts.any((g) => g.isLucky))
         const GiftCategory(id: 'lucky', name: '🍀 الحظ', sortOrder: -1),
       ..._categories,
@@ -146,40 +215,57 @@ class _GiftPanelState extends State<GiftPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'إرسال إلى:',
-            style: TextStyle(fontSize: 10, color: Colors.white70),
+          Row(
+            children: [
+              const Text(
+                'إرسال إلى:',
+                style: TextStyle(fontSize: 10, color: Colors.white70),
+              ),
+              const Spacer(),
+              Text(
+                'تم تحديد ${_selectedUserIds.length} من ${users.length}',
+                style: const TextStyle(fontSize: 10, color: Color(0xFFFFD700)),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           SizedBox(
-            height: 56,
+            height: 58,
             child: ListView(
               scrollDirection: Axis.horizontal,
               children: [
                 GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedUserId = null;
-                      _selectedUserName = null;
-                    });
-                  },
+                  onTap: _toggleSelectAll,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    margin: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    margin: const EdgeInsets.only(right: 6),
                     decoration: BoxDecoration(
-                      color: _selectedUserId == null
-                          ? Colors.white.withValues(alpha: 0.2)
-                          : Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(12),
+                      gradient: _isAllSelected
+                          ? const LinearGradient(
+                              colors: [Color(0xFFFFD700), Color(0xFFDE880F)],
+                            )
+                          : null,
+                      color: _isAllSelected ? null : Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: _isAllSelected
+                          ? Border.all(color: Colors.amberAccent, width: 1.5)
+                          : Border.all(color: Colors.white12, width: 0.5),
+                      boxShadow: _isAllSelected
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFFFFD700).withValues(alpha: 0.3),
+                                blurRadius: 6,
+                              )
+                            ]
+                          : null,
                     ),
                     alignment: Alignment.center,
                     child: Text(
                       'الكل',
                       style: TextStyle(
                         fontSize: 11,
-                        color: _selectedUserId == null
-                            ? Colors.white
-                            : Colors.white54,
+                        fontWeight: _isAllSelected ? FontWeight.bold : FontWeight.normal,
+                        color: _isAllSelected ? Colors.black87 : Colors.white70,
                       ),
                     ),
                   ),
@@ -203,7 +289,7 @@ class _GiftPanelState extends State<GiftPanel> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: (_selectedCategoryId ?? 'all') == cat.id
-                            ? const Color(0xFFDE880F)
+                            ? dc.giftPanelTabColor
                             : Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -231,69 +317,72 @@ class _GiftPanelState extends State<GiftPanel> {
   }
 
   Widget _buildHeaderUserItem(Map<String, dynamic> u, int idx) {
-    final selected = _selectedUserId == u['id'];
+    final uid = u['id']?.toString() ?? '';
+    final selected = _selectedUserIds.contains(uid);
+
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedUserId = u['id']?.toString();
-          _selectedUserName = u['name']?.toString();
-        });
-      },
+      onTap: () => _toggleUser(uid),
       child: Container(
         margin: const EdgeInsets.only(right: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 36,
-              height: 36,
+              width: 38,
+              height: 38,
               child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  if (selected)
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFFDE880F),
-                          width: 1,
-                        ),
+                  // Golden border glow when selected
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected ? const Color(0xFFFFD700) : Colors.white24,
+                        width: selected ? 2.2 : 1.0,
                       ),
-                    ),
-                  Positioned(
-                    left: 1,
-                    top: 1,
-                    child: CircleAvatar(
-                      radius: 17,
-                      backgroundImage: (u['photoUrl'] != null &&
-                              u['photoUrl'].toString().isNotEmpty)
-                          ? R.cachedImage(u['photoUrl'].toString())
-                          : null,
-                      child: (u['photoUrl'] == null ||
-                              u['photoUrl'].toString().isEmpty)
-                          ? const Icon(Icons.person, size: 14, color: Colors.white70)
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFFFFD700).withValues(alpha: 0.4),
+                                blurRadius: 6,
+                                spreadRadius: 1,
+                              )
+                            ]
                           : null,
                     ),
+                  ),
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundImage: (u['photoUrl'] != null &&
+                            u['photoUrl'].toString().isNotEmpty)
+                        ? R.cachedImage(u['photoUrl'].toString())
+                        : null,
+                    child: (u['photoUrl'] == null ||
+                            u['photoUrl'].toString().isEmpty)
+                        ? const Icon(Icons.person, size: 14, color: Colors.white70)
+                        : null,
                   ),
                   if (selected)
                     Positioned(
                       right: 0,
                       bottom: 0,
                       child: Container(
-                        width: 16,
-                        height: 16,
+                        width: 15,
+                        height: 15,
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
                           gradient: LinearGradient(
-                            colors: [Color(0xFFDE880F), Color(0xFFFFC525)],
+                            colors: [Color(0xFFFFD700), Color(0xFFFF9900)],
                           ),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black45, blurRadius: 2),
+                          ],
                         ),
                         alignment: Alignment.center,
-                        child: Text(
-                          '${idx + 1}',
-                          style: const TextStyle(fontSize: 9, color: Colors.white),
-                        ),
+                        child: const Icon(Icons.check, size: 10, color: Colors.white),
                       ),
                     ),
                 ],
@@ -301,12 +390,13 @@ class _GiftPanelState extends State<GiftPanel> {
             ),
             const SizedBox(height: 2),
             SizedBox(
-              width: 36,
+              width: 38,
               child: Text(
                 u['name']?.toString() ?? '',
                 style: TextStyle(
                   fontSize: 10,
-                  color: selected ? Colors.white : Colors.white54,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                  color: selected ? const Color(0xFFFFD700) : Colors.white54,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -320,6 +410,9 @@ class _GiftPanelState extends State<GiftPanel> {
   }
 
   Widget _buildGrid() {
+    if (_selectedCategoryId == 'backpack') {
+      return _buildBackpackGrid();
+    }
     final items = _filteredGifts;
     if (items.isEmpty) {
       return const Center(
@@ -341,6 +434,27 @@ class _GiftPanelState extends State<GiftPanel> {
         ),
         itemCount: items.length,
         itemBuilder: (_, i) => _buildGiftItem(i),
+      ),
+    );
+  }
+
+  Widget _buildBackpackGrid() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.backpack_outlined, size: 48, color: Colors.white.withValues(alpha: 0.3)),
+          const SizedBox(height: 8),
+          Text(
+            'الحقيبة',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white.withValues(alpha: 0.8)),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'لا توجد عناصر متاحة للإرسال حالياً في الحقيبة',
+            style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4)),
+          ),
+        ],
       ),
     );
   }
@@ -471,7 +585,7 @@ class _GiftPanelState extends State<GiftPanel> {
                   ),
                   const SizedBox(width: 2),
                   Text(
-                    '${g.value}',
+                    R.formatCoins(g.value),
                     style: const TextStyle(
                       fontSize: 11,
                       color: Color(0xFFFFD856),
@@ -490,12 +604,13 @@ class _GiftPanelState extends State<GiftPanel> {
     if (_sel < 0 || _sel >= _gifts.length) return;
 
     final gift = _gifts[_sel];
-    final userCount = (_selectedUserId == null) ? widget.targetUsers.length : 1;
-    final totalCost = gift.value * widget.selectedCount * userCount;
+    final selectedTargets = widget.targetUsers
+        .where((u) => _selectedUserIds.contains(u['id']?.toString()))
+        .toList();
 
-    if (widget.coins < totalCost) {
+    if (selectedTargets.isEmpty) {
       setState(() {
-        _errorMsg = 'عملات غير كافية! تحتاج $totalCost، لديك ${widget.coins}';
+        _errorMsg = 'لم يتم تحديد أي مستلم';
       });
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) setState(() => _errorMsg = null);
@@ -503,9 +618,14 @@ class _GiftPanelState extends State<GiftPanel> {
       return;
     }
 
-    if (userCount == 0) {
+    final totalCost = gift.value * widget.selectedCount * selectedTargets.length;
+
+    if (widget.coins < totalCost) {
       setState(() {
-        _errorMsg = 'لم يتم تحديد مستلم';
+        _errorMsg = 'عملات غير كافية! تحتاج ${R.formatCoins(totalCost)}، لديك ${R.formatCoins(widget.coins)}';
+      });
+      Future.delayed(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _errorMsg = null);
       });
       return;
     }
@@ -540,7 +660,7 @@ class _GiftPanelState extends State<GiftPanel> {
         'defaultImage': (defImg != null && defImg.isNotEmpty) ? defImg : gift.iconAsset,
         'senderName': currentUser?.name ?? '',
         'senderPhotoUrl': currentUser?.photoUrl ?? '',
-        'receiverId': _selectedUserId,
+        'receiverId': selectedTargets.length == 1 ? selectedTargets.first['id']?.toString() : null,
         'giftValue': gift.value,
         'giftCount': widget.selectedCount,
         'categoryId': gift.categoryId,
@@ -550,11 +670,8 @@ class _GiftPanelState extends State<GiftPanel> {
     var allOk = true;
     if (widget.roomId.isNotEmpty && currentUser != null) {
       final fb = SupabaseService();
-      final receivers = _selectedUserId != null
-          ? [{'id': _selectedUserId, 'name': _selectedUserName ?? ''}]
-          : widget.targetUsers;
 
-      for (final r in receivers) {
+      for (final r in selectedTargets) {
         final receiverId = r['id']?.toString() ?? '';
         final receiverName = r['name']?.toString() ?? '';
         bool ok;
@@ -645,9 +762,12 @@ class _GiftPanelState extends State<GiftPanel> {
     });
   }
 
-  Widget _buildBottomOperate() {
+  Widget _buildBottomOperate(DynamicConfigService dc) {
     final gift = _sel >= 0 && _sel < _gifts.length ? _gifts[_sel] : null;
-    final totalCost = gift != null ? gift.value * widget.selectedCount : 0;
+    final selectedTargetsCount = widget.targetUsers
+        .where((u) => _selectedUserIds.contains(u['id']?.toString()))
+        .length;
+    final totalCost = gift != null ? gift.value * widget.selectedCount * (selectedTargetsCount > 0 ? selectedTargetsCount : 1) : 0;
     final canAfford = widget.coins >= totalCost;
 
     return Container(
@@ -805,7 +925,7 @@ class _GiftPanelState extends State<GiftPanel> {
                   ),
                   const SizedBox(width: 3),
                   Text(
-                    '${widget.coins}',
+                    R.formatCoins(widget.coins),
                     style: TextStyle(
                       fontSize: 14,
                       color: canAfford ? Colors.white : Colors.redAccent,

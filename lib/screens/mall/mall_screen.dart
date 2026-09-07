@@ -62,7 +62,7 @@ class _MallScreenState extends State<MallScreen>
             _allItems = snapshot.data ?? [];
 
             final categoryItems = _categories.map((cat) =>
-              _allItems.where((item) => item.category == cat).toList()
+              _allItems.where((item) => !item.isHidden && item.category == cat).toList()
             ).toList();
 
             return Scaffold(
