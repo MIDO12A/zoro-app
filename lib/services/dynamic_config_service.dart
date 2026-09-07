@@ -26,6 +26,27 @@ class DynamicConfigService extends ChangeNotifier {
   String _splashSvgaUrl = '';
   int _splashDurationSeconds = 3;
   Color _splashNameColor = const Color(0xFF16151A);
+  String _splashActionType = '';
+  String _splashActionValue = '';
+
+  String get appName => _appName;
+  String get logoUrl => _logoUrl;
+  String get splashUrl => _splashUrl;
+  bool get splashEnabled => _splashEnabled;
+  String get splashImageUrl => _splashImageUrl;
+  String get splashSvgaUrl => _splashSvgaUrl;
+  int get splashDurationSeconds => _splashDurationSeconds;
+  Color get splashNameColor => _splashNameColor;
+  String get splashActionType => _splashActionType;
+  String get splashActionValue => _splashActionValue;
+  Color get primaryBg => _primaryBg;
+  Color get textPrimary => _textPrimary;
+  Color get textSecondary => _textSecondary;
+  Color get goldColor => _goldColor;
+  Color get buttonColor => _buttonColor;
+  Color get buttonTextColor => _buttonTextColor;
+  Color get headerColor => _headerColor;
+  Color get tabBarColor => _tabBarColor;
 
   // Mini Profile overrides
   String _miniProfileFollowIcon = '';
@@ -914,6 +935,8 @@ class DynamicConfigService extends ChangeNotifier {
       _splashImageUrl = config['splash_image_url'] as String? ?? config['splashImageUrl'] as String? ?? config['splashGifUrl'] as String? ?? '';
       _splashSvgaUrl = config['splash_svga_url'] as String? ?? config['splashSvgaUrl'] as String? ?? '';
       _splashDurationSeconds = (config['splash_duration_seconds'] as num?)?.toInt() ?? (config['splashDurationSeconds'] as num?)?.toInt() ?? 3;
+      _splashActionType = config['splash_action_type'] as String? ?? config['splashActionType'] as String? ?? '';
+      _splashActionValue = config['splash_action_value'] as String? ?? config['splashActionValue'] as String? ?? '';
       _splashUrl = _splashImageUrl.isNotEmpty ? _splashImageUrl : (config['splashGifUrl'] as String? ?? _splashUrl);
       _splashNameColor = _parseColor(config['splashNameColor'], _splashNameColor);
 

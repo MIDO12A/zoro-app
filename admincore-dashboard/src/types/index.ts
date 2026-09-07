@@ -276,7 +276,18 @@ export interface BannerConfig {
   title?: string;
   sortOrder: number;
   active: boolean;
+  actionType?: string;
+  actionValue?: string;
   createdAt: number;
+}
+
+export interface SplashConfig {
+  enabled: boolean;
+  imageUrl: string;
+  svgaUrl?: string;
+  durationSeconds: number;
+  actionType: string;
+  actionValue: string;
 }
 
 export interface NotificationPayload {

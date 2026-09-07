@@ -1,0 +1,136 @@
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../screens/mall/mall_screen.dart';
+import '../screens/level/level_screen.dart';
+import '../screens/backpack/backpack_screen.dart';
+import '../screens/rank/rank_screen.dart';
+import '../features/cp/cp_display_screen.dart';
+import '../features/vip/screens/vip_screen.dart';
+import '../features/tasks/screens/daily_tasks_screen.dart';
+import '../features/signin/weekly_signin_screen.dart';
+import '../features/host_agency/host_agency_screen.dart';
+import '../screens/room/room_screen.dart';
+import '../services/supabase_service.dart';
+
+class AppActionNavigator {
+  /// Navigate based on actionType and actionValue or raw link
+  static Future<void> handleAction(
+    BuildContext context, {
+    String? actionType,
+    String? actionValue,
+    String? rawLink,
+  }) async {
+    final value = (actionValue != null && actionValue.isNotEmpty)
+        ? actionValue.trim()
+        : (rawLink != null ? rawLink.trim() : '');
+
+    if (value.isEmpty) return;
+
+    // Check for direct scheme or keywords
+    final lower = value.toLowerCase();
+
+    // 1. In-App Screens
+    if (lower == '/mall' || lower == 'mall' || lower.contains('متجر') || lower.contains('store')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const MallScreen()));
+      return;
+    }
+
+    if (lower == '/cp' || lower == 'cp' || lower.contains('ارتباط') || lower.contains('علاقات')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const CpDisplayScreen()));
+      return;
+    }
+
+    if (lower == '/vip' || lower == 'vip') {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const VipScreen()));
+      return;
+    }
+
+    if (lower == '/tasks' || lower == 'tasks' || lower.contains('مهام')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const DailyTasksScreen()));
+      return;
+    }
+
+    if (lower == '/levels' || lower == 'levels' || lower.contains('مستويات')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const LevelScreen()));
+      return;
+    }
+
+    if (lower == '/signin' || lower == 'signin' || lower.contains('تسجيل')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const WeeklySignInScreen()));
+      return;
+    }
+
+    if (lower == '/agency' || lower == 'agency' || lower.contains('وكالة')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const HostAgencyScreen()));
+      return;
+    }
+
+    if (lower == '/rank' || lower == 'rank' || lower.contains('ترتيب') || lower.contains('رتب')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const GlobalRankScreen()));
+      return;
+    }
+
+    if (lower == '/backpack' || lower == 'backpack' || lower.contains('حقيبة')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const BackpackScreen()));
+      return;
+    }
+
+    // 2. Room by ID (e.g. "room:12345" or actionType == "room" or "12345" if numeric)
+    if (actionType == 'room' || lower.startsWith('room:') || lower.startsWith('room/')) {
+      final roomId = value.replaceAll(RegExp(r'^room[:/]', caseSensitive: false), '').trim();
+      if (roomId.isNotEmpty) {
+        _joinRoom(context, roomId);
+        return;
+      }
+    }
+
+    // 3. External HTTP / HTTPS link
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      final uri = Uri.tryParse(value);
+      if (uri != null) {
+        try {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } catch (e) {
+          debugPrint('Failed to launch URL: $e');
+        }
+      }
+      return;
+    }
+
+    // Fallback: If numeric, treat as room ID
+    if (RegExp(r'^\d+$').hasMatch(value)) {
+      _joinRoom(context, value);
+      return;
+    }
+  }
+
+  static Future<void> _joinRoom(BuildContext context, String roomId) async {
+    try {
+      final room = await SupabaseService().getRoom(roomId);
+      if (room != null && context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => RoomScreen(
+              roomId: room.id,
+              roomName: room.name,
+              roomPassword: room.password,
+              category: room.category,
+              gameDesc: room.gameDesc,
+            ),
+          ),
+        );
+      } else if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('الغرفة غير موجودة أو تم إغلاقها: $roomId')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('تعذر الدخول إلى الغرفة: $e')),
+        );
+      }
+    }
+  }
+}

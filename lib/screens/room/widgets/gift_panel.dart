@@ -654,6 +654,7 @@ class _GiftPanelState extends State<GiftPanel> {
       final effectiveAsset = (anim != null && anim.isNotEmpty) ? anim : gift.iconAsset;
       widget.onSendGift?.call(effectiveAsset);
       widget.onSendGiftExtended?.call({
+        'gift': gift,
         'animationAsset': effectiveAsset,
         'nameKey': gift.nameKey,
         'photoKey': gift.photoKey,
@@ -661,6 +662,8 @@ class _GiftPanelState extends State<GiftPanel> {
         'senderName': currentUser?.name ?? '',
         'senderPhotoUrl': currentUser?.photoUrl ?? '',
         'receiverId': selectedTargets.length == 1 ? selectedTargets.first['id']?.toString() : null,
+        'receiverIds': selectedTargets.map((t) => t['id']?.toString()).whereType<String>().toList(),
+        'selectedTargets': selectedTargets,
         'giftValue': gift.value,
         'giftCount': widget.selectedCount,
         'categoryId': gift.categoryId,

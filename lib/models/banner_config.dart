@@ -6,6 +6,8 @@ class BannerConfig {
   final int sortOrder;
   final bool active;
   final int createdAt;
+  final String? actionType;
+  final String? actionValue;
 
   BannerConfig({
     required this.id,
@@ -15,6 +17,8 @@ class BannerConfig {
     this.sortOrder = 0,
     this.active = true,
     this.createdAt = 0,
+    this.actionType,
+    this.actionValue,
   });
 
   factory BannerConfig.fromMap(Map<String, dynamic> map) {
@@ -25,6 +29,8 @@ class BannerConfig {
       title: map['title']?.toString(),
       sortOrder: (map['sort_order'] ?? 0).toInt(),
       active: map['active'] as bool? ?? true,
+      actionType: map['action_type']?.toString(),
+      actionValue: map['action_value']?.toString(),
       createdAt: map['created_at'] is int
           ? (map['created_at'] as int)
           : DateTime.tryParse(map['created_at']?.toString() ?? '')
@@ -39,6 +45,8 @@ class BannerConfig {
         'title': title,
         'sort_order': sortOrder,
         'active': active,
+        'action_type': actionType,
+        'action_value': actionValue,
         'created_at': createdAt > 0
             ? DateTime.fromMillisecondsSinceEpoch(createdAt).toIso8601String()
             : null,

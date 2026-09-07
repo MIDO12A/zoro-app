@@ -282,3 +282,8 @@ export async function uploadBadgeSvga(file: File, badgeId: string, onProgress?: 
 export async function uploadGiftBannerSvga(file: File, bannerId: string, onProgress?: (pct: number) => void): Promise<string> {
   return uploadAny(file, FOLDERS.banner, onProgress);
 }
+
+export async function uploadSplash(file: File, splashId: string, onProgress?: (pct: number) => void): Promise<string> {
+  return uploadAny(file, 'splash', onProgress);
+}
+

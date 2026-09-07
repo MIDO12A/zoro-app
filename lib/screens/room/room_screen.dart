@@ -229,45 +229,158 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _showGiftFlight = false;
   String _giftFlightIconUrl = '';
   List<Offset> _giftFlightTargets = [];
+  Map<String, dynamic>? _pendingBannerData;
+
+  // ── Floating Combo Button state ──
+  Timer? _roomComboTimer;
+  int _roomComboSeconds = 0;
+  int _roomComboMultiplier = 0;
+  bool _roomComboFiring = false;
+  Map<String, dynamic>? _lastGiftComboData;
+
+  void _startRoomComboTimer(Map<String, dynamic> giftData) {
+    _lastGiftComboData = giftData;
+    _roomComboTimer?.cancel();
+    _roomComboMultiplier = (_roomComboSeconds > 0) ? _roomComboMultiplier + 1 : 1;
+    setState(() => _roomComboSeconds = 10);
+    _roomComboTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _roomComboSeconds--;
+        if (_roomComboSeconds <= 0) {
+          _roomComboMultiplier = 0;
+          _lastGiftComboData = null;
+          timer.cancel();
+        }
+      });
+    });
+  }
+
+  void _onRoomComboTap() async {
+    if (_lastGiftComboData == null || _currentUserId == null) return;
+    setState(() {
+      _roomComboFiring = true;
+      _roomComboSeconds = 10;
+      _roomComboMultiplier++;
+    });
+
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() => _roomComboFiring = false);
+    });
+
+    final data = _lastGiftComboData!;
+    final iconUrl = data['defaultImage']?.toString() ?? data['animationAsset']?.toString() ?? '';
+    if (iconUrl.isNotEmpty) {
+      _triggerGiftFlight(
+        iconUrl: iconUrl,
+        receiverId: data['receiverId']?.toString(),
+        receiverIds: (data['receiverIds'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+      );
+    }
+
+    // Re-send gift
+    final gift = data['gift'] as gm.GiftModel?;
+    final selectedTargets = (data['selectedTargets'] as List<dynamic>?) ?? [];
+    if (gift != null && widget.roomId.isNotEmpty) {
+      final fb = SupabaseService();
+      final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+      final count = data['giftCount'] as int? ?? 1;
+
+      for (final r in selectedTargets) {
+        final receiverId = r['id']?.toString() ?? '';
+        final receiverName = r['name']?.toString() ?? '';
+        if (gift.isLucky) {
+          final cover = gift.defaultImage ?? gift.iconAsset;
+          await fb.sendLuckyGift(
+            roomId: widget.roomId,
+            giftId: gift.id,
+            giftName: gift.name,
+            giftNameAr: gift.name,
+            giftIconUrl: gift.iconAsset,
+            giftCoverUrl: cover,
+            giftBgUrl: cover,
+            svgaAnimUrl: gift.animationAsset,
+            senderId: user?.uid ?? '',
+            senderName: user?.name ?? '',
+            senderPhotoUrl: user?.photoUrl,
+            receiverId: receiverId,
+            receiverName: receiverName,
+            value: gift.value,
+            count: count,
+            comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
+            comboCount: _roomComboMultiplier,
+          );
+        } else {
+          await fb.sendGift(
+            roomId: widget.roomId,
+            giftId: gift.id,
+            giftName: gift.name,
+            animationAsset: gift.animationAsset,
+            senderId: user?.uid ?? '',
+            senderName: user?.name ?? '',
+            senderPhotoUrl: user?.photoUrl,
+            receiverId: receiverId,
+            receiverName: receiverName,
+            value: gift.value,
+            count: count,
+            comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
+            comboCount: _roomComboMultiplier,
+          );
+        }
+      }
+    }
+  }
 
   void _triggerGiftFlight({
     required String iconUrl,
     String? receiverId,
+    List<String>? receiverIds,
   }) {
     final screenSize = MediaQuery.of(context).size;
-    final startOffset = Offset(screenSize.width * 0.75, screenSize.height - 40);
+    final statusH = MediaQuery.of(context).padding.top;
+    final startOffset = Offset(screenSize.width * 0.8, screenSize.height - 60);
     final targets = <Offset>[];
 
-    const double headerHeight = 90.0;
-    const double rowHeight = 94.0;
-    const double seatWidth = 76.0;
+    final headerH = statusH + 50.0;
+    final colWidth = (screenSize.width - 16.0) / 5.0;
+    const rowHeight = 94.0;
 
-    if (receiverId != null && receiverId.isNotEmpty) {
-      final seatIdx = _seats.indexWhere((s) => s.user?.id == receiverId);
-      if (seatIdx >= 0) {
-        final row = seatIdx ~/ 5;
-        final col = seatIdx % 5;
-        final colWidth = screenSize.width / 5;
-        final targetX = (col * colWidth) + (colWidth / 2);
-        final targetY = headerHeight + (row * rowHeight) + (rowHeight / 2);
-        targets.add(Offset(targetX, targetY));
-      } else {
-        targets.add(Offset(screenSize.width / 2, headerHeight + 50));
+    final targetIds = <String>{};
+    if (receiverIds != null && receiverIds.isNotEmpty) {
+      targetIds.addAll(receiverIds.where((id) => id.isNotEmpty));
+    } else if (receiverId != null && receiverId.isNotEmpty) {
+      targetIds.add(receiverId);
+    }
+
+    if (targetIds.isNotEmpty) {
+      for (final id in targetIds) {
+        final seatIdx = _seats.indexWhere((s) => s.user?.id == id);
+        if (seatIdx >= 0) {
+          final row = seatIdx ~/ 5;
+          final col = seatIdx % 5;
+          final targetX = 8.0 + (col * colWidth) + (colWidth / 2.0);
+          final targetY = headerH + 6.0 + (row * rowHeight) + 38.0;
+          targets.add(Offset(targetX, targetY));
+        }
       }
     } else {
+      // All occupied seats
       for (int i = 0; i < _seats.length; i++) {
         if (_seats[i].isOccupied && _seats[i].user != null) {
           final row = i ~/ 5;
           final col = i % 5;
-          final colWidth = screenSize.width / 5;
-          final targetX = (col * colWidth) + (colWidth / 2);
-          final targetY = headerHeight + (row * rowHeight) + (rowHeight / 2);
+          final targetX = 8.0 + (col * colWidth) + (colWidth / 2.0);
+          final targetY = headerH + 6.0 + (row * rowHeight) + 38.0;
           targets.add(Offset(targetX, targetY));
         }
       }
-      if (targets.isEmpty) {
-        targets.add(Offset(screenSize.width / 2, headerHeight + 50));
-      }
+    }
+
+    if (targets.isEmpty) {
+      targets.add(Offset(screenSize.width / 2.0, headerH + 60.0));
     }
 
     if (mounted) {
@@ -1740,11 +1853,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         onSend: () {
                           setState(() {
                             _showGift = false;
-                            _showGiftAnim = true;
+                            _showGiftAnim = false;
                           });
                         },
                         onSendGift: (asset) {
-                          setState(() => _giftAnimAsset = asset);
+                          _giftAnimAsset = asset;
                         },
                         onSendGiftExtended: (data) {
                           if (data != null) {
@@ -1753,8 +1866,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                               _triggerGiftFlight(
                                 iconUrl: iconUrl,
                                 receiverId: data['receiverId']?.toString(),
+                                receiverIds: (data['receiverIds'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
                               );
                             }
+                            _startRoomComboTimer(data);
                             setState(() {
                               _giftTextReplacement = data['nameKey'] != null && data['nameKey'].toString().isNotEmpty && data['senderName'].toString().isNotEmpty
                                   ? <String, String>{data['nameKey'].toString(): data['senderName'].toString()}
@@ -1764,7 +1879,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                   : null;
                               _giftDefaultImage = data['defaultImage']?.toString();
                             });
-                            _checkGiftBanner(data);
+                            _pendingBannerData = data;
                           }
                         },
                         onCountTap: _showGiftCountMenu,
@@ -1982,7 +2097,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (_showGiftFlight && _giftFlightIconUrl.isNotEmpty && _giftFlightTargets.isNotEmpty)
             GiftSeatFlightOverlay(
               giftIconUrl: _giftFlightIconUrl,
-              startOffset: Offset(MediaQuery.of(context).size.width * 0.75, MediaQuery.of(context).size.height - 40),
+              startOffset: Offset(MediaQuery.of(context).size.width * 0.8, MediaQuery.of(context).size.height - 60),
               targetOffsets: _giftFlightTargets,
               onFinished: () {
                 if (mounted) {
@@ -1990,7 +2105,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     _showGiftFlight = false;
                     _giftFlightIconUrl = '';
                     _giftFlightTargets = [];
+                    // الآن بعد وصول الهدية إلى المقعد المحدد يشتغل عرض الهدية الكبيرة
+                    _showGiftAnim = (_giftAnimAsset != null && _giftAnimAsset!.isNotEmpty);
                   });
+                  if (_pendingBannerData != null) {
+                    _checkGiftBanner(_pendingBannerData!);
+                    _pendingBannerData = null;
+                  }
                 }
               },
             ),
@@ -2015,6 +2136,76 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 _giftBannerGiftImage = null;
                 _giftBannerCount = 1;
               }),
+            ),
+          // ── زر الكومبو العائم (Floating Combo Button) ──
+          if (_roomComboSeconds > 0 && _lastGiftComboData != null)
+            Positioned(
+              bottom: 72,
+              right: 14,
+              child: GestureDetector(
+                onTap: _onRoomComboTap,
+                child: Container(
+                  width: 80,
+                  height: 80,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Image.asset(
+                        _roomComboFiring ? R.comboFire : R.comboIdle,
+                        width: 80,
+                        height: 80,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Container(
+                          width: 64,
+                          height: 64,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
+                            ),
+                          ),
+                          child: const Center(
+                            child: Text('COMBO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 10,
+                        child: Text(
+                          'x$_roomComboMultiplier',
+                          style: const TextStyle(
+                            color: Color(0xFFFFD700),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                            shadows: [
+                              Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFFD700), width: 0.8),
+                          ),
+                          child: Text(
+                            '${_roomComboSeconds}s',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           // ── أنيميشن دخول الغرفة (car effect) ──
           if (_showEntranceAnim && _entranceAnimAsset != null)

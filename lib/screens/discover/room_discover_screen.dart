@@ -14,6 +14,7 @@ import '../../screens/room/room_screen.dart' show navigateToRoom;
 import '../../screens/room/widgets/svga_player.dart';
 import '../../screens/rank/rank_screen.dart';
 import 'package:zero/screens/user_profile/user_profile_screen.dart';
+import '../../utils/app_action_navigator.dart';
 import 'global_search_delegate.dart';
 
 class RoomDiscoverScreen extends StatefulWidget {
@@ -765,13 +766,14 @@ class _BannerCarouselState extends State<_BannerCarousel> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: GestureDetector(
-                        onTap: banner.linkUrl != null && banner.linkUrl!.isNotEmpty
-                            ? () {
-                                Clipboard.setData(ClipboardData(text: banner.linkUrl!));
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('تم نسخ الرابط: ${banner.linkUrl}')),
-                                );
-                              } : null,
+                        onTap: () {
+                          AppActionNavigator.handleAction(
+                            context,
+                            actionType: banner.actionType,
+                            actionValue: banner.actionValue,
+                            rawLink: banner.linkUrl,
+                          );
+                        },
                         child: CachedNetImage(
                           banner.imageUrl,
                           width: double.infinity,

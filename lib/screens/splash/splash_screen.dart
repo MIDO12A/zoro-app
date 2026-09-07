@@ -9,6 +9,7 @@ import '../../services/dynamic_config_service.dart';
 import '../../services/update_service.dart';
 import '../../providers/user_provider.dart';
 import '../../widgets/app_update_dialog.dart';
+import '../../utils/app_action_navigator.dart';
 import '../room/widgets/svga_frame.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -189,31 +190,57 @@ class _SplashScreenState extends State<SplashScreen> {
           ? config.splashImageUrl
           : config.splashUrl;
 
+      void triggerSplashAction() {
+        if (config.splashActionValue.isNotEmpty) {
+          _adTimer?.cancel();
+          widget.onNavigate();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              AppActionNavigator.handleAction(
+                context,
+                actionType: config.splashActionType,
+                actionValue: config.splashActionValue,
+              );
+            }
+          });
+        }
+      }
+
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
           children: [
             Positioned.fill(
-              child: svgaUrl.isNotEmpty
-                  ? SvgaFrame(
-                      svgaPath: svgaUrl,
-                      size: double.infinity,
-                      fit: BoxFit.cover,
-                    )
-                  : Image(
-                      image: R.cachedImage(imageUrl),
-                      fit: BoxFit.cover,
-                      errorBuilder: (ctx, err, stack) => Center(
-                        child: Text(
-                          config.appName,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onDoubleTap: triggerSplashAction,
+                onTap: () {
+                  // If action configured, allow tap/double-tap to trigger
+                  if (config.splashActionValue.isNotEmpty) {
+                    triggerSplashAction();
+                  }
+                },
+                child: svgaUrl.isNotEmpty
+                    ? SvgaFrame(
+                        svgaPath: svgaUrl,
+                        size: double.infinity,
+                        fit: BoxFit.cover,
+                      )
+                    : Image(
+                        image: R.cachedImage(imageUrl),
+                        fit: BoxFit.cover,
+                        errorBuilder: (ctx, err, stack) => Center(
+                          child: Text(
+                            config.appName,
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
+              ),
             ),
             SafeArea(
               child: Align(
