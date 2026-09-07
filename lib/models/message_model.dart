@@ -10,6 +10,7 @@ class MessageModel {
   final String? imageUrl;
   final String? activeBubble;
   final Map<String, dynamic>? giftPayload;
+  final Map<String, dynamic>? luckyBagPayload;
 
   MessageModel({
     this.msgId = '',
@@ -23,10 +24,12 @@ class MessageModel {
     this.imageUrl,
     this.activeBubble,
     this.giftPayload,
+    this.luckyBagPayload,
   });
 
   factory MessageModel.fromMap(Map map) {
     final payloadRaw = map['gift_payload'];
+    final luckyBagRaw = map['lucky_bag_payload'];
     return MessageModel(
       msgId: map['msg_id']?.toString() ?? '',
       roomId: map['room_id']?.toString() ?? '',
@@ -43,6 +46,9 @@ class MessageModel {
       activeBubble: map['active_bubble']?.toString(),
       giftPayload: payloadRaw is Map
           ? Map<String, dynamic>.from(payloadRaw)
+          : null,
+      luckyBagPayload: luckyBagRaw is Map
+          ? Map<String, dynamic>.from(luckyBagRaw)
           : null,
     );
   }
@@ -61,5 +67,6 @@ class MessageModel {
         'image_url': imageUrl,
         'active_bubble': activeBubble,
         if (giftPayload != null) 'gift_payload': giftPayload,
+        if (luckyBagPayload != null) 'lucky_bag_payload': luckyBagPayload,
       };
 }

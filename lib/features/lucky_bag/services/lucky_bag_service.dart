@@ -5,13 +5,7 @@ import '../../../services/firebase_service.dart';
 import '../models/lucky_bag_model.dart';
 import '../widgets/lucky_bag_grab_overlay.dart';
 
-/// خدمة أكياس الحظ (حقيبة الحظ/أكياس الحظ room-wide)
-///
-/// تتولى:
-///  - إرسال أكياس الحظ عبر السيرفر (server-authoritative)
-///  - التقاط كيس من الغرفة
-///  - عرض طبقة الالتقاط العائمة لكافة أعضاء الغرفة عند بث حدث lucky_bag
-///  - إظهار نتيجة الالتقاط للمستخدم
+/// خدمة المظاريف الحمراء وأكياس الحظ (Lucky Bag / Red Packet)
 class LuckyBagService {
   static final LuckyBagService _instance = LuckyBagService._internal();
   factory LuckyBagService() => _instance;
@@ -20,13 +14,16 @@ class LuckyBagService {
   final ApiService _api = ApiService();
   final FirebaseService _fb = FirebaseService();
 
-  /// إرسال أكياس الحظ من المستخدم الحالي إلى الغرفة.
+  /// إرسال مظروف أحمر / حقيبة حظ إلى الغرفة.
   Future<Map<String, dynamic>?> sendLuckyBag({
     required String roomId,
     String type = 'coins',
     String scope = 'room',
-    required int value,
-    int count = 3,
+    int? value,
+    int? count,
+    int? totalCoins,
+    String? greetingText,
+    bool isSuper = false,
   }) async {
     try {
       final res = await _api.sendLuckyBag(
@@ -35,6 +32,9 @@ class LuckyBagService {
         scope: scope,
         value: value,
         count: count,
+        totalCoins: totalCoins,
+        greetingText: greetingText,
+        isSuper: isSuper,
       );
       return res['success'] == true ? res : null;
     } catch (e) {
@@ -43,7 +43,7 @@ class LuckyBagService {
     }
   }
 
-  /// التقاط كيس من حقيبة حظ نشطة في الغرفة.
+  /// فتح / التقاط نصيب من المظروف الأحمر في الغرفة.
   Future<LuckyBagClaimResult> grabLuckyBag({
     required String roomId,
     String? bagId,
@@ -59,45 +59,62 @@ class LuckyBagService {
       );
     } catch (e) {
       debugPrint('grabLuckyBag failed: $e');
-      return LuckyBagClaimResult(success: false, error: 'network_error');
+      return const LuckyBagClaimResult(success: false, error: 'network_error');
     }
+  }
+
+  /// جلب تفاصيل المظروف وقائمة الفائزين بالكامل
+  Future<Map<String, dynamic>?> getLuckyBagDetails(String bagId) async {
+    try {
+      final res = await _api.getLuckyBagDetails(bagId);
+      if (res['success'] == true) return res;
+    } catch (e) {
+      debugPrint('getLuckyBagDetails failed: $e');
+    }
+    return null;
   }
 
   String _friendlyGrabError(String code) {
     switch (code) {
       case 'cannot_claim_own_bag':
         return 'لا يمكنك التقاط كيس أرسلته بنفسك';
+      case 'already_claimed':
+        return 'لقد قمت بفتح هذا المظروف مسبقاً!';
       case 'mic_only':
-        return 'هذا الكيس مخصص للمتواجدين على المايك فقط';
+        return 'هذا المظروف مخصص للمتواجدين على المايك فقط';
       case 'not_in_room':
-        return 'يجب أن تكون داخل الغرفة للالتقاط';
+        return 'يجب أن تكون داخل الغرفة للمشاركة';
       case 'bag_expired':
-        return 'الكيس انتهت صلاحيته';
+        return 'انتهت صلاحية هذا المظروف';
       case 'bag_empty':
-        return 'الكيس خلص';
+        return 'تم توزيع كافة الأنصبة بالكامل!';
       case 'no_active_bag':
-        return 'لا توجد أكياس نشطة حالياً';
+        return 'لا توجد مظاريف نشطة حالياً';
       case 'rate_limited':
-        return 'حاول مجدداً بعد قليل';
+        return 'تمهل قليلاً وحاول مجدداً';
       default:
-        return 'جيت متأخر، الكيس خلص';
+        return 'جيت متأخر، تم فتح المظروف بالكامل';
     }
   }
 
-  // ── عرض طبقة الالتقاط العائمة ─────────────────────────
+  // ── عرض إشعار الالتقاط السريع ─────────────────────────
   OverlayEntry? _grabOverlay;
 
-  /// يُستدعى عند بث حدث lucky_bag جديد في الغرفة لعرض زر الالتقاط.
   void showGrabBanner(
     BuildContext context, {
     required String roomId,
     required LuckyBagModel bag,
+    required VoidCallback onOpenDialog,
   }) {
     final overlay = Overlay.of(context, rootOverlay: true);
     _grabOverlay?.remove();
     _grabOverlay = OverlayEntry(
       builder: (ctx) => LuckyBagGrabOverlay(
         bag: bag,
+        onTapOpen: () {
+          _hideGrabBanner();
+          onOpenDialog();
+        },
         onGrab: () async {
           final result = await grabLuckyBag(
             roomId: roomId,
@@ -126,8 +143,8 @@ class LuckyBagService {
       SnackBar(
         content: Text(
           result.success
-              ? '🎉 مبروك! أخذت ${result.amount} 🪙 من كيس الحظ'
-              : '⚠️ ${result.error ?? 'فشل الالتقاط'}',
+              ? '🎉 مبروك! حصلت على ${result.amount} 🪙 من المظروف'
+              : '⚠️ ${result.error ?? 'فشل فتح المظروف'}',
         ),
         duration: const Duration(seconds: 3),
         backgroundColor: result.success ? const Color(0xFF2E7D32) : const Color(0xFF7A3B00),
@@ -135,7 +152,7 @@ class LuckyBagService {
     );
   }
 
-  /// تتبع حقيبة الحظ النشطة داخل الغرفة (للتحديثات اللحظية).
+  /// تتبع المظاريف النشطة داخل الغرفة
   Stream<List<LuckyBagModel>> activeBagsStream(String roomId) {
     return _fb.activeLuckyBagsStream(roomId).map((list) => list
         .map((m) => LuckyBagModel.fromJson(m))

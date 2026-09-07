@@ -18,7 +18,7 @@ async function bagTtlMs(): Promise<number> {
     const t = asInt(cfg.data()?.ttl_seconds);
     if (t > 0) return t * 1000;
   } catch (_) {}
-  return 60_000; // default 60s
+  return 90_000; // default 90s for red envelopes
 }
 
 const GRAB_RATE_WINDOW_MS = 30_000;
@@ -26,7 +26,7 @@ const grabWindow = new Map<string, number[]>();
 function grabRateLimited(uid: string): boolean {
   const now = Date.now();
   const hits = (grabWindow.get(uid) ?? []).filter((t) => now - t < GRAB_RATE_WINDOW_MS);
-  if (hits.length >= 10) {
+  if (hits.length >= 15) {
     grabWindow.set(uid, hits);
     return true;
   }
@@ -37,13 +37,14 @@ function grabRateLimited(uid: string): boolean {
 
 /**
  * POST /api/v1/lucky-bags/send
- * Server-authoritative creation of a room-wide luck bag (حقيبة الحظ):
- *  - type: 'coins' | 'gift' | 'gold'
+ * Server-authoritative creation of a room-wide Red Envelope / Lucky Bag (المظروف الأحمر / حقيبة الحظ):
+ *  - type: 'coins' | 'super' | 'gift' | 'gold'
  *  - scope: 'room' (anyone in room) | 'mic' (only users on the mic)
- *  - count: number of bags to scatter (default 3, max 20)
- *  - value: per-grab pool size (the total pool = value * count)
- * Deducts the total from the sender's coins in ONE transaction and
- * broadcasts room_messages type 'lucky_bag' so every member sees the banner.
+ *  - count: number of shares/bags (e.g. 5, 10, 20, 50, 100)
+ *  - value: total coins or per-bag amount
+ *  - totalCoins: optional explicit total coin pool
+ *  - greetingText: custom blessing/greeting text
+ *  - isSuper: boolean for Super Red Packet
  */
 router.post('/send', authenticate, async (req: Request, res: Response) => {
   const ownerId = req.user?.uid;
@@ -52,17 +53,37 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
     return;
   }
 
-  const { roomId, type: rawType, scope: rawScope, value: rawValue, count: rawCount } = req.body ?? {};
+  const {
+    roomId,
+    type: rawType,
+    scope: rawScope,
+    value: rawValue,
+    count: rawCount,
+    totalCoins: rawTotalCoins,
+    greetingText: rawGreeting,
+    isSuper: rawIsSuper,
+  } = req.body ?? {};
+
   const roomIdStr = String(roomId ?? '');
   if (!roomIdStr) {
     res.status(400).json({ error: 'Missing roomId' });
     return;
   }
-  const type = (rawType === 'gift' || rawType === 'gold') ? rawType : 'coins';
+
+  const type = rawType === 'super' || rawType === 'gift' || rawType === 'gold' ? rawType : 'coins';
+  const isSuper = rawIsSuper === true || type === 'super';
   const scope = rawScope === 'mic' ? 'mic' : 'room';
-  const value = Math.max(1, Math.min(1_000_000, asInt(rawValue)));
-  const count = Math.max(1, Math.min(20, Number(rawCount) || 3));
-  const totalCost = value * count;
+  const count = Math.max(1, Math.min(200, asInt(rawCount) || 5));
+  
+  // If totalCoins is explicitly passed, use it; otherwise value * count
+  let totalCost = asInt(rawTotalCoins);
+  if (totalCost <= 0) {
+    const value = Math.max(1, asInt(rawValue));
+    totalCost = value * count;
+  }
+  totalCost = Math.max(count, Math.min(10_000_000, totalCost));
+
+  const greeting = String(rawGreeting ?? '').trim() || (isSuper ? '🧧 بركة وسعادة للجميع ✨' : '🧧 حظ سعيد للجميع 🎁');
 
   try {
     const ownerRef = db.collection('users').doc(ownerId);
@@ -77,32 +98,43 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
 
       const ttl = await bagTtlMs();
       const now = Date.now();
-      const bagId = `${now}_${ownerId}_${Math.floor(Math.random() * 1e6)}`;
-      const ownerName = String(ownerData.name ?? '');
+      const bagId = `red_${now}_${ownerId}_${Math.floor(Math.random() * 1e6)}`;
+      const ownerName = String(ownerData.name ?? 'عضو');
       const ownerPhoto = String(ownerData.photo_url ?? ownerData.photoUrl ?? '');
+      const ownerVip = asInt(ownerData.vip_level ?? ownerData.vipLevel ?? 0);
+      const ownerLevel = asInt(ownerData.level ?? 1);
 
-      // One batch doc — everyone draws from the same remaining pool.
       txn.set(db.collection('lucky_bags').doc(bagId), {
         id: bagId,
+        bag_id: bagId,
         room_id: roomIdStr,
         owner_id: ownerId,
         owner_name: ownerName,
         owner_photo: ownerPhoto,
+        owner_vip: ownerVip,
+        owner_level: ownerLevel,
         type,
         scope,
+        is_super: isSuper,
+        greeting_text: greeting,
         total_value: totalCost,
         remaining_value: totalCost,
         total_bags: count,
+        total_shares: count,
         bags_taken: 0,
+        claimed_shares: 0,
+        luckiest_user_id: '',
+        luckiest_name: '',
+        luckiest_amount: 0,
         created_at: new Date(now).toISOString(),
         expires_at: new Date(now + ttl).toISOString(),
         status: 'active',
       });
 
-      const text =
-        type === 'coins'
-          ? `🛍️ ${ownerName} أرسل أكياس الحظ (${count} كيس) بمجموع ${totalCost} 🪙`
-          : `🛍️ ${ownerName} أرسل أكياس الحظ (${count} كيس) 🎁`;
+      const text = isSuper
+        ? `🧧🌟 أرسل ${ownerName} مظروفاً أحمر سوبر بمجموع ${totalCost} 🪙 (${count} نصيب) : "${greeting}"`
+        : `🧧 أرسل ${ownerName} مظروف الحظ (${count} نصيب) بمجموع ${totalCost} 🪙 : "${greeting}"`;
+
       txn.set(db.collection('room_messages').doc(), {
         msg_id: bagId,
         room_id: roomIdStr,
@@ -116,11 +148,20 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
           roomId: roomIdStr,
           ownerName,
           ownerAvatar: ownerPhoto,
+          ownerVip,
+          ownerLevel,
           type,
           scope,
-          value,
+          isSuper,
+          greetingText: greeting,
+          value: Math.floor(totalCost / count),
           totalBags: count,
+          totalShares: count,
           totalValue: totalCost,
+          remainingValue: totalCost,
+          claimedShares: 0,
+          status: 'active',
+          expiresAt: new Date(now + ttl).toISOString(),
         },
         created_at: new Date(now).toISOString(),
       });
@@ -138,7 +179,15 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
         });
       }
 
-      return { success: true, bagId, totalValue: totalCost, expiresAt: now + ttl };
+      return {
+        success: true,
+        bagId,
+        totalValue: totalCost,
+        totalShares: count,
+        isSuper,
+        greetingText: greeting,
+        expiresAt: now + ttl,
+      };
     });
 
     res.json(result);
@@ -149,9 +198,11 @@ router.post('/send', authenticate, async (req: Request, res: Response) => {
 
 /**
  * POST /api/v1/lucky-bags/grab
- * Server-authoritative grab: picks the oldest active bag in the room whose
- * remaining_value > 0 and hasn't expired, draws a random portion, credits the
- * claimer's coins, and returns leftovers to the owner when the bag is exhausted.
+ * Server-authoritative grab/open for Red Envelopes:
+ * - Checks double claiming (one claim per user per envelope)
+ * - Computes randomized lucky distribution
+ * - Crowns the luckiest winner (ملك الحظ)
+ * - Credits claimer coins in a single atomic transaction
  */
 router.post('/grab', authenticate, async (req: Request, res: Response) => {
   const claimerId = req.user?.uid;
@@ -159,7 +210,7 @@ router.post('/grab', authenticate, async (req: Request, res: Response) => {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
-  const { roomId, bagId: rawBagId } = req.body ?? {};
+  const { roomId, bagId: targetBagId } = req.body ?? {};
   const roomIdStr = String(roomId ?? '');
   if (!roomIdStr) {
     res.status(400).json({ error: 'Missing roomId' });
@@ -171,29 +222,59 @@ router.post('/grab', authenticate, async (req: Request, res: Response) => {
   }
 
   try {
-    // ── ALL reads/queries OUTSIDE the transaction (queries can't run inside) ──
     let bagRef: DocumentReference | null = null;
     let bagData: Record<string, any> = {};
-    const qs = await db.collection('lucky_bags')
-      .where('room_id', '==', roomIdStr)
-      .where('status', '==', 'active')
-      .orderBy('created_at', 'asc')
-      .get();
-    for (const doc of qs.docs) {
-      const d = doc.data();
-      if (asInt(d.remaining_value) > 0 && new Date(String(d.expires_at)).getTime() > Date.now()) {
+
+    if (targetBagId) {
+      const doc = await db.collection('lucky_bags').doc(String(targetBagId)).get();
+      if (doc.exists) {
         bagRef = doc.ref;
-        bagData = d;
-        break;
+        bagData = doc.data() ?? {};
       }
     }
+
+    if (!bagRef) {
+      const qs = await db.collection('lucky_bags')
+        .where('room_id', '==', roomIdStr)
+        .where('status', '==', 'active')
+        .orderBy('created_at', 'asc')
+        .get();
+
+      for (const doc of qs.docs) {
+        const d = doc.data();
+        if (asInt(d.remaining_value) > 0 && new Date(String(d.expires_at)).getTime() > Date.now()) {
+          bagRef = doc.ref;
+          bagData = d;
+          break;
+        }
+      }
+    }
+
     if (!bagRef) {
       res.status(404).json({ error: 'no_active_bag' });
       return;
     }
 
+    const currentBagId = String(bagData.id ?? bagData.bag_id ?? '');
+
+    // Check if user already claimed this bag
+    const existingClaimQ = await db.collection('lucky_bag_claims')
+      .where('bag_id', '==', currentBagId)
+      .where('claimer_id', '==', claimerId)
+      .limit(1)
+      .get();
+
+    if (!existingClaimQ.empty) {
+      const existingData = existingClaimQ.docs[0].data();
+      res.status(400).json({
+        error: 'already_claimed',
+        amount: asInt(existingData.amount),
+        claimId: existingData.id,
+      });
+      return;
+    }
+
     const scope = String(bagData.scope ?? 'room');
-    // Mic-scope bags are only claimable by users currently sitting on a mic.
     let isOnMic = true;
     if (scope === 'mic') {
       try {
@@ -209,16 +290,16 @@ router.post('/grab', authenticate, async (req: Request, res: Response) => {
         const md = memberQ.docs[0].data();
         isOnMic = md.mic_index != null || md.micIndex != null || md.on_mic === true;
       } catch (_) {
-        isOnMic = true; // fail-open if membership can't be resolved
+        isOnMic = true;
       }
     }
 
     const result = await db.runTransaction(async (txn) => {
       const claimerRef = db.collection('users').doc(claimerId);
       const ownerRef = db.collection('users').doc(String(bagData.owner_id ?? ''));
-      // ALL READS FIRST (transaction forbids reads after writes).
+
       const [bSnap, claimerSnap, ownerSnap] = await Promise.all([
-        txn.get(bagRef),
+        txn.get(bagRef!),
         txn.get(claimerRef),
         txn.get(ownerRef),
       ]);
@@ -229,39 +310,62 @@ router.post('/grab', authenticate, async (req: Request, res: Response) => {
       const remaining = asInt(b.remaining_value);
       if (remaining <= 0) throw new Error('bag_empty');
       if (new Date(String(b.expires_at)).getTime() <= Date.now()) throw new Error('bag_expired');
-      if (b.owner_id === claimerId) throw new Error('cannot_claim_own_bag');
       if (scope === 'mic' && !isOnMic) throw new Error('mic_only');
       if (!claimerSnap.exists) throw new Error('claimer_not_found');
       const cd = claimerSnap.data() ?? {};
 
-      // Draw 10–40% of remaining (at least 1).
-      const portion = 0.1 + Math.random() * 0.3;
-      const amount = Math.max(1, Math.floor(remaining * portion));
-      const newRemaining = remaining - amount;
-      const newStatus = newRemaining <= 0 ? 'done' : 'active';
+      const totalShares = asInt(b.total_shares ?? b.total_bags ?? 1);
+      const claimedShares = asInt(b.claimed_shares ?? b.bags_taken ?? 0);
+      const remainingShares = Math.max(1, totalShares - claimedShares);
 
-      const claimId = `${Date.now()}_${claimerId}_${Math.floor(Math.random() * 1e6)}`;
+      let amount = 1;
+      if (remainingShares === 1) {
+        amount = remaining;
+      } else {
+        const avg = remaining / remainingShares;
+        const maxDraw = Math.max(1, Math.floor(avg * 2));
+        amount = Math.max(1, Math.min(remaining - (remainingShares - 1), Math.floor(1 + Math.random() * maxDraw)));
+      }
+
+      const newRemaining = Math.max(0, remaining - amount);
+      const newClaimedShares = claimedShares + 1;
+      const isDone = newRemaining <= 0 || newClaimedShares >= totalShares;
+      const newStatus = isDone ? 'done' : 'active';
+
+      const currentLuckiestAmount = asInt(b.luckiest_amount ?? 0);
+      const isLuckiest = amount > currentLuckiestAmount;
+      const newLuckiestId = isLuckiest ? claimerId : String(b.luckiest_user_id ?? '');
+      const newLuckiestName = isLuckiest ? String(cd.name ?? '') : String(b.luckiest_name ?? '');
+      const newLuckiestAmount = isLuckiest ? amount : currentLuckiestAmount;
+
+      const claimId = `claim_${Date.now()}_${claimerId}_${Math.floor(Math.random() * 1e6)}`;
       const nowIso = new Date(Date.now()).toISOString();
 
       txn.set(db.collection('lucky_bag_claims').doc(claimId), {
         id: claimId,
-        bag_id: String(b.id),
+        bag_id: currentBagId,
         room_id: roomIdStr,
         claimer_id: claimerId,
-        claimer_name: String(cd.name ?? ''),
+        claimer_name: String(cd.name ?? 'عضو'),
+        claimer_avatar: String(cd.photo_url ?? cd.photoUrl ?? ''),
         amount,
+        is_luckiest: isLuckiest,
         created_at: nowIso,
       });
 
-      txn.update(bagRef, {
-        remaining_value: Math.max(0, newRemaining),
-        bags_taken: asInt(b.bags_taken) + 1,
+      txn.update(bagRef!, {
+        remaining_value: newRemaining,
+        bags_taken: newClaimedShares,
+        claimed_shares: newClaimedShares,
+        luckiest_user_id: newLuckiestId,
+        luckiest_name: newLuckiestName,
+        luckiest_amount: newLuckiestAmount,
         status: newStatus,
       });
 
       txn.update(claimerRef, { coins: asInt(cd.coins) + amount });
 
-      const text = `🫳 ${String(cd.name ?? '')} أخذ ${amount} 🪙 من كيس الحظ`;
+      const text = `🧧 فتح ${String(cd.name ?? '')} المظروف وحصل على ${amount} 🪙`;
       txn.set(db.collection('room_messages').doc(), {
         msg_id: claimId,
         room_id: roomIdStr,
@@ -271,19 +375,20 @@ router.post('/grab', authenticate, async (req: Request, res: Response) => {
         text,
         image_url: '',
         lucky_bag_payload: {
-          bagId: String(b.id),
+          bagId: currentBagId,
           roomId: roomIdStr,
           claimerName: String(cd.name ?? ''),
           claimerAvatar: String(cd.photo_url ?? cd.photoUrl ?? ''),
           amount,
           remaining: newRemaining,
-          isDone: newStatus === 'done',
+          isLuckiest,
+          isDone,
         },
         created_at: nowIso,
       });
 
-      // Return leftovers to the owner when exhausted.
-      if (newStatus === 'done' && ownerSnap.exists) {
+      // If expired with remaining coins, return leftovers to the owner
+      if (isDone && newRemaining > 0 && ownerSnap.exists) {
         const od = ownerSnap.data() ?? {};
         txn.update(ownerRef, { coins: asInt(od.coins) + newRemaining });
       }
@@ -291,10 +396,12 @@ router.post('/grab', authenticate, async (req: Request, res: Response) => {
       return {
         success: true,
         claimId,
+        bagId: currentBagId,
         amount,
         remaining: newRemaining,
-        isDone: newStatus === 'done',
-        type: String(b.type),
+        isDone,
+        isLuckiest,
+        type: String(b.type ?? 'coins'),
       };
     });
 
@@ -311,4 +418,107 @@ router.post('/grab', authenticate, async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/v1/lucky-bags/details/:bagId
+ * Fetches full details and claims list for a Red Envelope
+ */
+router.get('/details/:bagId', authenticate, async (req: Request, res: Response) => {
+  const { bagId } = req.params;
+  if (!bagId) {
+    res.status(400).json({ error: 'Missing bagId' });
+    return;
+  }
+
+  try {
+    const bagDoc = await db.collection('lucky_bags').doc(String(bagId)).get();
+    if (!bagDoc.exists) {
+      res.status(404).json({ error: 'bag_not_found' });
+      return;
+    }
+
+    const bag = bagDoc.data() ?? {};
+    const claimsSnap = await db.collection('lucky_bag_claims')
+      .where('bag_id', '==', bagId)
+      .orderBy('created_at', 'desc')
+      .limit(100)
+      .get();
+
+    let maxAmount = 0;
+    const claims = claimsSnap.docs.map((d) => {
+      const data = d.data();
+      const amt = asInt(data.amount);
+      if (amt > maxAmount) maxAmount = amt;
+      return {
+        id: d.id,
+        claimerId: data.claimer_id,
+        claimerName: data.claimer_name,
+        claimerAvatar: data.claimer_avatar,
+        amount: amt,
+        isLuckiest: data.is_luckiest === true,
+        createdAt: data.created_at,
+      };
+    });
+
+    // Mark the luckiest claim
+    claims.forEach((c) => {
+      if (c.amount === maxAmount && maxAmount > 0) {
+        c.isLuckiest = true;
+      }
+    });
+
+    res.json({
+      success: true,
+      bag: {
+        id: bag.id ?? bag.bag_id,
+        roomId: bag.room_id,
+        ownerId: bag.owner_id,
+        ownerName: bag.owner_name,
+        ownerAvatar: bag.owner_photo,
+        ownerVip: bag.owner_vip ?? 0,
+        ownerLevel: bag.owner_level ?? 1,
+        type: bag.type ?? 'coins',
+        scope: bag.scope ?? 'room',
+        isSuper: bag.is_super === true,
+        greetingText: bag.greeting_text ?? '',
+        totalValue: bag.total_value ?? 0,
+        remainingValue: bag.remaining_value ?? 0,
+        totalShares: bag.total_shares ?? bag.total_bags ?? 0,
+        claimedShares: bag.claimed_shares ?? bag.bags_taken ?? 0,
+        status: bag.status ?? 'active',
+        createdAt: bag.created_at,
+        expiresAt: bag.expires_at,
+      },
+      claims,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: String(err?.message ?? 'server_error') });
+  }
+});
+
+/**
+ * GET /api/v1/lucky-bags/active/:roomId
+ * Returns currently active red envelopes in a room
+ */
+router.get('/active/:roomId', authenticate, async (req: Request, res: Response) => {
+  const { roomId } = req.params;
+  try {
+    const qs = await db.collection('lucky_bags')
+      .where('room_id', '==', String(roomId))
+      .where('status', '==', 'active')
+      .orderBy('created_at', 'desc')
+      .limit(10)
+      .get();
+
+    const now = Date.now();
+    const bags = qs.docs
+      .map((d) => d.data())
+      .filter((d) => asInt(d.remaining_value) > 0 && new Date(String(d.expires_at)).getTime() > now);
+
+    res.json({ success: true, bags });
+  } catch (err: any) {
+    res.status(500).json({ error: String(err?.message ?? 'server_error') });
+  }
+});
+
 export default router;
+

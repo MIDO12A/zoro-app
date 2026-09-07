@@ -17,6 +17,7 @@ const navItems = [
   { to: '/store', icon: Store, label: 'nav.store' },
   { to: '/rooms', icon: DoorOpen, label: 'nav.rooms' },
   { to: '/lucky-gifts', icon: Sparkles, label: 'nav.luckyGifts' },
+  { to: '/red-packets', icon: Gift, label: 'المظاريف وصناديق الحظ 🧧' },
   { to: '/tasks-manager', icon: CheckSquare, label: 'مركز المهام والمكافآت' },
   { to: '/unions', icon: Building2, label: 'nav.unions' },
   { to: '/vip', icon: Crown, label: 'nav.vip' },

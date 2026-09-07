@@ -3,69 +3,120 @@ import 'package:provider/provider.dart';
 import '../../../providers/user_provider.dart';
 import '../services/lucky_bag_service.dart';
 
-/// حوار إرسال أكياس الحظ (حقيبة الحظ)
-///
-/// يختار المستخدم:
-///  - النطاق: الغرفة كلها / المايك فقط
-///  - القيمة لكل كيس (coins)
-///  - عدد الأكياس
-/// ثم يرسل عبر LuckyBagService (السيرفر يخصم العملات ويبث الحدث للغرفة).
+/// حوار إرسال المظاريف الحمراء وأكياس الحظ (Red Envelope Send Dialog)
 class LuckyBagSendDialog extends StatefulWidget {
   final String roomId;
 
   const LuckyBagSendDialog({super.key, required this.roomId});
 
+  static Future<bool?> show(BuildContext context, {required String roomId}) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => LuckyBagSendDialog(roomId: roomId),
+    );
+  }
+
   @override
   State<LuckyBagSendDialog> createState() => _LuckyBagSendDialogState();
 }
 
-class _LuckyBagSendDialogState extends State<LuckyBagSendDialog> {
+class _LuckyBagSendDialogState extends State<LuckyBagSendDialog> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   String _scope = 'room';
-  int _value = 100;
-  int _count = 3;
+  int _selectedAmount = 1000;
+  int _sharesCount = 10;
   bool _sending = false;
 
-  static const _valueOptions = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
-  static const _countOptions = [1, 2, 3, 5, 10, 20];
+  final TextEditingController _customAmountCtrl = TextEditingController();
+  final TextEditingController _greetingCtrl = TextEditingController();
 
-  int get _totalCost => _value * _count;
+  static const _amountPresets = [500, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+  static const _sharesPresets = [5, 10, 20, 30, 50, 100];
+  static const _greetingPresets = [
+    'مبروك وموفقين ✨',
+    'كل عام وأنتم بخير 🌙',
+    'ألف مبروك للفائزين 🎁',
+    'تحياتي للجميع ❤️',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _greetingCtrl.text = _greetingPresets[0];
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _customAmountCtrl.dispose();
+    _greetingCtrl.dispose();
+    super.dispose();
+  }
+
+  int get _totalCoins {
+    final custom = int.tryParse(_customAmountCtrl.text.trim());
+    if (custom != null && custom > 0) return custom;
+    return _selectedAmount;
+  }
+
+  bool get _isSuper => _tabController.index == 1;
 
   Future<void> _handleSend() async {
     if (_sending) return;
     final user = Provider.of<UserProvider>(context, listen: false).currentUser;
     if (user == null) return;
-    if (user.coins < _totalCost) {
+
+    final cost = _totalCoins;
+    if (user.coins < cost) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('عملات غير كافية!'),
-          backgroundColor: Color(0xFF7A3B00),
+          content: Text('رصيد العملات غير كافٍ!'),
+          backgroundColor: Color(0xFFB71C1C),
         ),
       );
       return;
     }
+
+    if (cost < _sharesCount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('يجب أن تكون قيمة المظروف ($_totalCoins) أكبر من عدد الأنصبة ($_sharesCount)!'),
+          backgroundColor: const Color(0xFFB71C1C),
+        ),
+      );
+      return;
+    }
+
     setState(() => _sending = true);
     final res = await LuckyBagService().sendLuckyBag(
       roomId: widget.roomId,
-      type: 'coins',
+      type: _isSuper ? 'super' : 'coins',
       scope: _scope,
-      value: _value,
-      count: _count,
+      totalCoins: cost,
+      count: _sharesCount,
+      greetingText: _greetingCtrl.text.trim(),
+      isSuper: _isSuper,
     );
+
     if (!mounted) return;
     setState(() => _sending = false);
+
     if (res != null) {
       Navigator.of(context).pop(true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('🎉 أُرسلت ${_count} أكياس بمجموع $_totalCost 🪙'),
+          content: Text('🧧 أُرسل المظروف الأحمر بنجاح بمجموع $cost 🪙 ($_sharesCount نصيب)'),
           backgroundColor: const Color(0xFF2E7D32),
         ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('فشل الإرسال — تأكد من رصيد العملات'),
-          backgroundColor: Color(0xFF7A3B00),
+          content: Text('فشل الإرسال — تأكد من رصيد العملات أو الاتصال'),
+          backgroundColor: Color(0xFFB71C1C),
         ),
       );
     }
@@ -76,49 +127,57 @@ class _LuckyBagSendDialogState extends State<LuckyBagSendDialog> {
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
     final user = Provider.of<UserProvider>(context).currentUser;
     final coins = user?.coins ?? 0;
-    final canAfford = coins >= _totalCost;
+    final canAfford = coins >= _totalCoins;
 
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xF5130810),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        gradient: LinearGradient(
+          colors: [Color(0xFF1F0B10), Color(0xFF140508)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: Color(0xFFFFD54F), width: 1.5)),
       ),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Title + wallet
+              // Header + Balance
               Row(
                 children: [
+                  const Text('🧧', style: TextStyle(fontSize: 22)),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      isAr ? '🛍️ أكياس الحظ (حقيبة الحظ)' : '🛍️ Lucky Bag',
+                      isAr ? 'المظاريف الحمراء (صندوق الحظ)' : 'Lucky Red Packets',
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: Color(0xFFFFE082),
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFC107).withValues(alpha: 0.18),
+                      color: const Color(0xFFFFD54F).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFFFD54F).withValues(alpha: 0.4)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.monetization_on, color: Color(0xFFFFC107), size: 16),
+                        const Text('🪙', style: TextStyle(fontSize: 14)),
                         const SizedBox(width: 4),
                         Text(
                           '$coins',
                           style: const TextStyle(
-                            color: Color(0xFFFFC107),
-                            fontSize: 13,
+                            color: Color(0xFFFFD54F),
+                            fontSize: 12,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -127,124 +186,211 @@ class _LuckyBagSendDialogState extends State<LuckyBagSendDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                isAr
-                    ? 'أرسل حقيبة حظ لأعضاء الغرفة — أول من يلتقط يكسب!'
-                    : 'Send a lucky bag to room members — first grab wins!',
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
-              ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 14),
 
-              _sectionLabel(isAr ? 'نطاق الكيس' : 'Scope'),
+              // Tabs: Random vs Super
+              Container(
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: TabBar(
+                  controller: _tabController,
+                  indicator: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFD32F2F), Color(0xFFFF8F00)],
+                    ),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.white54,
+                  labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  tabs: [
+                    Tab(text: isAr ? '🧧 مظروف حظ (عشوائي)' : '🧧 Lucky (Random)'),
+                    Tab(text: isAr ? '👑 سوبر بركة (مميز)' : '👑 Super Blessing'),
+                  ],
+                  onTap: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Scope selection
+              _sectionTitle(isAr ? 'نطاق التوزيع' : 'Scope'),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _choiceChip(
-                    label: isAr ? 'الغرفة كلها' : 'Room',
-                    icon: Icons.groups,
+                  _scopeButton(
+                    label: isAr ? '👥 الغرفة كاملة' : '👥 Whole Room',
                     selected: _scope == 'room',
                     onTap: () => setState(() => _scope = 'room'),
                   ),
-                  const SizedBox(width: 8),
-                  _choiceChip(
-                    label: isAr ? 'المايك فقط' : 'Mic only',
-                    icon: Icons.mic,
+                  const SizedBox(width: 10),
+                  _scopeButton(
+                    label: isAr ? '🎤 على المايك فقط' : '🎤 On Mic Only',
                     selected: _scope == 'mic',
                     onTap: () => setState(() => _scope = 'mic'),
                   ),
                 ],
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
 
-              _sectionLabel(isAr ? 'قيمة الكيس الواحد (عملات)' : 'Value per bag (coins)'),
+              // Total coins presets
+              _sectionTitle(isAr ? 'إجمالي العملات' : 'Total Coins'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _valueOptions.map((v) {
-                  final selected = _value == v;
+                children: _amountPresets.map((amt) {
+                  final isSelected = _selectedAmount == amt && _customAmountCtrl.text.isEmpty;
                   return GestureDetector(
-                    onTap: () => setState(() => _value = v),
+                    onTap: () {
+                      _customAmountCtrl.clear();
+                      setState(() => _selectedAmount = amt);
+                    },
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xFFDE880F)
-                            : Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
-                        border: selected
-                            ? null
-                            : Border.all(color: Colors.white24),
+                        gradient: isSelected
+                            ? const LinearGradient(colors: [Color(0xFFFFD54F), Color(0xFFFF8F00)])
+                            : null,
+                        color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFFFFF9C4) : Colors.white24,
+                        ),
                       ),
                       child: Text(
-                        '$v',
+                        '$amt 🪙',
                         style: TextStyle(
-                          color: selected ? Colors.white : Colors.white70,
+                          color: isSelected ? const Color(0xFF5D1000) : Colors.white70,
                           fontSize: 12,
-                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ),
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 8),
 
-              _sectionLabel(isAr ? 'عدد الأكياس' : 'Number of bags'),
+              // Custom amount input
+              TextField(
+                controller: _customAmountCtrl,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: isAr ? 'أو أدخل مبلغاً مخصصاً (عملات)...' : 'Or enter custom amount...',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                  filled: true,
+                  fillColor: Colors.black26,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFFD54F))),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Shares count presets
+              _sectionTitle(isAr ? 'عدد الأنصبة (الفائزين)' : 'Number of Shares'),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _countOptions.map((c) {
-                  final selected = _count == c;
+                children: _sharesPresets.map((cnt) {
+                  final isSelected = _sharesCount == cnt;
                   return GestureDetector(
-                    onTap: () => setState(() => _count = c),
+                    onTap: () => setState(() => _sharesCount = cnt),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: selected
-                            ? const Color(0xFFDE880F)
-                            : Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
-                        border: selected
-                            ? null
-                            : Border.all(color: Colors.white24),
+                        gradient: isSelected
+                            ? const LinearGradient(colors: [Color(0xFFE53935), Color(0xFFB71C1C)])
+                            : null,
+                        color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xFFFFD54F) : Colors.white24,
+                        ),
                       ),
                       child: Text(
-                        '$c',
+                        '$cnt ${isAr ? 'نصيب' : 'shares'}',
                         style: TextStyle(
-                          color: selected ? Colors.white : Colors.white70,
+                          color: isSelected ? Colors.white : Colors.white70,
                           fontSize: 12,
-                          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ),
                   );
                 }).toList(),
               ),
+              const SizedBox(height: 16),
+
+              // Greeting text presets
+              _sectionTitle(isAr ? 'عبارة التهنئة والبركة' : 'Greeting Message'),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _greetingPresets.map((g) {
+                  return GestureDetector(
+                    onTap: () => setState(() => _greetingCtrl.text = g),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Text(g, style: const TextStyle(color: Color(0xFFFFE082), fontSize: 11)),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _greetingCtrl,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: isAr ? 'اكتب عبارة تهنئة...' : 'Custom blessing...',
+                  hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                  filled: true,
+                  fillColor: Colors.black26,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFFD54F))),
+                ),
+              ),
               const SizedBox(height: 18),
 
-              // ── Total ──
+              // Summary bar
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0B3A09).withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFFFF295)),
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFFFD54F).withValues(alpha: 0.15),
+                      const Color(0xFFB71C1C).withValues(alpha: 0.25),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFFD54F).withValues(alpha: 0.5)),
                 ),
                 child: Row(
                   children: [
                     Text(
-                      isAr ? 'المجموع:' : 'Total:',
+                      isAr ? 'الإجمالي المطلوب:' : 'Total Cost:',
                       style: const TextStyle(color: Colors.white70, fontSize: 13),
                     ),
                     const Spacer(),
                     Text(
-                      '$_value × $_count = $_totalCost 🪙',
+                      '$_totalCoins 🪙',
                       style: TextStyle(
-                        color: canAfford ? const Color(0xFFFFF295) : Colors.redAccent,
-                        fontSize: 14,
+                        color: canAfford ? const Color(0xFFFFEB3B) : const Color(0xFFFF8A80),
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -253,34 +399,43 @@ class _LuckyBagSendDialogState extends State<LuckyBagSendDialog> {
               ),
               const SizedBox(height: 18),
 
-              // ── Send button ──
+              // Send button
               GestureDetector(
                 onTap: _sending ? null : _handleSend,
                 child: Container(
-                  height: 44,
+                  height: 48,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: canAfford
-                          ? [const Color(0xFFFF6D00), const Color(0xFFFFA726)]
-                          : [const Color(0xFF555555), const Color(0xFF777777)],
+                          ? [const Color(0xFFFFD54F), const Color(0xFFFF8F00), const Color(0xFFD32F2F)]
+                          : [Colors.grey.shade700, Colors.grey.shade800],
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
                     ),
-                    borderRadius: BorderRadius.circular(22),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: canAfford
+                        ? [
+                            BoxShadow(
+                              color: Colors.red.withValues(alpha: 0.5),
+                              blurRadius: 14,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
                   ),
                   child: _sending
                       ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                         )
                       : Text(
-                          isAr ? 'إرسال أكياس' : 'Send Lucky Bag',
-                          style: const TextStyle(
-                            color: Colors.white,
+                          isAr ? '🧧 إرسال المظروف الأحمر' : '🧧 Send Red Packet',
+                          style: TextStyle(
+                            color: canAfford ? const Color(0xFF5D1000) : Colors.white54,
                             fontSize: 15,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                 ),
@@ -292,20 +447,19 @@ class _LuckyBagSendDialogState extends State<LuckyBagSendDialog> {
     );
   }
 
-  Widget _sectionLabel(String text) {
+  Widget _sectionTitle(String text) {
     return Text(
       text,
       style: const TextStyle(
-        color: Colors.white70,
+        color: Color(0xFFFFE082),
         fontSize: 12,
         fontWeight: FontWeight.bold,
       ),
     );
   }
 
-  Widget _choiceChip({
+  Widget _scopeButton({
     required String label,
-    required IconData icon,
     required bool selected,
     required VoidCallback onTap,
   }) {
@@ -313,29 +467,23 @@ class _LuckyBagSendDialogState extends State<LuckyBagSendDialog> {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          height: 42,
+          height: 40,
           decoration: BoxDecoration(
-            color: selected
-                ? const Color(0xFFDE880F)
-                : Colors.white.withValues(alpha: 0.08),
+            gradient: selected
+                ? const LinearGradient(colors: [Color(0xFFD32F2F), Color(0xFFFF8F00)])
+                : null,
+            color: selected ? null : Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
-            border: selected ? null : Border.all(color: Colors.white24),
+            border: Border.all(color: selected ? const Color(0xFFFFD54F) : Colors.white24),
           ),
           alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 18, color: selected ? Colors.white : Colors.white70),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: selected ? Colors.white : Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.white70,
+              fontSize: 12,
+              fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+            ),
           ),
         ),
       ),

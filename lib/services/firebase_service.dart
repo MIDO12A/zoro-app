@@ -2146,6 +2146,29 @@ class FirebaseService {
       }
     }
   }
+
+  /// بث المظاريف وأكياس الحظ النشطة داخل الغرفة لحظياً
+  Stream<List<Map<String, dynamic>>> activeLuckyBagsStream(String roomId) {
+    return _db
+        .collection('lucky_bags')
+        .where('room_id', isEqualTo: roomId)
+        .where('status', isEqualTo: 'active')
+        .snapshots()
+        .map((snap) {
+          final now = DateTime.now();
+          return snap.docs
+              .map((d) => d.data())
+              .where((d) {
+                final rem = _asInt(d['remaining_value']);
+                final expStr = d['expires_at']?.toString();
+                final exp = expStr != null ? DateTime.tryParse(expStr) : null;
+                final notExpired = exp == null || exp.isAfter(now);
+                return rem > 0 && notExpired;
+              })
+              .toList();
+        });
+  }
 }
+
 
 

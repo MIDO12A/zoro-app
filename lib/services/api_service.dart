@@ -214,6 +214,48 @@ class ApiService {
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     throw ApiException(response.statusCode, body['error']?.toString() ?? 'Unknown error');
   }
+
+  // ===== Lucky Bags / Red Envelopes =====
+  Future<Map<String, dynamic>> sendLuckyBag({
+    required String roomId,
+    String type = 'coins',
+    String scope = 'room',
+    int? value,
+    int? count,
+    int? totalCoins,
+    String? greetingText,
+    bool isSuper = false,
+  }) async {
+    return await _post('/lucky-bags/send', {
+      'roomId': roomId,
+      'type': type,
+      'scope': scope,
+      'value': value,
+      'count': count,
+      'totalCoins': totalCoins,
+      'greetingText': greetingText,
+      'isSuper': isSuper,
+    });
+  }
+
+  Future<Map<String, dynamic>> grabLuckyBag({
+    required String roomId,
+    String? bagId,
+  }) async {
+    return await _post('/lucky-bags/grab', {
+      'roomId': roomId,
+      if (bagId != null) 'bagId': bagId,
+    });
+  }
+
+  Future<Map<String, dynamic>> getLuckyBagDetails(String bagId) async {
+    return await _get('/lucky-bags/details/$bagId');
+  }
+
+  Future<List<dynamic>> getActiveLuckyBags(String roomId) async {
+    final res = await _get('/lucky-bags/active/$roomId');
+    return res['bags'] as List<dynamic>? ?? [];
+  }
 }
 
 class ApiException implements Exception {

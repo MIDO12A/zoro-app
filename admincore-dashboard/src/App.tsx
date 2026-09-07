@@ -42,6 +42,7 @@ import Reports from './pages/Reports';
 import Emojis from './pages/Emojis';
 import RoomBackgrounds from './pages/RoomBackgrounds';
 import LuckyGiftsManager from './pages/LuckyGiftsManager';
+import RedPacketsManager from './pages/RedPacketsManager';
 import TasksManager from './pages/TasksManager';
 import AppSounds from './pages/AppSounds';
 import ZegoAudioSettings from './pages/ZegoAudioSettings';
@@ -101,6 +102,7 @@ export default function App() {
             <Route path="/store" element={<Store />} />
             <Route path="/rooms" element={<Rooms />} />
             <Route path="/lucky-gifts" element={<LuckyGiftsManager />} />
+            <Route path="/red-packets" element={<RedPacketsManager />} />
             <Route path="/tasks-manager" element={<TasksManager />} />
             <Route path="/unions" element={<Unions />} />
             <Route path="/vip" element={<VIP />} />

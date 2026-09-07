@@ -54,6 +54,11 @@ import '../report/report_user_screen.dart';
 import '../../features/lucky_gift/services/lucky_gift_service.dart';
 import '../../features/lucky_gift/models/lucky_gift_model.dart';
 import '../../features/lucky_gift/widgets/gift_seat_flight_overlay.dart';
+import '../../features/lucky_bag/models/lucky_bag_model.dart';
+import '../../features/lucky_bag/services/lucky_bag_service.dart';
+import '../../features/lucky_bag/widgets/lucky_bag_send_dialog.dart';
+import '../../features/lucky_bag/widgets/lucky_bag_claim_dialog.dart';
+import '../../features/lucky_bag/widgets/lucky_bag_floating_widget.dart';
 
 /// Helper to navigate to a room, exiting any minimized room first
 Future<void> navigateToRoom(
@@ -586,7 +591,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ..addAll(msgs.where((m) => m.timestamp >= filterTime));
           _msgCount = _chatMessages.length;
         });
-        // عرض هدايا الحظ (lucky_gift) لكافة أعضاء الغرفة لحظياً
+        // عرض هدايا الحظ (lucky_gift) والمظاريف الحمراء (lucky_bag) لكافة أعضاء الغرفة لحظياً
         for (final m in msgs) {
           if (m.type == 'lucky_gift' &&
               m.timestamp >= filterTime &&
@@ -594,6 +599,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             try {
               final data = LuckyGiftBroadcastData.fromJson(m.giftPayload!);
               LuckyGiftService().enqueueLuckyGift(context, data);
+            } catch (_) {}
+          } else if (m.type == 'lucky_bag' &&
+              m.timestamp >= filterTime &&
+              m.luckyBagPayload != null) {
+            try {
+              final bag = LuckyBagModel.fromJson(m.luckyBagPayload!);
+              LuckyBagService().showGrabBanner(
+                context,
+                roomId: widget.roomId,
+                bag: bag,
+                onOpenDialog: () {
+                  LuckyBagClaimDialog.show(context, bag: bag, roomId: widget.roomId);
+                },
+              );
             } catch (_) {}
           }
         }
@@ -1796,6 +1815,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ],
           ),
 
+          // ── Lucky Bag / Red Envelope floating button ─────────
+          Positioned(
+            bottom: navH + 63 + 17 + 56,
+            right: 10,
+            child: LuckyBagFloatingWidget(roomId: widget.roomId),
+          ),
+
           // ── Game button ───────────────────────────────────────
           Positioned(
             bottom: navH + 63 + 17,
@@ -2343,6 +2369,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       case 'Share':
         setState(() => _showShare = true);
+        break;
+      case 'Lucky Bag':
+        LuckyBagSendDialog.show(context, roomId: widget.roomId);
         break;
       default:
         break;
