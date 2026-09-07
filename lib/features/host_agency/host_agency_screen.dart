@@ -20,6 +20,7 @@ import 'data/agency_models.dart';
 import 'screens/agency_leaderboard_screen.dart';
 import 'screens/agency_profile_screen.dart';
 import 'screens/agency_supervisor_dashboard_screen.dart';
+import 'screens/anchor_agent_screen.dart';
 
 import '../../core/cache/encrypted_image_provider.dart';
 import 'package:provider/provider.dart';
@@ -97,9 +98,8 @@ debugPrint('[host_agency_screen] error: $e');
     // Route to the right dashboard immediately (no wrapping shell needed)
     switch (_role) {
       case _UserAgencyRole.owner:
-        return AgencyDashboardScreen(agencyId: _agencyId);
       case _UserAgencyRole.supervisor:
-        return AgencySupervisorDashboardScreen(agencyId: _agencyId);
+        return AnchorAgentScreen(agencyId: _agencyId);
       case _UserAgencyRole.host:
         return const HostDashboardScreen();
       case _UserAgencyRole.none:

@@ -2167,6 +2167,151 @@ class FirebaseService {
               })
               .toList();
         });
+  /// جلب بيانات وكيل المضيفين والمذيعين التابعين للوكالة (Anchor Agent Data)
+  Future<Map<String, dynamic>> getAnchorAgencyData({String? agencyId, required String agentUid}) async {
+    try {
+      // 1. البحث عن الوكالة إما بالـ ID أو بالـ Owner UID
+      QuerySnapshot agencySnap;
+      if (agencyId != null && agencyId.isNotEmpty) {
+        final doc = await _db.collection('host_agencies').doc(agencyId).get();
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id;
+          return await _buildAgencyDataPayload(doc.id, data, agentUid);
+        }
+      }
+      agencySnap = await _db.collection('host_agencies').where('owner_id', isEqualTo: agentUid).limit(1).get();
+      if (agencySnap.docs.isNotEmpty) {
+        final doc = agencySnap.docs.first;
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id;
+        return await _buildAgencyDataPayload(doc.id, data, agentUid);
+      }
+
+      // إذا لم يكن لديه وكالة مسجلة، ننشئ له أو نعيد ملف فارغ افتراضي
+      return {
+        'info': null,
+        'anchors': <Map<String, dynamic>>[],
+      };
+    } catch (e) {
+      debugPrint('getAnchorAgencyData error: $e');
+      return {
+        'info': null,
+        'anchors': <Map<String, dynamic>>[],
+      };
+    }
+  }
+
+  Future<Map<String, dynamic>> _buildAgencyDataPayload(String agencyDocId, Map<String, dynamic> agencyData, String agentUid) async {
+    // جلب بيانات الأعضاء والمضيفين
+    final membersSnap = await _db
+        .collection('host_agency_members')
+        .where('agency_id', isEqualTo: agencyDocId)
+        .where('status', isEqualTo: 'active')
+        .get();
+
+    final anchors = <Map<String, dynamic>>[];
+    int totalDiamonds = 0;
+
+    for (final mDoc in membersSnap.docs) {
+      final mData = mDoc.data();
+      final mUid = mData['user_id']?.toString() ?? mDoc.id;
+      final uSnap = await _db.collection('users').doc(mUid).get();
+      final uData = uSnap.exists ? (uSnap.data() ?? {}) : {};
+
+      final diamonds = _asInt(mData['diamonds'] ?? uData['earnings'] ?? 0);
+      totalDiamonds += diamonds;
+
+      anchors.add({
+        'user_id': _asInt(uData['custom_id'] ?? mData['user_id'] ?? 0),
+        'user_no': _asInt(uData['custom_id'] ?? 0),
+        'nickname': uData['name'] ?? mData['user_name'] ?? 'مضيف',
+        'headImage': uData['photo_url'] ?? uData['avatar'] ?? '',
+        'country': _asInt(uData['country'] ?? 0),
+        'country_flag_url': uData['country_flag_url'] ?? '',
+        'days': _asInt(mData['active_days'] ?? mData['days'] ?? 1),
+        'minute': (mData['on_mic_minutes'] as num?)?.toDouble() ?? (mData['minute'] as num?)?.toDouble() ?? 120.0,
+        'diamonds': diamonds.toString(),
+        'experience': _asInt(uData['wealth_xp'] ?? 0),
+        'level': _asInt(uData['level'] ?? 1),
+        'recg_level': _asInt(uData['wealth_level'] ?? 0),
+        'recharge_value': _asInt(uData['recharge_coins'] ?? 0),
+        'sex': _asInt(uData['gender'] ?? 1),
+        'vip': _asInt(uData['vip_level'] ?? 0),
+        'target_diamonds': _asInt(mData['target_diamonds'] ?? 100000),
+      });
+    }
+
+    final agentUserSnap = await _db.collection('users').doc(agentUid).get();
+    final agentUserData = agentUserSnap.exists ? (agentUserSnap.data() ?? {}) : {};
+
+    return {
+      'info': {
+        'user_id': _asInt(agentUserData['custom_id'] ?? 0),
+        'agency_name': agencyData['name'] ?? 'وكالة النجوم المعتمدة',
+        'avatar_url': agentUserData['photo_url'] ?? '',
+        'country_flag_url': agentUserData['country_flag_url'] ?? '',
+        'agent_bean': _asInt(agentUserData['coins'] ?? 0),
+        'transfer_money': totalDiamonds,
+        'transfer_dollar': (totalDiamonds / 1000).toInt(),
+        'transfer_number': membersSnap.docs.length,
+      },
+      'anchors': anchors,
+    };
+  }
+
+  /// تحويل كوينز من الوكيل إلى أحد مضيفي الوكالة (Agent Coin Transfer)
+  Future<bool> transferCoinsToMember({
+    required String agentUid,
+    required String targetUserNoOrId,
+    required int coinsAmount,
+  }) async {
+    try {
+      final agentRef = _db.collection('users').doc(agentUid);
+      
+      // البحث عن المضيف بالـ customId أو بالـ UID
+      QuerySnapshot targetSnap = await _db.collection('users').where('custom_id', isEqualTo: targetUserNoOrId).limit(1).get();
+      if (targetSnap.docs.isEmpty) {
+        final byIdDoc = await _db.collection('users').doc(targetUserNoOrId).get();
+        if (byIdDoc.exists) {
+          targetSnap = await _db.collection('users').where(FieldPath.documentId, isEqualTo: targetUserNoOrId).get();
+        }
+      }
+
+      if (targetSnap.docs.isEmpty) return false;
+      final targetRef = targetSnap.docs.first.ref;
+
+      return await _db.runTransaction((txn) async {
+        final agentDoc = await txn.get(agentRef);
+        final targetDoc = await txn.get(targetRef);
+
+        if (!agentDoc.exists || !targetDoc.exists) return false;
+
+        final agentCoins = _asInt(agentDoc.data()?['coins'] ?? 0);
+        if (agentCoins < coinsAmount) return false;
+
+        final targetCoins = _asInt(targetDoc.data()?['coins'] ?? 0);
+
+        txn.update(agentRef, {'coins': agentCoins - coinsAmount});
+        txn.update(targetRef, {'coins': targetCoins + coinsAmount});
+
+        // تسجيل العملية في السجلات المالية
+        final transferRef = _db.collection('agency_transfers').doc();
+        txn.set(transferRef, {
+          'agent_id': agentUid,
+          'target_id': targetRef.id,
+          'target_custom_id': targetUserNoOrId,
+          'amount': coinsAmount,
+          'created_at': FieldValue.serverTimestamp(),
+          'status': 'completed',
+        });
+
+        return true;
+      });
+    } catch (e) {
+      debugPrint('transferCoinsToMember error: $e');
+      return false;
+    }
   }
 }
 
