@@ -27,8 +27,7 @@ class DynamicConfigService extends ChangeNotifier {
   int _splashDurationSeconds = 3;
   Color _splashNameColor = const Color(0xFF16151A);
   String _splashActionType = '';
-  String get splashActionType => _splashActionType;
-  String get splashActionValue => _splashActionValue;
+  String _splashActionValue = '';
 
   // Mini Profile overrides
   String _miniProfileFollowIcon = '';
@@ -384,7 +383,6 @@ class DynamicConfigService extends ChangeNotifier {
   Color get bottomNavInactiveTextColor => _bottomNavInactiveTextColor;
 
   String get giftPanelBgImage => _screenStr('giftPanel', 'backgroundImage', _giftPanelBgImage);
-  String get giftPanelHeaderBgImage => _screenStr('giftPanel', 'headerBgImage', _giftPanelHeaderBgImage);
   Color get giftPanelBgColor => _screenColor('giftPanel', 'backgroundColor', _screenColor('giftPanel', 'cardBgColor', _giftPanelBgColor));
   Color get giftPanelTabColor => _screenColor('giftPanel', 'tabActiveColor', _giftPanelTabColor);
 
@@ -758,7 +756,7 @@ class DynamicConfigService extends ChangeNotifier {
   String get giftPanelBackgroundImage => _screenStr('giftPanel', 'backgroundImage', _giftPanelBgImage);
   Color get giftPanelBackgroundColor => _screenColor('giftPanel', 'backgroundColor', const Color(0xFF16151A));
   Color get giftPanelHeaderBgColor => _screenColor('giftPanel', 'headerBgColor', Colors.transparent);
-  String get giftPanelHeaderBgImage => _screenStr('giftPanel', 'headerBgImage', _giftPanelHeaderBgImage);
+  String get giftPanelHeaderBgImage => _screenStr('giftPanel', 'headerBgImage', '');
   Color get giftPanelTabActiveColor => _screenColor('giftPanel', 'tabActiveColor', const Color(0xFFFFD700));
   Color get giftPanelTabInactiveColor => _screenColor('giftPanel', 'tabInactiveColor', Colors.white70);
   Color get giftPanelTabBgColor => _screenColor('giftPanel', 'tabBgColor', const Color(0x1AFFFFFF));
