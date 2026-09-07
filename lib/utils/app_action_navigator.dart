@@ -5,7 +5,7 @@ import '../screens/level/level_screen.dart';
 import '../screens/backpack/backpack_screen.dart';
 import '../screens/rank/rank_screen.dart';
 import '../features/cp/cp_display_screen.dart';
-import '../features/vip/screens/vip_screen.dart';
+import '../screens/vip/vip_center_screen.dart';
 import '../features/tasks/screens/daily_tasks_screen.dart';
 import '../features/signin/weekly_signin_screen.dart';
 import '../features/host_agency/host_agency_screen.dart';
@@ -41,7 +41,7 @@ class AppActionNavigator {
     }
 
     if (lower == '/vip' || lower == 'vip') {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const VipScreen()));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const VipCenterScreen()));
       return;
     }
 
@@ -56,7 +56,7 @@ class AppActionNavigator {
     }
 
     if (lower == '/signin' || lower == 'signin' || lower.contains('تسجيل')) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const WeeklySignInScreen()));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const WeeklySigninScreen()));
       return;
     }
 
@@ -66,7 +66,7 @@ class AppActionNavigator {
     }
 
     if (lower == '/rank' || lower == 'rank' || lower.contains('ترتيب') || lower.contains('رتب')) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const GlobalRankScreen()));
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const RankScreen()));
       return;
     }
 
@@ -112,11 +112,11 @@ class AppActionNavigator {
           context,
           MaterialPageRoute(
             builder: (_) => RoomScreen(
-              roomId: room.id,
+              roomId: room.roomId,
               roomName: room.name,
+              hostName: room.hostName.isNotEmpty ? room.hostName : 'Host',
               roomPassword: room.password,
-              category: room.category,
-              gameDesc: room.gameDesc,
+              gameDesc: room.description,
             ),
           ),
         );

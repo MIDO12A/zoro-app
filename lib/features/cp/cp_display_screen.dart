@@ -4,14 +4,16 @@ import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
 import 'cp_invitation_list_screen.dart';
 
-class CcDisplayScreen extends StatefulWidget {
-  const CcDisplayScreen({super.key});
+class CpDisplayScreen extends StatefulWidget {
+  const CpDisplayScreen({super.key});
 
   @override
-  State<CcDisplayScreen> createState() => _CcDisplayScreenState();
+  State<CpDisplayScreen> createState() => _CpDisplayScreenState();
 }
 
-class _CcDisplayScreenState extends State<CcDisplayScreen> {
+typedef CcDisplayScreen = CpDisplayScreen;
+
+class _CpDisplayScreenState extends State<CpDisplayScreen> {
   List<Map<String, dynamic>> _couples = [];
   bool _isLoading = true;
   String? _error;

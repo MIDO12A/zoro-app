@@ -9,6 +9,7 @@ import '../../../models/gift_category_model.dart';
 import '../../../providers/user_provider.dart';
 import '../../../services/supabase_service.dart';
 import '../../../services/media_prefetch_service.dart';
+import '../../../services/dynamic_config_service.dart';
 import 'svga_player.dart';
 import 'vap_player.dart';
 

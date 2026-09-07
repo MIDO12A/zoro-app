@@ -29,24 +29,7 @@ class DynamicConfigService extends ChangeNotifier {
   String _splashActionType = '';
   String _splashActionValue = '';
 
-  String get appName => _appName;
-  String get logoUrl => _logoUrl;
-  String get splashUrl => _splashUrl;
-  bool get splashEnabled => _splashEnabled;
-  String get splashImageUrl => _splashImageUrl;
-  String get splashSvgaUrl => _splashSvgaUrl;
-  int get splashDurationSeconds => _splashDurationSeconds;
-  Color get splashNameColor => _splashNameColor;
-  String get splashActionType => _splashActionType;
-  String get splashActionValue => _splashActionValue;
-  Color get primaryBg => _primaryBg;
-  Color get textPrimary => _textPrimary;
-  Color get textSecondary => _textSecondary;
-  Color get goldColor => _goldColor;
-  Color get buttonColor => _buttonColor;
-  Color get buttonTextColor => _buttonTextColor;
-  Color get headerColor => _headerColor;
-  Color get tabBarColor => _tabBarColor;
+
 
   // Mini Profile overrides
   String _miniProfileFollowIcon = '';
@@ -382,6 +365,8 @@ class DynamicConfigService extends ChangeNotifier {
   String get splashSvgaUrl => _splashSvgaUrl;
   int get splashDurationSeconds => _splashDurationSeconds;
   Color get splashNameColor => _splashNameColor;
+  String get splashActionType => _splashActionType;
+  String get splashActionValue => _splashActionValue;
   String get miniProfileFollowIcon => _miniProfileFollowIcon;
   String get miniProfileMessageIcon => _miniProfileMessageIcon;
   Color get primaryBg => _primaryBg;
@@ -400,7 +385,6 @@ class DynamicConfigService extends ChangeNotifier {
   Color get bottomNavInactiveTextColor => _bottomNavInactiveTextColor;
 
   String get giftPanelBgImage => _screenStr('giftPanel', 'backgroundImage', _giftPanelBgImage);
-  String get giftPanelHeaderBgImage => _screenStr('giftPanel', 'headerBgImage', _giftPanelHeaderBgImage);
   Color get giftPanelBgColor => _screenColor('giftPanel', 'backgroundColor', _screenColor('giftPanel', 'cardBgColor', _giftPanelBgColor));
   Color get giftPanelTabColor => _screenColor('giftPanel', 'tabActiveColor', _giftPanelTabColor);
 

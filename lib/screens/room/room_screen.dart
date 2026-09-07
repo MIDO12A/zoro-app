@@ -305,7 +305,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             svgaAnimUrl: gift.animationAsset,
             senderId: user?.uid ?? '',
             senderName: user?.name ?? '',
-            senderPhotoUrl: user?.photoUrl,
+            senderPhotoUrl: user?.photoUrl ?? '',
             receiverId: receiverId,
             receiverName: receiverName,
             value: gift.value,
@@ -321,13 +321,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             animationAsset: gift.animationAsset,
             senderId: user?.uid ?? '',
             senderName: user?.name ?? '',
-            senderPhotoUrl: user?.photoUrl,
+            senderPhotoUrl: user?.photoUrl ?? '',
             receiverId: receiverId,
             receiverName: receiverName,
             value: gift.value,
             count: count,
-            comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
-            comboCount: _roomComboMultiplier,
           );
         }
       }
