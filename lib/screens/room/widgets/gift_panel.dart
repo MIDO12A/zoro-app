@@ -122,7 +122,19 @@ class _GiftPanelState extends State<GiftPanel> {
       return _gifts;
     }
     if (_selectedCategoryId == 'lucky') {
-      return _gifts.where((g) => g.isLucky || g.categoryId == 'lucky').toList();
+      return _gifts.where((g) => g.isLucky || g.giftType == 3 || g.categoryId == 'lucky').toList();
+    }
+    if (_selectedCategoryId == 'luxury' || _selectedCategoryId == 'vip') {
+      return _gifts.where((g) => g.isVap || g.bigEffect || g.giftType == 2 || g.categoryId == 'vip' || g.categoryId == 'luxury').toList();
+    }
+    if (_selectedCategoryId == 'cp') {
+      return _gifts.where((g) => g.isCpGift || g.giftType == 5 || g.categoryId == 'cp').toList();
+    }
+    if (_selectedCategoryId == 'normal' || _selectedCategoryId == 'popular') {
+      return _gifts.where((g) => (g.giftType == 1 && !g.isLucky && !g.isCpGift) || g.categoryId == 'normal' || g.categoryId == 'popular').toList();
+    }
+    if (_selectedCategoryId == 'backpack') {
+      return _gifts.where((g) => g.packageCount > 0 || g.giftType == 4 || g.categoryId == 'backpack').toList();
     }
     return _gifts.where((g) => g.categoryId == _selectedCategoryId).toList();
   }
@@ -204,11 +216,16 @@ class _GiftPanelState extends State<GiftPanel> {
   Widget _buildHeader(DynamicConfigService dc) {
     final users = widget.targetUsers;
     final allTabs = [
-      const GiftCategory(id: 'all', name: 'الكل', sortOrder: -2),
-      const GiftCategory(id: 'backpack', name: '🎒 الحقيبة', sortOrder: -3),
-      if (_gifts.any((g) => g.isLucky))
-        const GiftCategory(id: 'lucky', name: '🍀 الحظ', sortOrder: -1),
-      ..._categories,
+      const GiftCategory(id: 'all', name: 'الكل', sortOrder: -5),
+      const GiftCategory(id: 'normal', name: 'شائع', sortOrder: -4),
+      if (_gifts.any((g) => g.isVap || g.bigEffect || g.giftType == 2))
+        const GiftCategory(id: 'luxury', name: '👑 فاخر', sortOrder: -3),
+      if (_gifts.any((g) => g.isLucky || g.giftType == 3))
+        const GiftCategory(id: 'lucky', name: '🍀 الحظ', sortOrder: -2),
+      if (_gifts.any((g) => g.isCpGift || g.giftType == 5))
+        const GiftCategory(id: 'cp', name: '💍 الارتباط', sortOrder: -1),
+      const GiftCategory(id: 'backpack', name: '🎒 الحقيبة', sortOrder: 0),
+      ..._categories.where((c) => !['all', 'normal', 'luxury', 'vip', 'lucky', 'cp', 'backpack'].contains(c.id)),
     ];
 
     return Padding(

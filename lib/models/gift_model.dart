@@ -4,13 +4,16 @@
 class GiftModel {
   final String id;
   final String name;
+  final String nameAr;
   final int value;
   final String iconAsset;
   final String? animationAsset;
+  final int type; // 1: normal, 2: luxury/VIP, 3: lucky/crystal, 4: backpack, 5: cp
   final bool isVap;
   final bool isLucky;
   final bool isStar;
   final bool isMusic;
+  final bool bigEffect;
   final int packageCount;
   final int sortOrder;
   final String? nameKey; // SVGA layer key for sender name
@@ -28,6 +31,15 @@ class GiftModel {
   final bool luckyBurst;
   final String luckyDisplayMode;
 
+  int get giftType {
+    if (type > 0) return type;
+    if (isCpGift) return 5;
+    if (packageCount > 0) return 4;
+    if (isLucky) return 3;
+    if (isVap || bigEffect || (animationAsset != null && animationAsset!.isNotEmpty)) return 2;
+    return 1;
+  }
+
   String get durationBadge {
     if (durationValue > 0) {
       return '$durationValue${durationType == 'hours' ? 'h' : 'd'}';
@@ -44,13 +56,16 @@ class GiftModel {
   const GiftModel({
     required this.id,
     required this.name,
+    this.nameAr = '',
     required this.value,
     required this.iconAsset,
     this.animationAsset,
+    this.type = 1,
     this.isVap = false,
     this.isLucky = false,
     this.isStar = false,
     this.isMusic = false,
+    this.bigEffect = false,
     this.packageCount = 0,
     this.sortOrder = 0,
     this.nameKey,
@@ -72,13 +87,16 @@ class GiftModel {
   GiftModel copyWith({
     String? id,
     String? name,
+    String? nameAr,
     int? value,
     String? iconAsset,
     String? animationAsset,
+    int? type,
     bool? isVap,
     bool? isLucky,
     bool? isStar,
     bool? isMusic,
+    bool? bigEffect,
     int? packageCount,
     int? sortOrder,
     String? nameKey,
@@ -99,13 +117,16 @@ class GiftModel {
     return GiftModel(
       id: id ?? this.id,
       name: name ?? this.name,
+      nameAr: nameAr ?? this.nameAr,
       value: value ?? this.value,
       iconAsset: iconAsset ?? this.iconAsset,
       animationAsset: animationAsset ?? this.animationAsset,
+      type: type ?? this.type,
       isVap: isVap ?? this.isVap,
       isLucky: isLucky ?? this.isLucky,
       isStar: isStar ?? this.isStar,
       isMusic: isMusic ?? this.isMusic,
+      bigEffect: bigEffect ?? this.bigEffect,
       packageCount: packageCount ?? this.packageCount,
       sortOrder: sortOrder ?? this.sortOrder,
       nameKey: nameKey ?? this.nameKey,
@@ -128,13 +149,19 @@ class GiftModel {
   Map<String, dynamic> toMap() => {
         'id': id,
         'name': name,
+        'name_ar': nameAr,
         'value': value,
+        'price': value,
+        'type': giftType,
         'icon_asset': iconAsset,
+        'icon_url': iconAsset,
         'animation_asset': animationAsset,
+        'svga_url': animationAsset,
         'is_vap': isVap,
         'is_lucky': isLucky,
         'is_star': isStar,
         'is_music': isMusic,
+        'big_effect': bigEffect ? 1 : 0,
         'package_count': packageCount,
         'sort_order': sortOrder,
         if (nameKey != null) 'name_key': nameKey,
@@ -165,25 +192,34 @@ class GiftModel {
         (map['cp_gift_duration_hours'] as num?)?.toInt() ??
         0;
 
+    final rawType = (map['type'] as num?)?.toInt() ?? 0;
+    final catId = map['category_id']?.toString();
+    final isLuckyVal = rawType == 3 || (map['is_lucky'] == true) || catId == 'lucky';
+    final isCpVal = rawType == 5 || (map['is_cp_gift'] == true) || catId == 'cp';
+    final isVipVal = rawType == 2 || (map['is_vap'] == true) || (map['big_effect'] == 1) || (map['bigEffect'] == true) || catId == 'vip' || catId == 'luxury';
+
     return GiftModel(
       id: map['id']?.toString() ?? map['gift_id']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
+      nameAr: map['name_ar']?.toString() ?? map['englist_name']?.toString() ?? '',
       value: (map['value'] ?? map['price'] ?? 0).toInt(),
-      iconAsset: map['icon_asset']?.toString() ?? map['icon_url']?.toString() ?? '',
-      animationAsset: map['animation_asset']?.toString() ?? map['svga_url']?.toString(),
-      isVap: (map['is_vap'] ?? false) as bool,
-      isLucky: (map['is_lucky'] ?? false) as bool,
+      iconAsset: map['icon_asset']?.toString() ?? map['icon_url']?.toString() ?? map['thumb']?.toString() ?? map['photo']?.toString() ?? '',
+      animationAsset: map['animation_asset']?.toString() ?? map['svga_url']?.toString() ?? map['effect']?.toString() ?? map['mp4_url']?.toString(),
+      type: rawType > 0 ? rawType : (isCpVal ? 5 : isLuckyVal ? 3 : isVipVal ? 2 : 1),
+      isVap: isVipVal || ((map['is_vap'] ?? false) as bool),
+      isLucky: isLuckyVal,
       isStar: (map['is_star'] ?? false) as bool,
-      isMusic: (map['is_music'] ?? false) as bool,
-      packageCount: (map['package_count'] ?? 0).toInt(),
-      sortOrder: (map['sort_order'] ?? 0).toInt(),
+      isMusic: (map['is_music'] ?? false) as bool || (map['isMusic'] == 1),
+      bigEffect: (map['big_effect'] == 1) || (map['bigEffect'] == true),
+      packageCount: (map['package_count'] ?? map['gift_number'] ?? map['number'] ?? 0).toInt(),
+      sortOrder: (map['sort_order'] ?? map['sort'] ?? 0).toInt(),
       nameKey: map['name_key']?.toString(),
       photoKey: map['photo_key']?.toString(),
       defaultImage: map['default_image']?.toString(),
       wealthXp: (map['wealth_xp'] ?? 0).toInt(),
-      gemsXp: (map['gems_xp'] ?? 0).toInt(),
-      categoryId: map['category_id']?.toString(),
-      isCpGift: (map['is_cp_gift'] ?? false) as bool,
+      gemsXp: (map['gems_xp'] ?? map['diamond'] != null ? int.tryParse(map['diamond'].toString()) ?? 0 : 0).toInt(),
+      categoryId: catId,
+      isCpGift: isCpVal,
       cpGiftDurationHours: (map['cp_gift_duration_hours'] ?? (dType == 'days' ? dVal * 24 : dVal)).toInt(),
       durationType: dType,
       durationValue: dVal,
