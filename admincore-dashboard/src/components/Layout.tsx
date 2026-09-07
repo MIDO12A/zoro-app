@@ -49,14 +49,14 @@ export default function Layout() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0B] text-slate-300 flex">
+    <div className="h-screen bg-[#0A0A0B] text-slate-300 flex overflow-hidden">
       <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       {/* Mobile overlay backdrop */}
-      {mobileOpen && <div className="fixed inset-0 bg-black/50 z-10 lg:hidden" onClick={() => setMobileOpen(true)} />}
-      <div className="flex-1 flex flex-col min-w-0">
+      {mobileOpen && <div className="fixed inset-0 bg-black/50 z-10 lg:hidden" onClick={() => setMobileOpen(false)} />}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <Header onMenuClick={() => setMobileOpen(true)} />
         {status && !status.fixed && (
-          <div className="mx-3 mt-3 lg:mx-6 lg:mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200 flex flex-wrap items-center gap-2">
+          <div className="mx-3 mt-3 lg:mx-6 lg:mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-200 flex flex-wrap items-center gap-2 shrink-0">
             <span className="font-bold">⚠️ Admin write access blocked</span>
             <span className="opacity-80 break-all flex-1 min-w-[200px]">{status.reason}</span>
             <button
@@ -69,7 +69,7 @@ export default function Layout() {
             {uid && <code className="opacity-60 whitespace-nowrap">uid: {uid}</code>}
           </div>
         )}
-        <main className="flex-1 overflow-y-auto p-3 lg:p-6">
+        <main className="flex-1 overflow-y-auto p-3 lg:p-6 custom-scrollbar">
           <Outlet />
         </main>
       </div>

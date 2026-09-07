@@ -470,10 +470,19 @@ class CpService {
       };
     }
 
-    final extraHours = (gift['duration_hours'] as num?)?.toInt() ??
-        ((gift['duration_days'] as num?)?.toInt() != null
-            ? (gift['duration_days'] as num).toInt() * 24
-            : 0);
+    final dType = gift['duration_type']?.toString();
+    final dVal = (gift['duration_value'] as num?)?.toInt();
+    int extraHours = 0;
+    if (dType == 'hours' && dVal != null && dVal > 0) {
+      extraHours = dVal;
+    } else if (dType == 'days' && dVal != null && dVal > 0) {
+      extraHours = dVal * 24;
+    } else {
+      extraHours = (gift['duration_hours'] as num?)?.toInt() ??
+          ((gift['duration_days'] as num?)?.toInt() != null
+              ? (gift['duration_days'] as num).toInt() * 24
+              : ((gift['cp_gift_duration_hours'] as num?)?.toInt() ?? 0));
+    }
 
     final batch = _db.batch();
     batch.update(_db.collection('users').doc(sender), <String, dynamic>{
@@ -572,21 +581,24 @@ class CpService {
       int finalDurationHours = durationHours;
       try {
         final gSnap = await _db.collection('cp_gifts').doc(giftId).get();
+        Map<String, dynamic>? gData;
         if (gSnap.exists) {
-          final gData = gSnap.data()!;
-          final dDays = (gData['duration_days'] as num?)?.toInt();
-          final dHours = (gData['duration_hours'] as num?)?.toInt();
-          if (dDays != null && dDays > 0) {
-            finalDurationHours = dDays * 24;
-          } else if (dHours != null && dHours > 0) {
-            finalDurationHours = dHours;
-          }
+          gData = gSnap.data();
         } else {
           final regSnap = await _db.collection('gifts').doc(giftId).get();
-          if (regSnap.exists) {
-            final gData = regSnap.data()!;
+          if (regSnap.exists) gData = regSnap.data();
+        }
+
+        if (gData != null) {
+          final dType = gData['duration_type']?.toString();
+          final dVal = (gData['duration_value'] as num?)?.toInt();
+          if (dType == 'hours' && dVal != null && dVal > 0) {
+            finalDurationHours = dVal;
+          } else if (dType == 'days' && dVal != null && dVal > 0) {
+            finalDurationHours = dVal * 24;
+          } else {
             final dDays = (gData['duration_days'] as num?)?.toInt();
-            final dHours = (gData['cp_gift_duration_hours'] as num?)?.toInt() ?? (gData['duration_hours'] as num?)?.toInt();
+            final dHours = (gData['duration_hours'] as num?)?.toInt() ?? (gData['cp_gift_duration_hours'] as num?)?.toInt();
             if (dDays != null && dDays > 0) {
               finalDurationHours = dDays * 24;
             } else if (dHours != null && dHours > 0) {

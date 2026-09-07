@@ -21,10 +21,25 @@ class GiftModel {
   final String? categoryId;
   final bool isCpGift;
   final int cpGiftDurationHours;
+  final String durationType; // 'days' | 'hours'
+  final int durationValue; // e.g. 7 for 7d, 24 for 24h
   final int luckyRtp;
   final int luckyMaxMultiplier;
   final bool luckyBurst;
   final String luckyDisplayMode;
+
+  String get durationBadge {
+    if (durationValue > 0) {
+      return '$durationValue${durationType == 'hours' ? 'h' : 'd'}';
+    }
+    if (cpGiftDurationHours > 0) {
+      if (cpGiftDurationHours % 24 == 0) {
+        return '${cpGiftDurationHours ~/ 24}d';
+      }
+      return '${cpGiftDurationHours}h';
+    }
+    return '';
+  }
 
   const GiftModel({
     required this.id,
@@ -46,6 +61,8 @@ class GiftModel {
     this.categoryId,
     this.isCpGift = false,
     this.cpGiftDurationHours = 0,
+    this.durationType = 'days',
+    this.durationValue = 0,
     this.luckyRtp = 85,
     this.luckyMaxMultiplier = 100,
     this.luckyBurst = true,
@@ -72,6 +89,8 @@ class GiftModel {
     String? categoryId,
     bool? isCpGift,
     int? cpGiftDurationHours,
+    String? durationType,
+    int? durationValue,
     int? luckyRtp,
     int? luckyMaxMultiplier,
     bool? luckyBurst,
@@ -97,6 +116,8 @@ class GiftModel {
       categoryId: categoryId ?? this.categoryId,
       isCpGift: isCpGift ?? this.isCpGift,
       cpGiftDurationHours: cpGiftDurationHours ?? this.cpGiftDurationHours,
+      durationType: durationType ?? this.durationType,
+      durationValue: durationValue ?? this.durationValue,
       luckyRtp: luckyRtp ?? this.luckyRtp,
       luckyMaxMultiplier: luckyMaxMultiplier ?? this.luckyMaxMultiplier,
       luckyBurst: luckyBurst ?? this.luckyBurst,
@@ -124,37 +145,54 @@ class GiftModel {
         if (categoryId != null) 'category_id': categoryId,
         'is_cp_gift': isCpGift,
         'cp_gift_duration_hours': cpGiftDurationHours,
+        'duration_type': durationType,
+        'duration_value': durationValue,
         'lucky_rtp': luckyRtp,
         'lucky_max_multiplier': luckyMaxMultiplier,
         'lucky_burst': luckyBurst,
         'lucky_display_mode': luckyDisplayMode,
       };
 
-  factory GiftModel.fromMap(Map<String, dynamic> map) => GiftModel(
-        id: map['id']?.toString() ?? map['gift_id']?.toString() ?? '',
-        name: map['name']?.toString() ?? '',
-        value: (map['value'] ?? map['price'] ?? 0).toInt(),
-        iconAsset: map['icon_asset']?.toString() ?? map['icon_url']?.toString() ?? '',
-        animationAsset: map['animation_asset']?.toString() ?? map['svga_url']?.toString(),
-        isVap: (map['is_vap'] ?? false) as bool,
-        isLucky: (map['is_lucky'] ?? false) as bool,
-        isStar: (map['is_star'] ?? false) as bool,
-        isMusic: (map['is_music'] ?? false) as bool,
-        packageCount: (map['package_count'] ?? 0).toInt(),
-        sortOrder: (map['sort_order'] ?? 0).toInt(),
-        nameKey: map['name_key']?.toString(),
-        photoKey: map['photo_key']?.toString(),
-        defaultImage: map['default_image']?.toString(),
-        wealthXp: (map['wealth_xp'] ?? 0).toInt(),
-        gemsXp: (map['gems_xp'] ?? 0).toInt(),
-        categoryId: map['category_id']?.toString(),
-        isCpGift: (map['is_cp_gift'] ?? false) as bool,
-        cpGiftDurationHours: (map['cp_gift_duration_hours'] ?? 0).toInt(),
-        luckyRtp: (map['lucky_rtp'] ?? map['rtp'] ?? 85).toInt(),
-        luckyMaxMultiplier: (map['lucky_max_multiplier'] ?? map['max_multiplier'] ?? 100).toInt(),
-        luckyBurst: (map['lucky_burst'] ?? true) as bool,
-        luckyDisplayMode: map['lucky_display_mode']?.toString() ?? 'cards',
-      );
+  factory GiftModel.fromMap(Map<String, dynamic> map) {
+    final dType = map['duration_type']?.toString() ??
+        (map['duration_hours'] != null || map['cp_gift_duration_hours'] != null && (map['cp_gift_duration_hours'] as num) < 24
+            ? 'hours'
+            : 'days');
+    final dVal = (map['duration_value'] as num?)?.toInt() ??
+        (map['duration_days'] as num?)?.toInt() ??
+        (map['durationDays'] as num?)?.toInt() ??
+        (map['duration_hours'] as num?)?.toInt() ??
+        (map['cp_gift_duration_hours'] as num?)?.toInt() ??
+        0;
+
+    return GiftModel(
+      id: map['id']?.toString() ?? map['gift_id']?.toString() ?? '',
+      name: map['name']?.toString() ?? '',
+      value: (map['value'] ?? map['price'] ?? 0).toInt(),
+      iconAsset: map['icon_asset']?.toString() ?? map['icon_url']?.toString() ?? '',
+      animationAsset: map['animation_asset']?.toString() ?? map['svga_url']?.toString(),
+      isVap: (map['is_vap'] ?? false) as bool,
+      isLucky: (map['is_lucky'] ?? false) as bool,
+      isStar: (map['is_star'] ?? false) as bool,
+      isMusic: (map['is_music'] ?? false) as bool,
+      packageCount: (map['package_count'] ?? 0).toInt(),
+      sortOrder: (map['sort_order'] ?? 0).toInt(),
+      nameKey: map['name_key']?.toString(),
+      photoKey: map['photo_key']?.toString(),
+      defaultImage: map['default_image']?.toString(),
+      wealthXp: (map['wealth_xp'] ?? 0).toInt(),
+      gemsXp: (map['gems_xp'] ?? 0).toInt(),
+      categoryId: map['category_id']?.toString(),
+      isCpGift: (map['is_cp_gift'] ?? false) as bool,
+      cpGiftDurationHours: (map['cp_gift_duration_hours'] ?? (dType == 'days' ? dVal * 24 : dVal)).toInt(),
+      durationType: dType,
+      durationValue: dVal,
+      luckyRtp: (map['lucky_rtp'] ?? map['rtp'] ?? 85).toInt(),
+      luckyMaxMultiplier: (map['lucky_max_multiplier'] ?? map['max_multiplier'] ?? 100).toInt(),
+      luckyBurst: (map['lucky_burst'] ?? true) as bool,
+      luckyDisplayMode: map['lucky_display_mode']?.toString() ?? 'cards',
+    );
+  }
 }
 
 class SentGiftModel {

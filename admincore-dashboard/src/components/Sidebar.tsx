@@ -90,8 +90,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
       </div>
     </aside>
     {/* Desktop sidebar */}
-    <aside className={`${collapsed ? 'w-16' : 'w-56'} transition-all duration-300 border-r border-white/5 bg-[#0D0D0E] flex-col shrink-0 ${lang === 'ar' ? 'border-l border-r-0' : ''} hidden lg:flex`}>
-      <div className="p-4 flex items-center justify-between border-b border-white/5 h-14">
+    <aside className={`${collapsed ? 'w-16' : 'w-56'} transition-all duration-300 border-r border-white/5 bg-[#0D0D0E] flex flex-col shrink-0 ${lang === 'ar' ? 'border-l border-r-0' : ''} hidden lg:flex h-screen sticky top-0`}>
+      <div className="p-4 flex items-center justify-between border-b border-white/5 h-14 shrink-0">
         {!collapsed && (
           <div className={`flex items-center gap-2 ${lang === 'ar' ? 'flex-row-reverse' : ''}`}>
             <div className="w-7 h-7 rounded bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">Z</div>
@@ -102,7 +102,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           <ChevronLeft className={`w-4 h-4 transition-transform ${collapsed ? 'rotate-180' : ''} ${lang === 'ar' ? 'rotate-180' : ''}`} />
         </button>
       </div>
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-0.5 custom-scrollbar">
         {navItems.map(item => (
           <NavLink
             key={item.to}
@@ -122,7 +122,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           </NavLink>
         ))}
       </nav>
-      <div className="p-3 border-t border-white/5">
+      <div className="p-3 border-t border-white/5 shrink-0">
         <button
           onClick={() => logout()}
           className={`flex items-center gap-3 px-2.5 py-2 rounded-lg text-xs text-slate-500 hover:text-rose-400 hover:bg-rose-500/5 w-full transition-all ${lang === 'ar' ? 'flex-row-reverse' : ''}`}

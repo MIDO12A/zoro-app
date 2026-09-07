@@ -191,7 +191,7 @@ class _GiftPanelState extends State<GiftPanel> {
             children: [
               _buildHeader(dc),
               Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-              Expanded(child: _buildGrid()),
+              Expanded(child: _buildGrid(dc)),
               _buildBottomOperate(dc),
             ],
           ),
@@ -289,8 +289,8 @@ class _GiftPanelState extends State<GiftPanel> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: (_selectedCategoryId ?? 'all') == cat.id
-                            ? dc.giftPanelTabColor
-                            : Colors.white.withValues(alpha: 0.1),
+                            ? dc.giftPanelTabActiveColor
+                            : dc.giftPanelTabBgColor,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       alignment: Alignment.center,
@@ -299,8 +299,8 @@ class _GiftPanelState extends State<GiftPanel> {
                         style: TextStyle(
                           fontSize: 11,
                           color: (_selectedCategoryId ?? 'all') == cat.id
-                              ? Colors.white
-                              : Colors.white70,
+                              ? Colors.black87
+                              : dc.giftPanelTabInactiveColor,
                           fontWeight: (_selectedCategoryId ?? 'all') == cat.id
                               ? FontWeight.bold
                               : FontWeight.normal,
@@ -409,7 +409,7 @@ class _GiftPanelState extends State<GiftPanel> {
     );
   }
 
-  Widget _buildGrid() {
+  Widget _buildGrid(DynamicConfigService dc) {
     if (_selectedCategoryId == 'backpack') {
       return _buildBackpackGrid();
     }
@@ -433,7 +433,7 @@ class _GiftPanelState extends State<GiftPanel> {
           childAspectRatio: 80 / 93,
         ),
         itemCount: items.length,
-        itemBuilder: (_, i) => _buildGiftItem(i),
+        itemBuilder: (_, i) => _buildGiftItem(i, dc),
       ),
     );
   }
@@ -459,7 +459,7 @@ class _GiftPanelState extends State<GiftPanel> {
     );
   }
 
-  Widget _buildGiftItem(int i) {
+  Widget _buildGiftItem(int i, DynamicConfigService dc) {
     final items = _filteredGifts;
     if (i >= items.length) return const SizedBox();
     final g = items[i];
@@ -470,22 +470,29 @@ class _GiftPanelState extends State<GiftPanel> {
         final idx = _gifts.indexWhere((x) => x.id == g.id);
         setState(() => _sel = idx);
       },
-      child: _buildGiftItemContent(g, sel),
+      child: _buildGiftItemContent(g, sel, dc),
     );
   }
 
-  Widget _buildGiftItemContent(gm.GiftModel g, bool sel) {
+  Widget _buildGiftItemContent(gm.GiftModel g, bool sel, DynamicConfigService dc) {
+    final hasCardBgImage = dc.giftPanelCardBgImage.isNotEmpty;
     return Container(
         margin: const EdgeInsets.symmetric(horizontal: 4),
         decoration: BoxDecoration(
-          image: const DecorationImage(
-            image: AssetImage(R.roomGiftImgPre),
-            fit: BoxFit.fill,
-          ),
+          color: hasCardBgImage ? null : dc.giftPanelCardBgColor,
+          image: hasCardBgImage
+              ? DecorationImage(
+                  image: R.cachedImage(dc.giftPanelCardBgImage),
+                  fit: BoxFit.fill,
+                )
+              : const DecorationImage(
+                  image: AssetImage(R.roomGiftImgPre),
+                  fit: BoxFit.fill,
+                ),
           borderRadius: BorderRadius.circular(4),
           border: sel
-              ? Border.all(color: AppColors.goldLight, width: 1.5)
-              : null,
+              ? Border.all(color: dc.giftPanelCardSelectedBorderColor, width: 1.5)
+              : (dc.giftPanelCardBorderColor != Colors.transparent ? Border.all(color: dc.giftPanelCardBorderColor, width: 1) : null),
         ),
         child: Column(
           children: [
@@ -513,20 +520,57 @@ class _GiftPanelState extends State<GiftPanel> {
                     Positioned(
                       top: 4,
                       right: 0,
-                      child: R.image(
-                        R.roomGiftLuckyLabelIc,
-                        width: 30,
-                        height: 14,
-                      ),
+                      child: dc.giftPanelLuckyBadgeImage.isNotEmpty
+                          ? R.loadImage(dc.giftPanelLuckyBadgeImage, width: 30, height: 14)
+                          : R.image(
+                              R.roomGiftLuckyLabelIc,
+                              width: 30,
+                              height: 14,
+                            ),
                     ),
                   if (g.isStar)
                     Positioned(
                       top: 4,
                       left: 0,
-                      child: R.image(
-                        R.roomGiftStarLabelIc,
-                        width: 22,
-                        height: 14,
+                      child: dc.giftPanelStarBadgeImage.isNotEmpty
+                          ? R.loadImage(dc.giftPanelStarBadgeImage, width: 22, height: 14)
+                          : R.image(
+                              R.roomGiftStarLabelIc,
+                              width: 22,
+                              height: 14,
+                            ),
+                    ),
+                  if (g.durationBadge.isNotEmpty)
+                    Positioned(
+                      top: 4,
+                      left: 2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: dc.giftPanelDurationBadgeBg,
+                          borderRadius: BorderRadius.circular(6),
+                          boxShadow: [
+                            BoxShadow(
+                              color: dc.giftPanelDurationBadgeBg.withValues(alpha: 0.5),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.favorite, size: 8, color: Colors.white),
+                            const SizedBox(width: 2),
+                            Text(
+                              g.durationBadge,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   if (g.isMusic)
@@ -565,9 +609,9 @@ class _GiftPanelState extends State<GiftPanel> {
             ),
             Text(
               g.name,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
-                color: Colors.white,
+                color: dc.giftPanelTextColor,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -586,9 +630,9 @@ class _GiftPanelState extends State<GiftPanel> {
                   const SizedBox(width: 2),
                   Text(
                     R.formatCoins(g.value),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0xFFFFD856),
+                      color: dc.giftPanelSubTextColor,
                     ),
                   ),
                 ],
@@ -794,9 +838,9 @@ class _GiftPanelState extends State<GiftPanel> {
                   width: 72,
                   height: 32,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: Color(0x1AFFFFFF),
-                    borderRadius: BorderRadius.only(
+                  decoration: BoxDecoration(
+                    color: dc.giftPanelCountBtnBgColor,
+                    borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(8),
                       bottomLeft: Radius.circular(8),
                     ),
@@ -807,7 +851,7 @@ class _GiftPanelState extends State<GiftPanel> {
                     children: [
                       Text(
                         '${widget.selectedCount}',
-                        style: const TextStyle(fontSize: 11, color: Colors.white),
+                        style: TextStyle(fontSize: 11, color: dc.giftPanelCountBtnTextColor),
                       ),
                       const SizedBox(width: 4),
                       R.image(
@@ -830,13 +874,13 @@ class _GiftPanelState extends State<GiftPanel> {
                           alignment: Alignment.center,
                           children: [
                             // الزر المتغير: عند ضغط الإرسال تظهر صورة الإطلاق، وفي وضع الاستعداد تظهر صورة العداد
-                            Image.asset(
-                              _sending ? R.comboFire : R.comboIdle,
-                              width: 76,
-                              height: 76,
-                              fit: BoxFit.contain,
-                              gaplessPlayback: true,
-                            ),
+                            _sending
+                                ? (dc.giftPanelComboFireImage.isNotEmpty
+                                    ? R.loadImage(dc.giftPanelComboFireImage, width: 76, height: 76, fit: BoxFit.contain)
+                                    : Image.asset(R.comboFire, width: 76, height: 76, fit: BoxFit.contain, gaplessPlayback: true))
+                                : (dc.giftPanelComboIdleImage.isNotEmpty
+                                    ? R.loadImage(dc.giftPanelComboIdleImage, width: 76, height: 76, fit: BoxFit.contain)
+                                    : Image.asset(R.comboIdle, width: 76, height: 76, fit: BoxFit.contain, gaplessPlayback: true)),
                             // رقم العداد التنازلي التبادلي (10s) ورقم الكومبو
                             Positioned(
                               bottom: 14,
@@ -890,7 +934,9 @@ class _GiftPanelState extends State<GiftPanel> {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           gradient: canAfford
-                              ? AppColors.giftBtnGradient
+                              ? LinearGradient(
+                                  colors: [dc.giftPanelSendBtnGradientStart, dc.giftPanelSendBtnGradientEnd],
+                                )
                               : const LinearGradient(
                                   colors: [Color(0xFF666666), Color(0xFF444444)],
                                 ),
@@ -908,11 +954,11 @@ class _GiftPanelState extends State<GiftPanel> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text(
+                            : Text(
                                 'إرسال',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.white,
+                                  color: dc.giftPanelSendBtnTextColor,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -931,7 +977,7 @@ class _GiftPanelState extends State<GiftPanel> {
                     R.formatCoins(widget.coins),
                     style: TextStyle(
                       fontSize: 14,
-                      color: canAfford ? Colors.white : Colors.redAccent,
+                      color: canAfford ? dc.giftPanelCoinsTextColor : Colors.redAccent,
                     ),
                   ),
                 ],

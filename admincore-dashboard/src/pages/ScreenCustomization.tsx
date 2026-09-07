@@ -13,6 +13,7 @@ interface ScreenVisuals {
   checkbox: Record<string, string>;
   store: Record<string, string>;
   backpack: Record<string, string>;
+  giftPanel: Record<string, string>;
   wallet: Record<string, string>;
   level: Record<string, string>;
   cp: Record<string, string>;
@@ -157,6 +158,9 @@ const defaultVisuals: ScreenVisuals = {
     headerBgImage: '',
     headerTextColor: '#ffffff',
     headerTextImage: '',
+    tabBgColor: '#16151A',
+    tabActiveColor: '#ffffff',
+    tabInactiveColor: '#9BA1B6',
     cardBgColor: '#16151A',
     cardBgImage: '',
     cardBorderColor: '#ffffff',
@@ -170,6 +174,35 @@ const defaultVisuals: ScreenVisuals = {
     lockImage: '',
     sectionBgColor: '#0d0d12',
     sectionBgImage: '',
+  },
+  giftPanel: {
+    backgroundImage: '',
+    backgroundColor: '#16151A',
+    headerBgColor: 'transparent',
+    headerBgImage: '',
+    headerTextColor: '#ffffff',
+    tabBgColor: '#22222E',
+    tabActiveColor: '#FFD700',
+    tabInactiveColor: '#9BA1B6',
+    cardBgColor: '#1A1A24',
+    cardBgImage: '',
+    cardBorderColor: '#2A2A3A',
+    cardSelectedBorderColor: '#FFD700',
+    textColor: '#ffffff',
+    subTextColor: '#FFD856',
+    accentColor: '#DE880F',
+    sendBtnColor: '#DE880F',
+    sendBtnGradientStart: '#FFD700',
+    sendBtnGradientEnd: '#DE880F',
+    sendBtnTextColor: '#ffffff',
+    countBtnBgColor: '#22222E',
+    countBtnTextColor: '#ffffff',
+    coinsTextColor: '#ffffff',
+    comboIdleImage: '',
+    comboFireImage: '',
+    durationBadgeBg: '#E91E63',
+    luckyBadgeImage: '',
+    starBadgeImage: '',
   },
   wallet: {
     backgroundImage: '',
@@ -413,7 +446,7 @@ const defaultVisuals: ScreenVisuals = {
   },
 };
 
-const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'wallet', 'level', 'cp', 'miniprofile', 'signin', 'room', 'discover', 'message', 'profile', 'chat', 'userProfile', 'eventInfo', 'notifications'] as const;
+const screenTabs = ['agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'giftPanel', 'wallet', 'level', 'cp', 'miniprofile', 'signin', 'room', 'discover', 'message', 'profile', 'chat', 'userProfile', 'eventInfo', 'notifications'] as const;
 
 const screenLabels: Record<string, Record<string, string>> = {
   agency: { ar: 'شاشة الوكالة', en: 'Agency Screen' },
@@ -422,7 +455,8 @@ const screenLabels: Record<string, Record<string, string>> = {
   rank: { ar: 'شاشة الترتيب', en: 'Rank Screen' },
   checkbox: { ar: 'صور الاختيار', en: 'Checkbox Images' },
   store: { ar: 'شاشة المتجر', en: 'Store Screen' },
-  backpack: { ar: 'شاشة الحقيبة', en: 'Backpack Screen' },
+  backpack: { ar: '🎒 شاشة الحقيبة (في كلمة أنا)', en: '🎒 Profile Backpack Screen' },
+  giftPanel: { ar: '🎁 صندوق الهدايا (داخل الغرفة)', en: '🎁 Room Gift Box / Panel' },
   wallet: { ar: 'شاشة المحفظة', en: 'Wallet Screen' },
   level: { ar: 'شاشة المستويات', en: 'Levels Screen' },
   cp: { ar: '💑 شاشة CP', en: '💑 CP Screen' },
@@ -441,6 +475,19 @@ const screenLabels: Record<string, Record<string, string>> = {
 const fieldLabels: Record<string, Record<string, string>> = {
   backgroundImage: { ar: 'صورة الخلفية', en: 'Background Image' },
   backgroundColor: { ar: 'لون الخلفية', en: 'Background Color' },
+  cardSelectedBorderColor: { ar: 'لون إطار العنصر/الهدية المحددة', en: 'Selected Item Border Color' },
+  sendBtnColor: { ar: 'لون زر الإرسال', en: 'Send Button Color' },
+  sendBtnGradientStart: { ar: 'بداية تدرج زر الإرسال', en: 'Send Button Gradient Start' },
+  sendBtnGradientEnd: { ar: 'نهاية تدرج زر الإرسال', en: 'Send Button Gradient End' },
+  sendBtnTextColor: { ar: 'لون نص زر الإرسال', en: 'Send Button Text Color' },
+  countBtnBgColor: { ar: 'لون خلفية زر تحديد العدد', en: 'Count Button Background' },
+  countBtnTextColor: { ar: 'لون نص تحديد العدد', en: 'Count Button Text Color' },
+  coinsTextColor: { ar: 'لون نص رصيد العملات', en: 'Coins Text Color' },
+  comboIdleImage: { ar: 'صورة زر الكومبو (وضع الاستعداد والعداد 10s)', en: 'Combo Idle Button Image' },
+  comboFireImage: { ar: 'صورة زر الكومبو (وضع الإطلاق والضغط)', en: 'Combo Fire Button Image' },
+  durationBadgeBg: { ar: 'لون شارة مدة الـ CP (مثل 7d, 24h)', en: 'CP Duration Badge Color' },
+  luckyBadgeImage: { ar: 'شارة هدية الحظ', en: 'Lucky Gift Badge' },
+  starBadgeImage: { ar: 'شارة هدية النجوم', en: 'Star Gift Badge' },
   bubbleSelfBgColor: { ar: 'لون فقاعة رسائلي', en: 'Self Bubble Background Color' },
   bubbleOtherBgColor: { ar: 'لون فقاعة رسائل الطرف الآخر', en: 'Other Bubble Background Color' },
   seatDefaultCircleImage: { ar: 'صورة المقعد الدائري المفتوح', en: 'Circular Open Seat Image' },

@@ -399,10 +399,10 @@ class DynamicConfigService extends ChangeNotifier {
   Color get bottomNavActiveTextColor => _bottomNavActiveTextColor;
   Color get bottomNavInactiveTextColor => _bottomNavInactiveTextColor;
 
-  String get giftPanelBgImage => _giftPanelBgImage;
-  String get giftPanelHeaderBgImage => _giftPanelHeaderBgImage;
-  Color get giftPanelBgColor => _giftPanelBgColor;
-  Color get giftPanelTabColor => _giftPanelTabColor;
+  String get giftPanelBgImage => _screenStr('giftPanel', 'backgroundImage', _giftPanelBgImage);
+  String get giftPanelHeaderBgImage => _screenStr('giftPanel', 'headerBgImage', _giftPanelHeaderBgImage);
+  Color get giftPanelBgColor => _screenColor('giftPanel', 'backgroundColor', _screenColor('giftPanel', 'cardBgColor', _giftPanelBgColor));
+  Color get giftPanelTabColor => _screenColor('giftPanel', 'tabActiveColor', _giftPanelTabColor);
 
   String get fontFamily => _fontFamily;
   int get borderRadius => _borderRadius;
@@ -753,6 +753,9 @@ class DynamicConfigService extends ChangeNotifier {
   String get backpackHeaderBgImage => _screenStr('backpack', 'headerBgImage', '');
   Color get backpackHeaderTextColor => _screenColor('backpack', 'headerTextColor', Colors.white);
   String get backpackHeaderTextImage => _screenStr('backpack', 'headerTextImage', '');
+  Color get backpackTabBgColor => _screenColor('backpack', 'tabBgColor', const Color(0x14FFFFFF));
+  Color get backpackTabActiveColor => _screenColor('backpack', 'tabActiveColor', Colors.white);
+  Color get backpackTabInactiveColor => _screenColor('backpack', 'tabInactiveColor', Colors.white70);
   Color get backpackCardBgColor => _screenColor('backpack', 'cardBgColor', const Color(0xFF16151A));
   String get backpackCardBgImage => _screenStr('backpack', 'cardBgImage', '');
   Color get backpackCardBorderColor => _screenColor('backpack', 'cardBorderColor', Colors.white);
@@ -766,6 +769,33 @@ class DynamicConfigService extends ChangeNotifier {
   String get backpackLockImage => _screenStr('backpack', 'lockImage', '');
   Color get backpackSectionBgColor => _screenColor('backpack', 'sectionBgColor', const Color(0xFF0d0d12));
   String get backpackSectionBgImage => _screenStr('backpack', 'sectionBgImage', '');
+
+  // Gift Panel (Room Gift Box) screen visuals
+  String get giftPanelBackgroundImage => _screenStr('giftPanel', 'backgroundImage', _giftPanelBgImage);
+  Color get giftPanelBackgroundColor => _screenColor('giftPanel', 'backgroundColor', const Color(0xFF16151A));
+  Color get giftPanelHeaderBgColor => _screenColor('giftPanel', 'headerBgColor', Colors.transparent);
+  String get giftPanelHeaderBgImage => _screenStr('giftPanel', 'headerBgImage', _giftPanelHeaderBgImage);
+  Color get giftPanelTabActiveColor => _screenColor('giftPanel', 'tabActiveColor', const Color(0xFFFFD700));
+  Color get giftPanelTabInactiveColor => _screenColor('giftPanel', 'tabInactiveColor', Colors.white70);
+  Color get giftPanelTabBgColor => _screenColor('giftPanel', 'tabBgColor', const Color(0x1AFFFFFF));
+  String get giftPanelCardBgImage => _screenStr('giftPanel', 'cardBgImage', '');
+  Color get giftPanelCardBgColor => _screenColor('giftPanel', 'cardBgColor', const Color(0x0DFFFFFF));
+  Color get giftPanelCardBorderColor => _screenColor('giftPanel', 'cardBorderColor', Colors.transparent);
+  Color get giftPanelCardSelectedBorderColor => _screenColor('giftPanel', 'cardSelectedBorderColor', const Color(0xFFFFD700));
+  Color get giftPanelTextColor => _screenColor('giftPanel', 'textColor', Colors.white);
+  Color get giftPanelSubTextColor => _screenColor('giftPanel', 'subTextColor', const Color(0xFFFFD856));
+  Color get giftPanelSendBtnColor => _screenColor('giftPanel', 'sendBtnColor', const Color(0xFFDE880F));
+  Color get giftPanelSendBtnGradientStart => _screenColor('giftPanel', 'sendBtnGradientStart', const Color(0xFFFFD700));
+  Color get giftPanelSendBtnGradientEnd => _screenColor('giftPanel', 'sendBtnGradientEnd', const Color(0xFFDE880F));
+  Color get giftPanelSendBtnTextColor => _screenColor('giftPanel', 'sendBtnTextColor', Colors.white);
+  Color get giftPanelCountBtnBgColor => _screenColor('giftPanel', 'countBtnBgColor', const Color(0x1AFFFFFF));
+  Color get giftPanelCountBtnTextColor => _screenColor('giftPanel', 'countBtnTextColor', Colors.white);
+  Color get giftPanelCoinsTextColor => _screenColor('giftPanel', 'coinsTextColor', Colors.white);
+  String get giftPanelComboIdleImage => _screenStr('giftPanel', 'comboIdleImage', '');
+  String get giftPanelComboFireImage => _screenStr('giftPanel', 'comboFireImage', '');
+  Color get giftPanelDurationBadgeBg => _screenColor('giftPanel', 'durationBadgeBg', const Color(0xFFE91E63));
+  String get giftPanelLuckyBadgeImage => _screenStr('giftPanel', 'luckyBadgeImage', '');
+  String get giftPanelStarBadgeImage => _screenStr('giftPanel', 'starBadgeImage', '');
 
   // Wallet screen visuals
   String get walletBackgroundImage => _screenStr('wallet', 'backgroundImage', '');
