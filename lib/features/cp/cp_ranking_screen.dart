@@ -60,8 +60,6 @@ class _CpRankingScreenState extends State<CpRankingScreen>
 
   @override
   Widget build(BuildContext context) {
-    final cfg = DynamicConfigService();
-
     return Scaffold(
       backgroundColor: const Color(0xFF2e0d15),
       body: Stack(
@@ -207,7 +205,7 @@ class _CpRankingScreenState extends State<CpRankingScreen>
 
   Widget _buildPodium(List<Map<String, dynamic>> top3) {
     // Order: 2nd, 1st, 3rd
-    final first = top3.length > 0 ? top3[0] : null;
+    final first = top3.isNotEmpty ? top3[0] : null;
     final second = top3.length > 1 ? top3[1] : null;
     final third = top3.length > 2 ? top3[2] : null;
 
@@ -242,53 +240,65 @@ class _CpRankingScreenState extends State<CpRankingScreen>
       _ => '',
     };
 
+    final animSize = rank == 1 ? 120.0 : 104.0;
+    final avaSize = rank == 1 ? 38.0 : 34.0;
+    final podiumWidth = rank == 1 ? 116.0 : 100.0;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // SVGA Rank Animation & Avatars
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            if (svgaRankAsset.isNotEmpty)
+        SizedBox(
+          width: animSize,
+          height: animSize,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              // Avatars
               Positioned(
-                top: 0,
-                child: SvgaFrame(
-                  svgaPath: svgaRankAsset,
-                  size: rank == 1 ? 110 : 96,
-                  fit: BoxFit.contain,
+                bottom: rank == 1 ? 20 : 16,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _podiumAvatar(u1?['avatar']?.toString(), size: avaSize),
+                    Transform.translate(
+                      offset: const Offset(-8, 0),
+                      child: _podiumAvatar(u2?['avatar']?.toString(), size: avaSize),
+                    ),
+                  ],
                 ),
               ),
-            Padding(
-              padding: EdgeInsets.only(top: rank == 1 ? 24 : 18),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _podiumAvatar(u1?['avatar']?.toString()),
-                  Transform.translate(
-                    offset: const Offset(-8, 0),
-                    child: _podiumAvatar(u2?['avatar']?.toString()),
+              // SVGA Animation overlay
+              if (svgaRankAsset.isNotEmpty)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: SvgaFrame(
+                      svgaPath: svgaRankAsset,
+                      size: animSize,
+                      fit: BoxFit.contain,
+                    ),
                   ),
-                ],
-              ),
-            ),
-          ],
+                ),
+            ],
+          ),
         ),
         const SizedBox(height: 6),
         // Score
         Container(
-          width: 100,
+          width: podiumWidth,
           height: height,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                medalColor.withValues(alpha: 0.3),
+                medalColor.withValues(alpha: 0.35),
                 const Color(0xFF2e0d15),
               ],
             ),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: medalColor.withValues(alpha: 0.5), width: 1),
+            border: Border.all(color: medalColor.withValues(alpha: 0.6), width: 1.2),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -297,7 +307,7 @@ class _CpRankingScreenState extends State<CpRankingScreen>
                   style: TextStyle(
                       color: medalColor, fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 2),
-              const Text('قربى', style: TextStyle(color: Colors.white60, fontSize: 10)),
+              const Text('قربى', style: TextStyle(color: Colors.white70, fontSize: 11)),
             ],
           ),
         ),
@@ -305,13 +315,27 @@ class _CpRankingScreenState extends State<CpRankingScreen>
     );
   }
 
-  Widget _podiumAvatar(String? url) {
-    return ClipOval(
-      child: R.loadImage(
-        url ?? R.avaBoy,
-        width: 36,
-        height: 36,
-        fit: BoxFit.cover,
+  Widget _podiumAvatar(String? url, {double size = 36}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFFFFD54F), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: R.loadImage(
+          url ?? R.avaBoy,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

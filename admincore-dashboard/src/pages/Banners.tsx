@@ -9,7 +9,8 @@ import { Plus, Save, X, Trash2, Layers, Sparkles, Smartphone, CheckCircle2, Arro
 const SCREEN_ACTIONS = [
   { value: 'none', label: 'بدون إجراء (عرض فقط)' },
   { value: '/mall', label: '🛍️ المتجر العام (Store / Mall)' },
-  { value: '/cp', label: '💑 مركز الارتباط والعلاقات (CP Center)' },
+  { value: '/cp_ranking', label: '🏆 ترتيب علاقات CP (CP Ranking)' },
+  { value: '/cp_space', label: '💑 مساحة الـ CP (CP Space)' },
   { value: '/vip', label: '👑 متجر وباقات الـ VIP' },
   { value: '/wallet', label: '💰 المحفظة والشحن (Wallet)' },
   { value: '/tasks', label: '📋 المهام اليومية (Daily Tasks)' },

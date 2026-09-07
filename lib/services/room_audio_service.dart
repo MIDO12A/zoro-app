@@ -168,7 +168,7 @@ class RoomAudioService {
   }
 
   Future<bool> toggleMic(bool on) async {
-    if (!_initialized || effectiveAppSign.isEmpty) {
+    if (!_initialized || !_isPublishing || effectiveAppSign.isEmpty) {
       _micEnabled = on;
       return true;
     }
