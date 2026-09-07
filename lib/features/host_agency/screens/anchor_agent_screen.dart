@@ -51,8 +51,8 @@ class _AnchorAgentScreenState extends State<AnchorAgentScreen> {
                 agencyName: user?.name ?? 'وكالة النجوم',
                 avatarUrl: user?.photoUrl ?? '',
                 agentBean: user?.coins ?? 0,
-                transferMoney: user?.earnings ?? 0,
-                transferDollar: ((user?.earnings ?? 0) / 1000).toInt(),
+                transferMoney: user?.diamonds ?? 0,
+                transferDollar: ((user?.diamonds ?? 0) / 1000).toInt(),
               );
           _anchors = (data['anchors'] as List<dynamic>?)
                   ?.map((e) => AnchorAgentUserInfoDataModel.fromJson(e as Map<String, dynamic>))

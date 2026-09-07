@@ -2167,23 +2167,24 @@ class FirebaseService {
               })
               .toList();
         });
+  }
+
   /// جلب بيانات وكيل المضيفين والمذيعين التابعين للوكالة (Anchor Agent Data)
   Future<Map<String, dynamic>> getAnchorAgencyData({String? agencyId, required String agentUid}) async {
     try {
       // 1. البحث عن الوكالة إما بالـ ID أو بالـ Owner UID
-      QuerySnapshot agencySnap;
       if (agencyId != null && agencyId.isNotEmpty) {
         final doc = await _db.collection('host_agencies').doc(agencyId).get();
         if (doc.exists) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data() as Map<String, dynamic>? ?? {};
           data['id'] = doc.id;
           return await _buildAgencyDataPayload(doc.id, data, agentUid);
         }
       }
-      agencySnap = await _db.collection('host_agencies').where('owner_id', isEqualTo: agentUid).limit(1).get();
+      final agencySnap = await _db.collection('host_agencies').where('owner_id', isEqualTo: agentUid).limit(1).get();
       if (agencySnap.docs.isNotEmpty) {
         final doc = agencySnap.docs.first;
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data() as Map<String, dynamic>? ?? {};
         data['id'] = doc.id;
         return await _buildAgencyDataPayload(doc.id, data, agentUid);
       }
@@ -2214,12 +2215,12 @@ class FirebaseService {
     int totalDiamonds = 0;
 
     for (final mDoc in membersSnap.docs) {
-      final mData = mDoc.data();
+      final mData = mDoc.data() as Map<String, dynamic>? ?? {};
       final mUid = mData['user_id']?.toString() ?? mDoc.id;
       final uSnap = await _db.collection('users').doc(mUid).get();
-      final uData = uSnap.exists ? (uSnap.data() ?? {}) : {};
+      final uData = uSnap.exists ? ((uSnap.data() as Map<String, dynamic>?) ?? {}) : {};
 
-      final diamonds = _asInt(mData['diamonds'] ?? uData['earnings'] ?? 0);
+      final diamonds = _asInt(mData['diamonds'] ?? uData['diamonds'] ?? 0);
       totalDiamonds += diamonds;
 
       anchors.add({
@@ -2243,7 +2244,7 @@ class FirebaseService {
     }
 
     final agentUserSnap = await _db.collection('users').doc(agentUid).get();
-    final agentUserData = agentUserSnap.exists ? (agentUserSnap.data() ?? {}) : {};
+    final agentUserData = agentUserSnap.exists ? ((agentUserSnap.data() as Map<String, dynamic>?) ?? {}) : {};
 
     return {
       'info': {
@@ -2270,16 +2271,18 @@ class FirebaseService {
       final agentRef = _db.collection('users').doc(agentUid);
       
       // البحث عن المضيف بالـ customId أو بالـ UID
-      QuerySnapshot targetSnap = await _db.collection('users').where('custom_id', isEqualTo: targetUserNoOrId).limit(1).get();
-      if (targetSnap.docs.isEmpty) {
+      final targetSnap = await _db.collection('users').where('custom_id', isEqualTo: targetUserNoOrId).limit(1).get();
+      DocumentReference targetRef;
+      if (targetSnap.docs.isNotEmpty) {
+        targetRef = targetSnap.docs.first.reference;
+      } else {
         final byIdDoc = await _db.collection('users').doc(targetUserNoOrId).get();
         if (byIdDoc.exists) {
-          targetSnap = await _db.collection('users').where(FieldPath.documentId, isEqualTo: targetUserNoOrId).get();
+          targetRef = byIdDoc.reference;
+        } else {
+          return false;
         }
       }
-
-      if (targetSnap.docs.isEmpty) return false;
-      final targetRef = targetSnap.docs.first.ref;
 
       return await _db.runTransaction((txn) async {
         final agentDoc = await txn.get(agentRef);
@@ -2287,10 +2290,13 @@ class FirebaseService {
 
         if (!agentDoc.exists || !targetDoc.exists) return false;
 
-        final agentCoins = _asInt(agentDoc.data()?['coins'] ?? 0);
+        final agentData = agentDoc.data() as Map<String, dynamic>?;
+        final targetData = targetDoc.data() as Map<String, dynamic>?;
+
+        final agentCoins = _asInt(agentData?['coins'] ?? 0);
         if (agentCoins < coinsAmount) return false;
 
-        final targetCoins = _asInt(targetDoc.data()?['coins'] ?? 0);
+        final targetCoins = _asInt(targetData?['coins'] ?? 0);
 
         txn.update(agentRef, {'coins': agentCoins - coinsAmount});
         txn.update(targetRef, {'coins': targetCoins + coinsAmount});
