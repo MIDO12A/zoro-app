@@ -602,8 +602,22 @@ export interface CpGiftModel {
   iconUrl: string;
   svgaUrl?: string;
   value: number;
+  durationDays?: number;
+  durationHours?: number;
   sortOrder: number;
   isActive: boolean;
+  maleRewardName?: string;
+  maleRewardType?: string;
+  maleRewardSvga?: string;
+  maleRewardIcon?: string;
+  maleRewardCoins?: number;
+  maleRewardDays?: number;
+  femaleRewardName?: string;
+  femaleRewardType?: string;
+  femaleRewardSvga?: string;
+  femaleRewardIcon?: string;
+  femaleRewardCoins?: number;
+  femaleRewardDays?: number;
   createdAt?: string;
 }
 

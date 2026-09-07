@@ -149,6 +149,7 @@ class CpService {
   static Future<Map<String, dynamic>> sendRequest(
     String receiverId, {
     String? message,
+    String? giftId,
     int durationHours = 24,
   }) async {
     final sender = _uid;
@@ -175,6 +176,7 @@ class CpService {
       'sender_uid': sender,
       'receiver_uid': receiverId,
       'message': message,
+      'gift_id': giftId,
       'duration_hours': durationHours,
       'status': 'pending',
       'created_at': _now(),
@@ -222,9 +224,143 @@ class CpService {
         'created_at': _now(),
         'updated_at': _now(),
       });
+
+      // Grant CP Link Rewards for Male & Female partners
+      try {
+        await _grantCpLinkRewards(
+          senderUid: senderUid,
+          receiverUid: receiver,
+          giftId: req['gift_id'] as String?,
+        );
+      } catch (e) {
+        debugPrint('Error granting CP link rewards: $e');
+      }
     }
 
     return <String, dynamic>{'success': true};
+  }
+
+  static Future<void> _grantCpLinkRewards({
+    required String senderUid,
+    required String receiverUid,
+    String? giftId,
+  }) async {
+    final u1 = await FirebaseService().getUser(senderUid);
+    final u2 = await FirebaseService().getUser(receiverUid);
+
+    Map<String, dynamic>? giftData;
+    if (giftId != null && giftId.isNotEmpty) {
+      final snap = await _db.collection('cp_gifts').doc(giftId).get();
+      if (snap.exists) {
+        giftData = snap.data();
+      } else {
+        final gSnap = await _db.collection('gifts').doc(giftId).get();
+        if (gSnap.exists) giftData = gSnap.data();
+      }
+    }
+
+    final settings = await getSettings();
+
+    // Male reward extraction
+    final maleName = giftData?['male_reward_name']?.toString() ??
+        settings['cp_link_male_reward_name']?.toString() ??
+        '';
+    final maleType = giftData?['male_reward_type']?.toString() ??
+        settings['cp_link_male_reward_type']?.toString() ??
+        'ring';
+    final maleSvga = giftData?['male_reward_svga']?.toString() ??
+        settings['cp_link_male_reward_svga']?.toString() ??
+        '';
+    final maleIcon = giftData?['male_reward_icon']?.toString() ??
+        settings['cp_link_male_reward_icon']?.toString() ??
+        '';
+    final maleCoins = (giftData?['male_reward_coins'] as num?)?.toInt() ??
+        (int.tryParse(settings['cp_link_male_reward_coins']?.toString() ?? '0') ?? 0);
+    final maleDays = (giftData?['male_reward_days'] as num?)?.toInt() ??
+        (int.tryParse(settings['cp_link_male_reward_days']?.toString() ?? '7') ?? 7);
+
+    // Female reward extraction
+    final femaleName = giftData?['female_reward_name']?.toString() ??
+        settings['cp_link_female_reward_name']?.toString() ??
+        '';
+    final femaleType = giftData?['female_reward_type']?.toString() ??
+        settings['cp_link_female_reward_type']?.toString() ??
+        'ring';
+    final femaleSvga = giftData?['female_reward_svga']?.toString() ??
+        settings['cp_link_female_reward_svga']?.toString() ??
+        '';
+    final femaleIcon = giftData?['female_reward_icon']?.toString() ??
+        settings['cp_link_female_reward_icon']?.toString() ??
+        '';
+    final femaleCoins = (giftData?['female_reward_coins'] as num?)?.toInt() ??
+        (int.tryParse(settings['cp_link_female_reward_coins']?.toString() ?? '0') ?? 0);
+    final femaleDays = (giftData?['female_reward_days'] as num?)?.toInt() ??
+        (int.tryParse(settings['cp_link_female_reward_days']?.toString() ?? '7') ?? 7);
+
+    // Determine who gets male vs female reward
+    final u1IsFemale = (u1?.gender?.toLowerCase() == 'female' || u1?.gender == 'أنثى' || u1?.gender == '2');
+    final u2IsFemale = (u2?.gender?.toLowerCase() == 'female' || u2?.gender == 'أنثى' || u2?.gender == '2');
+
+    final maleUid = u1IsFemale ? receiverUid : (u2IsFemale ? senderUid : senderUid);
+    final femaleUid = maleUid == senderUid ? receiverUid : senderUid;
+
+    // Deliver to male backpack & coins
+    if (maleName.isNotEmpty || maleSvga.isNotEmpty || maleIcon.isNotEmpty) {
+      await _db.collection('user_backpack').add(<String, dynamic>{
+        'user_id': maleUid,
+        'item_id': 'cp_reward_male_${DateTime.now().millisecondsSinceEpoch}',
+        'item_name': maleName.isNotEmpty ? maleName : 'مكافأة ارتباط CP (شاب)',
+        'item_type': maleType,
+        'item_icon': maleIcon,
+        'item_svga': maleSvga,
+        'duration_days': maleDays,
+        'expires_at': DateTime.now().add(Duration(days: maleDays)).toIso8601String(),
+        'created_at': _now(),
+        'is_equipped': false,
+        'source': 'cp_link',
+      });
+      if (maleCoins > 0) {
+        await _db.collection('users').doc(maleUid).update({
+          'coins': FieldValue.increment(maleCoins),
+        });
+      }
+      await FirebaseService().sendNotification(
+        uid: maleUid,
+        type: 'cp_link_reward',
+        actorUid: femaleUid,
+        title: '🎉 مبروك الارتباط!',
+        body: 'تم استلام مكافأة الشريك ($maleName) في حقيبتك بنجاح 🎁',
+      );
+    }
+
+    // Deliver to female backpack & coins
+    if (femaleName.isNotEmpty || femaleSvga.isNotEmpty || femaleIcon.isNotEmpty) {
+      await _db.collection('user_backpack').add(<String, dynamic>{
+        'user_id': femaleUid,
+        'item_id': 'cp_reward_female_${DateTime.now().millisecondsSinceEpoch}',
+        'item_name': femaleName.isNotEmpty ? femaleName : 'مكافأة ارتباط CP (فتاة)',
+        'item_type': femaleType,
+        'item_icon': femaleIcon,
+        'item_svga': femaleSvga,
+        'duration_days': femaleDays,
+        'expires_at': DateTime.now().add(Duration(days: femaleDays)).toIso8601String(),
+        'created_at': _now(),
+        'is_equipped': false,
+        'source': 'cp_link',
+      });
+      if (femaleCoins > 0) {
+        await _db.collection('users').doc(femaleUid).update({
+          'coins': FieldValue.increment(femaleCoins),
+        });
+      }
+      await FirebaseService().sendNotification(
+        uid: femaleUid,
+        type: 'cp_link_reward',
+        actorUid: maleUid,
+        title: '🎉 مبروك الارتباط!',
+        body: 'تم استلام مكافأة الشريكة ($femaleName) في حقيبتك بنجاح 🎁',
+      );
+    }
   }
 
   static Future<bool> setTheme(String themeId) async {
@@ -415,9 +551,38 @@ class CpService {
         return <String, dynamic>{'error': 'لديك علاقة CP بالفعل مع شخص آخر'};
       }
 
+      int finalDurationHours = durationHours;
+      try {
+        final gSnap = await _db.collection('cp_gifts').doc(giftId).get();
+        if (gSnap.exists) {
+          final gData = gSnap.data()!;
+          final dDays = (gData['duration_days'] as num?)?.toInt();
+          final dHours = (gData['duration_hours'] as num?)?.toInt();
+          if (dDays != null && dDays > 0) {
+            finalDurationHours = dDays * 24;
+          } else if (dHours != null && dHours > 0) {
+            finalDurationHours = dHours;
+          }
+        } else {
+          final regSnap = await _db.collection('gifts').doc(giftId).get();
+          if (regSnap.exists) {
+            final gData = regSnap.data()!;
+            final dDays = (gData['duration_days'] as num?)?.toInt();
+            final dHours = (gData['cp_gift_duration_hours'] as num?)?.toInt() ?? (gData['duration_hours'] as num?)?.toInt();
+            if (dDays != null && dDays > 0) {
+              finalDurationHours = dDays * 24;
+            } else if (dHours != null && dHours > 0) {
+              finalDurationHours = dHours;
+            }
+          }
+        }
+      } catch (_) {}
+
       final reqResult = await sendRequest(
         receiverId,
         message: 'أرسل لك هدية CP 🎁',
+        giftId: giftId,
+        durationHours: finalDurationHours,
       );
       final success = reqResult['success'] == true || reqResult['id'] != null;
       if (!success) {

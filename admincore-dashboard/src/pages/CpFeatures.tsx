@@ -5,9 +5,32 @@ import { uploadAppAsset } from '../lib/storage';
 import type { CpGiftModel, CpCarModel, CpRankRewardModel, GiftModel } from '../types';
 import DataTable from '../components/DataTable';
 import ImageUpload from '../components/ImageUpload';
-import { Plus, Save, X, Gift, Car, Calendar, Settings, Award, Upload, RotateCcw, Zap, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Save, X, Gift, Car, Calendar, Settings, Award, Upload, RotateCcw, Zap, Trash2, RefreshCw, Heart } from 'lucide-react';
 
-const defaultGiftForm = { id: '', name: '', nameAr: '', nameEn: '', iconUrl: '', svgaUrl: '', value: 100, sortOrder: 0, isActive: true };
+const defaultGiftForm = {
+  id: '',
+  name: '',
+  nameAr: '',
+  nameEn: '',
+  iconUrl: '',
+  svgaUrl: '',
+  value: 100,
+  durationDays: 1,
+  sortOrder: 0,
+  isActive: true,
+  maleRewardName: '',
+  maleRewardType: 'frame',
+  maleRewardSvga: '',
+  maleRewardIcon: '',
+  maleRewardCoins: 0,
+  maleRewardDays: 7,
+  femaleRewardName: '',
+  femaleRewardType: 'frame',
+  femaleRewardSvga: '',
+  femaleRewardIcon: '',
+  femaleRewardCoins: 0,
+  femaleRewardDays: 7,
+};
 const defaultCarForm = { id: '', name: '', nameAr: '', nameEn: '', svgaUrl: '', thumbnailUrl: '', sortOrder: 0, isActive: true };
 
 const eventSettingKeys = [
@@ -33,6 +56,7 @@ const eventSettingKeys = [
 
 const tabs = [
   { key: 'gifts', labelAr: '🎁 هدايا CP', labelEn: 'CP Gifts', icon: Gift },
+  { key: 'linkRewards', labelAr: '💑 مكافآت الارتباط (شاب وفتاة)', labelEn: 'Link Rewards (Boy & Girl)', icon: Heart },
   { key: 'cars', labelAr: '🚗 سيارات CP', labelEn: 'CP Cars', icon: Car },
   { key: 'rewards', labelAr: '🏆 جوائز المراكز', labelEn: 'Rank Rewards', icon: Award },
   { key: 'rewardsConfig', labelAr: '⚙️ إعدادات المكافآت', labelEn: 'Rewards Settings', icon: Settings },
@@ -192,12 +216,55 @@ export default function CpFeaturesPage() {
   const handleEditGift = (g: CpGiftModel) => {
     setEditingGift(g.id);
     setShowAddGift(false);
-    setGiftForm({ id: g.id, name: g.nameAr || g.name, nameAr: g.nameAr || '', nameEn: g.nameEn || '', iconUrl: g.iconUrl || '', svgaUrl: g.svgaUrl || '', value: g.value, sortOrder: g.sortOrder, isActive: g.isActive });
+    setGiftForm({
+      id: g.id,
+      name: g.nameAr || g.name,
+      nameAr: g.nameAr || '',
+      nameEn: g.nameEn || '',
+      iconUrl: g.iconUrl || '',
+      svgaUrl: g.svgaUrl || '',
+      value: g.value,
+      durationDays: g.durationDays ?? (g.durationHours ? Math.round(g.durationHours / 24) : 1),
+      sortOrder: g.sortOrder,
+      isActive: g.isActive,
+      maleRewardName: g.maleRewardName || '',
+      maleRewardType: g.maleRewardType || 'frame',
+      maleRewardSvga: g.maleRewardSvga || '',
+      maleRewardIcon: g.maleRewardIcon || '',
+      maleRewardCoins: g.maleRewardCoins || 0,
+      maleRewardDays: g.maleRewardDays || 7,
+      femaleRewardName: g.femaleRewardName || '',
+      femaleRewardType: g.femaleRewardType || 'frame',
+      femaleRewardSvga: g.femaleRewardSvga || '',
+      femaleRewardIcon: g.femaleRewardIcon || '',
+      femaleRewardCoins: g.femaleRewardCoins || 0,
+      femaleRewardDays: g.femaleRewardDays || 7,
+    });
   };
 
   const handleSaveGift = async () => {
     if (!editingGift) return;
-    await updateCpGift(editingGift, { ...giftForm, iconUrl: giftForm.iconUrl || null, svgaUrl: giftForm.svgaUrl || null } as any);
+    const durationHours = (giftForm.durationDays || 1) * 24;
+    await updateCpGift(editingGift, {
+      ...giftForm,
+      durationHours,
+      duration_hours: durationHours,
+      duration_days: giftForm.durationDays || 1,
+      male_reward_name: giftForm.maleRewardName,
+      male_reward_type: giftForm.maleRewardType,
+      male_reward_svga: giftForm.maleRewardSvga,
+      male_reward_icon: giftForm.maleRewardIcon,
+      male_reward_coins: giftForm.maleRewardCoins,
+      male_reward_days: giftForm.maleRewardDays,
+      female_reward_name: giftForm.femaleRewardName,
+      female_reward_type: giftForm.femaleRewardType,
+      female_reward_svga: giftForm.femaleRewardSvga,
+      female_reward_icon: giftForm.femaleRewardIcon,
+      female_reward_coins: giftForm.femaleRewardCoins,
+      female_reward_days: giftForm.femaleRewardDays,
+      iconUrl: giftForm.iconUrl || null,
+      svgaUrl: giftForm.svgaUrl || null,
+    } as any);
     resetGiftForm();
     loadGifts();
     showMsg('Saved!');
@@ -206,7 +273,28 @@ export default function CpFeaturesPage() {
   const handleAddGift = async () => {
     if (!giftForm.nameAr) { showMsg('Please enter Arabic name'); return; }
     const id = 'cp_gift_' + Date.now();
-    await addCpGift(id, { ...giftForm, id, iconUrl: giftForm.iconUrl || null, svgaUrl: giftForm.svgaUrl || null } as any);
+    const durationHours = (giftForm.durationDays || 1) * 24;
+    await addCpGift(id, {
+      ...giftForm,
+      id,
+      durationHours,
+      duration_hours: durationHours,
+      duration_days: giftForm.durationDays || 1,
+      male_reward_name: giftForm.maleRewardName,
+      male_reward_type: giftForm.maleRewardType,
+      male_reward_svga: giftForm.maleRewardSvga,
+      male_reward_icon: giftForm.maleRewardIcon,
+      male_reward_coins: giftForm.maleRewardCoins,
+      male_reward_days: giftForm.maleRewardDays,
+      female_reward_name: giftForm.femaleRewardName,
+      female_reward_type: giftForm.femaleRewardType,
+      female_reward_svga: giftForm.femaleRewardSvga,
+      female_reward_icon: giftForm.femaleRewardIcon,
+      female_reward_coins: giftForm.femaleRewardCoins,
+      female_reward_days: giftForm.femaleRewardDays,
+      iconUrl: giftForm.iconUrl || null,
+      svgaUrl: giftForm.svgaUrl || null,
+    } as any);
     resetGiftForm();
     loadGifts();
     showMsg('Added!');
@@ -293,7 +381,7 @@ export default function CpFeaturesPage() {
                 <h3 className="text-white font-semibold text-sm">{editingGift ? (isAr ? 'تعديل' : 'Edit') + ' ' + giftForm.name : (isAr ? 'هدية جديدة' : 'New Gift')}</h3>
                 <button onClick={resetGiftForm} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'الاسم (عربي)' : 'Name (Arabic)'}</label>
                   <input value={giftForm.nameAr} onChange={e => updateForm(giftForm, setGiftForm, 'nameAr', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
@@ -307,6 +395,10 @@ export default function CpFeaturesPage() {
                   <input type="number" value={giftForm.value} onChange={e => updateForm(giftForm, setGiftForm, 'value', Number(e.target.value))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
                 </div>
                 <div>
+                  <label className="block text-[10px] uppercase text-rose-400 font-bold mb-1">{isAr ? '⏳ مدة الارتباط (بالأيام)' : '⏳ Link Duration (Days)'}</label>
+                  <input type="number" min="1" value={giftForm.durationDays} onChange={e => updateForm(giftForm, setGiftForm, 'durationDays', Number(e.target.value))} className="w-full bg-[#161618] border border-rose-500/30 rounded-lg py-1.5 px-2 text-xs text-white" />
+                </div>
+                <div>
                   <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">Sort Order</label>
                   <input type="number" value={giftForm.sortOrder} onChange={e => updateForm(giftForm, setGiftForm, 'sortOrder', Number(e.target.value))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
                 </div>
@@ -318,10 +410,80 @@ export default function CpFeaturesPage() {
                   </label>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <ImageUpload currentUrl={giftForm.iconUrl} onUpload={file => uploadAppAsset(file, `cp_gift_icon_${Date.now()}`)} onUrlChange={url => updateForm(giftForm, setGiftForm, 'iconUrl', url)} label={isAr ? 'أيقونة الهدية' : 'Gift Icon'} accept="image/*,.webp,.png,.svg" />
                 <ImageUpload currentUrl={giftForm.svgaUrl} onUpload={file => uploadAppAsset(file, `cp_gift_svga_${Date.now()}`)} onUrlChange={url => updateForm(giftForm, setGiftForm, 'svgaUrl', url)} label={isAr ? 'ملف الأنميشن (SVGA)' : 'Animation (SVGA)'} accept=".svga,.zip,.mp4,.vap" />
               </div>
+
+              {/* Male Partner Reward */}
+              <div className="border border-blue-500/20 bg-blue-950/10 rounded-xl p-4 space-y-3">
+                <h4 className="text-blue-400 font-semibold text-xs flex items-center gap-1.5">👦 {isAr ? 'مكافأة الشاب / الذكر عند تفعيل الارتباط (اختياري)' : 'Boy / Male Link Reward (Optional)'}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'اسم المكافأة' : 'Reward Name'}</label>
+                    <input value={giftForm.maleRewardName} onChange={e => updateForm(giftForm, setGiftForm, 'maleRewardName', e.target.value)} placeholder={isAr ? 'مثال: خاتم الفارس الذهبي' : 'e.g. Gold Ring'} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'نوع المكافأة' : 'Reward Type'}</label>
+                    <select value={giftForm.maleRewardType} onChange={e => updateForm(giftForm, setGiftForm, 'maleRewardType', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white">
+                      <option value="frame">{isAr ? 'إطار (Frame)' : 'Frame'}</option>
+                      <option value="badge">{isAr ? 'وسام (Badge)' : 'Badge'}</option>
+                      <option value="necklace">{isAr ? 'قلادة (Necklace)' : 'Necklace'}</option>
+                      <option value="ring">{isAr ? 'خاتم CP (Ring)' : 'Ring'}</option>
+                      <option value="entrance">{isAr ? 'مآثر دخول (Entrance)' : 'Entrance'}</option>
+                      <option value="coins">{isAr ? 'عملات فقط (Coins)' : 'Coins'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'عملات إضافية' : 'Bonus Coins'}</label>
+                    <input type="number" value={giftForm.maleRewardCoins} onChange={e => updateForm(giftForm, setGiftForm, 'maleRewardCoins', Number(e.target.value))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'مدة المكافأة (أيام)' : 'Reward Validity (Days)'}</label>
+                    <input type="number" min="1" value={giftForm.maleRewardDays} onChange={e => updateForm(giftForm, setGiftForm, 'maleRewardDays', Number(e.target.value))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <ImageUpload currentUrl={giftForm.maleRewardIcon} onUpload={file => uploadAppAsset(file, `cp_male_reward_icon_${Date.now()}`)} onUrlChange={url => updateForm(giftForm, setGiftForm, 'maleRewardIcon', url)} label={isAr ? 'صورة/أيقونة مكافأة الشاب' : 'Boy Reward Icon'} accept="image/*,.webp,.png" />
+                  <ImageUpload currentUrl={giftForm.maleRewardSvga} onUpload={file => uploadAppAsset(file, `cp_male_reward_svga_${Date.now()}`)} onUrlChange={url => updateForm(giftForm, setGiftForm, 'maleRewardSvga', url)} label={isAr ? 'ملف SVGA لمكافأة الشاب' : 'Boy Reward SVGA'} accept=".svga,.zip,.mp4,.vap" />
+                </div>
+              </div>
+
+              {/* Female Partner Reward */}
+              <div className="border border-pink-500/20 bg-pink-950/10 rounded-xl p-4 space-y-3">
+                <h4 className="text-pink-400 font-semibold text-xs flex items-center gap-1.5">👧 {isAr ? 'مكافأة الفتاة / الأنثى عند تفعيل الارتباط (اختياري)' : 'Girl / Female Link Reward (Optional)'}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'اسم المكافأة' : 'Reward Name'}</label>
+                    <input value={giftForm.femaleRewardName} onChange={e => updateForm(giftForm, setGiftForm, 'femaleRewardName', e.target.value)} placeholder={isAr ? 'مثال: تاج الأميرة الوردي' : 'e.g. Princess Crown'} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'نوع المكافأة' : 'Reward Type'}</label>
+                    <select value={giftForm.femaleRewardType} onChange={e => updateForm(giftForm, setGiftForm, 'femaleRewardType', e.target.value)} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white">
+                      <option value="frame">{isAr ? 'إطار (Frame)' : 'Frame'}</option>
+                      <option value="badge">{isAr ? 'وسام (Badge)' : 'Badge'}</option>
+                      <option value="necklace">{isAr ? 'قلادة (Necklace)' : 'Necklace'}</option>
+                      <option value="ring">{isAr ? 'خاتم CP (Ring)' : 'Ring'}</option>
+                      <option value="entrance">{isAr ? 'مآثر دخول (Entrance)' : 'Entrance'}</option>
+                      <option value="coins">{isAr ? 'عملات فقط (Coins)' : 'Coins'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'عملات إضافية' : 'Bonus Coins'}</label>
+                    <input type="number" value={giftForm.femaleRewardCoins} onChange={e => updateForm(giftForm, setGiftForm, 'femaleRewardCoins', Number(e.target.value))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold mb-1">{isAr ? 'مدة المكافأة (أيام)' : 'Reward Validity (Days)'}</label>
+                    <input type="number" min="1" value={giftForm.femaleRewardDays} onChange={e => updateForm(giftForm, setGiftForm, 'femaleRewardDays', Number(e.target.value))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <ImageUpload currentUrl={giftForm.femaleRewardIcon} onUpload={file => uploadAppAsset(file, `cp_female_reward_icon_${Date.now()}`)} onUrlChange={url => updateForm(giftForm, setGiftForm, 'femaleRewardIcon', url)} label={isAr ? 'صورة/أيقونة مكافأة الفتاة' : 'Girl Reward Icon'} accept="image/*,.webp,.png" />
+                  <ImageUpload currentUrl={giftForm.femaleRewardSvga} onUpload={file => uploadAppAsset(file, `cp_female_reward_svga_${Date.now()}`)} onUrlChange={url => updateForm(giftForm, setGiftForm, 'femaleRewardSvga', url)} label={isAr ? 'ملف SVGA لمكافأة الفتاة' : 'Girl Reward SVGA'} accept=".svga,.zip,.mp4,.vap" />
+                </div>
+              </div>
+
               <button onClick={editingGift ? handleSaveGift : handleAddGift} className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-xs text-white font-semibold rounded-lg flex items-center gap-1">
                 <Save className="w-3 h-3" /> {editingGift ? (isAr ? 'حفظ' : 'Save') : (isAr ? 'إضافة' : 'Add')}
               </button>
@@ -333,10 +495,107 @@ export default function CpFeaturesPage() {
               { key: 'iconUrl', label: '', render: (g: CpGiftModel) => g.iconUrl ? <img src={g.iconUrl} className="w-8 h-8 object-contain rounded" /> : <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center text-lg">{isAr ? '🎁' : '🎁'}</div> },
               { key: 'nameAr', label: isAr ? 'الاسم' : 'Name', sortable: true },
               { key: 'value', label: isAr ? 'القيمة' : 'Value', sortable: true },
+              { key: 'durationDays', label: isAr ? 'مدة الارتباط' : 'Duration', render: (g: CpGiftModel) => <span className="text-amber-400 font-semibold">{g.durationDays || (g.durationHours ? Math.round(g.durationHours / 24) : 1)} {isAr ? 'يوم' : 'days'}</span> },
               { key: 'sortOrder', label: 'Order', sortable: true },
               { key: 'isActive', label: isAr ? 'نشط' : 'Active', render: (g: CpGiftModel) => <span className={g.isActive ? 'text-emerald-400' : 'text-rose-400'}>{g.isActive ? (isAr ? 'نعم' : 'Yes') : (isAr ? 'لا' : 'No')}</span> },
             ]}
             data={gifts} onEdit={handleEditGift} onDelete={async (g) => { if (confirm(`Delete ${g.nameAr}?`)) { await deleteCpGift(g.id); loadGifts(); } }} />
+        </div>
+      )}
+
+      {/* ════════════ LINK REWARDS TAB ════════════ */}
+      {activeTab === 'linkRewards' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-white text-sm font-semibold">{isAr ? '💑 مكافآت الارتباط التلقائية (الشاب والفتاة)' : '💑 CP Link Rewards (Boy & Girl)'}</h3>
+              <p className="text-slate-400 text-xs mt-0.5">{isAr ? 'المكافآت التي يستلمها كل من الرابط والمرتبط في حقيبته فور قبول طلب ارتباط الـ CP' : 'Rewards automatically granted to both partners upon CP link acceptance'}</p>
+            </div>
+            <button onClick={handleSaveSettings} disabled={savingSettings}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-xs text-white font-semibold rounded-lg flex items-center gap-1.5 shadow-lg">
+              <Save className="w-4 h-4" /> {savingSettings ? (isAr ? 'جاري الحفظ...' : 'Saving...') : (isAr ? 'حفظ إعدادات المكافآت' : 'Save Rewards')}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Male Partner Global Reward */}
+            <div className="bg-[#141417] rounded-2xl border border-blue-500/20 p-6 space-y-4">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-3">
+                <span className="text-xl">👦</span>
+                <h4 className="text-blue-400 font-bold text-sm">{isAr ? 'مكافأة الشاب / الذكر (الرابط)' : 'Boy / Male Partner Reward'}</h4>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'اسم المكافأة' : 'Reward Name'}</label>
+                  <input value={cpSettings['cp_link_male_reward_name'] ?? 'خاتم الـ CP الفضي'} onChange={e => setCpSettings(p => ({ ...p, cp_link_male_reward_name: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'نوع المكافأة' : 'Reward Type'}</label>
+                    <select value={cpSettings['cp_link_male_reward_type'] ?? 'ring'} onChange={e => setCpSettings(p => ({ ...p, cp_link_male_reward_type: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white">
+                      <option value="frame">{isAr ? 'إطار (Frame)' : 'Frame'}</option>
+                      <option value="badge">{isAr ? 'وسام (Badge)' : 'Badge'}</option>
+                      <option value="necklace">{isAr ? 'قلادة (Necklace)' : 'Necklace'}</option>
+                      <option value="ring">{isAr ? 'خاتم CP (Ring)' : 'Ring'}</option>
+                      <option value="entrance">{isAr ? 'مآثر دخول (Entrance)' : 'Entrance'}</option>
+                      <option value="coins">{isAr ? 'عملات فقط (Coins)' : 'Coins'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'عملات إضافية' : 'Bonus Coins'}</label>
+                    <input type="number" value={cpSettings['cp_link_male_reward_coins'] ?? '0'} onChange={e => setCpSettings(p => ({ ...p, cp_link_male_reward_coins: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'مدة المكافأة (أيام)' : 'Validity (Days)'}</label>
+                    <input type="number" min="1" value={cpSettings['cp_link_male_reward_days'] ?? '7'} onChange={e => setCpSettings(p => ({ ...p, cp_link_male_reward_days: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <ImageUpload currentUrl={cpSettings['cp_link_male_reward_icon'] ?? ''} onUpload={file => handleImageUpload(file, 'cp_link_male_reward_icon')} onUrlChange={url => setCpSettings(p => ({ ...p, cp_link_male_reward_icon: url }))} label={isAr ? 'صورة/أيقونة المكافأة' : 'Reward Icon'} accept="image/*,.webp,.png" />
+                  <ImageUpload currentUrl={cpSettings['cp_link_male_reward_svga'] ?? ''} onUpload={file => handleImageUpload(file, 'cp_link_male_reward_svga')} onUrlChange={url => setCpSettings(p => ({ ...p, cp_link_male_reward_svga: url }))} label={isAr ? 'ملف SVGA للمكافأة' : 'Reward SVGA'} accept=".svga,.zip,.mp4,.vap" />
+                </div>
+              </div>
+            </div>
+
+            {/* Female Partner Global Reward */}
+            <div className="bg-[#141417] rounded-2xl border border-pink-500/20 p-6 space-y-4">
+              <div className="flex items-center gap-2 border-b border-white/5 pb-3">
+                <span className="text-xl">👧</span>
+                <h4 className="text-pink-400 font-bold text-sm">{isAr ? 'مكافأة الفتاة / الأنثى (المرتبط)' : 'Girl / Female Partner Reward'}</h4>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'اسم المكافأة' : 'Reward Name'}</label>
+                  <input value={cpSettings['cp_link_female_reward_name'] ?? 'خاتم الـ CP الوردي'} onChange={e => setCpSettings(p => ({ ...p, cp_link_female_reward_name: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'نوع المكافأة' : 'Reward Type'}</label>
+                    <select value={cpSettings['cp_link_female_reward_type'] ?? 'ring'} onChange={e => setCpSettings(p => ({ ...p, cp_link_female_reward_type: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white">
+                      <option value="frame">{isAr ? 'إطار (Frame)' : 'Frame'}</option>
+                      <option value="badge">{isAr ? 'وسام (Badge)' : 'Badge'}</option>
+                      <option value="necklace">{isAr ? 'قلادة (Necklace)' : 'Necklace'}</option>
+                      <option value="ring">{isAr ? 'خاتم CP (Ring)' : 'Ring'}</option>
+                      <option value="entrance">{isAr ? 'مآثر دخول (Entrance)' : 'Entrance'}</option>
+                      <option value="coins">{isAr ? 'عملات فقط (Coins)' : 'Coins'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'عملات إضافية' : 'Bonus Coins'}</label>
+                    <input type="number" value={cpSettings['cp_link_female_reward_coins'] ?? '0'} onChange={e => setCpSettings(p => ({ ...p, cp_link_female_reward_coins: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'مدة المكافأة (أيام)' : 'Validity (Days)'}</label>
+                    <input type="number" min="1" value={cpSettings['cp_link_female_reward_days'] ?? '7'} onChange={e => setCpSettings(p => ({ ...p, cp_link_female_reward_days: e.target.value }))} className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <ImageUpload currentUrl={cpSettings['cp_link_female_reward_icon'] ?? ''} onUpload={file => handleImageUpload(file, 'cp_link_female_reward_icon')} onUrlChange={url => setCpSettings(p => ({ ...p, cp_link_female_reward_icon: url }))} label={isAr ? 'صورة/أيقونة المكافأة' : 'Reward Icon'} accept="image/*,.webp,.png" />
+                  <ImageUpload currentUrl={cpSettings['cp_link_female_reward_svga'] ?? ''} onUpload={file => handleImageUpload(file, 'cp_link_female_reward_svga')} onUrlChange={url => setCpSettings(p => ({ ...p, cp_link_female_reward_svga: url }))} label={isAr ? 'ملف SVGA للمكافأة' : 'Reward SVGA'} accept=".svga,.zip,.mp4,.vap" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
