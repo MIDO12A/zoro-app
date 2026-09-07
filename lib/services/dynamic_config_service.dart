@@ -27,9 +27,8 @@ class DynamicConfigService extends ChangeNotifier {
   int _splashDurationSeconds = 3;
   Color _splashNameColor = const Color(0xFF16151A);
   String _splashActionType = '';
-  String _splashActionValue = '';
-
-
+  String get splashActionType => _splashActionType;
+  String get splashActionValue => _splashActionValue;
 
   // Mini Profile overrides
   String _miniProfileFollowIcon = '';
@@ -385,6 +384,7 @@ class DynamicConfigService extends ChangeNotifier {
   Color get bottomNavInactiveTextColor => _bottomNavInactiveTextColor;
 
   String get giftPanelBgImage => _screenStr('giftPanel', 'backgroundImage', _giftPanelBgImage);
+  String get giftPanelHeaderBgImage => _screenStr('giftPanel', 'headerBgImage', _giftPanelHeaderBgImage);
   Color get giftPanelBgColor => _screenColor('giftPanel', 'backgroundColor', _screenColor('giftPanel', 'cardBgColor', _giftPanelBgColor));
   Color get giftPanelTabColor => _screenColor('giftPanel', 'tabActiveColor', _giftPanelTabColor);
 

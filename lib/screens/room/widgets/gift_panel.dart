@@ -290,8 +290,8 @@ class _GiftPanelState extends State<GiftPanel> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: (_selectedCategoryId ?? 'all') == cat.id
-                            ? dc.giftPanelTabActiveColor
-                            : dc.giftPanelTabBgColor,
+                            ? dc.giftPanelTabColor
+                            : Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       alignment: Alignment.center,
@@ -631,9 +631,9 @@ class _GiftPanelState extends State<GiftPanel> {
                   const SizedBox(width: 2),
                   Text(
                     R.formatCoins(g.value),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 11,
-                      color: dc.giftPanelSubTextColor,
+                      color: Color(0xFFD3A350),
                     ),
                   ),
                 ],

@@ -25,6 +25,10 @@ migrate_working_dir/
 
 admincore-dashboard-uploaded/
 supabase/
+serviceAccountKey.json
+*serviceAccountKey*.json
+*SERVICE_ACCOUNT*
+*.key.json
 
 # Node / npm / pnpm
 node_modules/

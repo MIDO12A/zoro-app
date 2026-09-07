@@ -4,7 +4,7 @@ import {
   Building2, Crown, BarChart3, Award, Handshake,
   TrendingUp, Image, Palette, Bug,
   Bell, Settings, Shield, ChevronLeft, LogOut,   SlidersHorizontal, Grid, Gift as GiftIcon,
-  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket, Phone, CheckSquare,
+  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket, Phone, CheckSquare, Volume2,
 } from 'lucide-react';
 import { logout } from '../lib/auth';
 import { useContext } from 'react';
@@ -28,6 +28,7 @@ const navItems = [
   { to: '/app-visual-designer', icon: Phone, label: 'nav.appVisualDesigner' },
   { to: '/screen-customization', icon: SlidersHorizontal, label: 'nav.screenVisuals' },
   { to: '/app-assets', icon: Image, label: 'nav.appAssets' },
+  { to: '/app-sounds', icon: Volume2, label: 'nav.appSounds' },
   { to: '/app-icons', icon: Grid, label: 'nav.appIcons' },
   { to: '/visual-manager', icon: Eye, label: 'المظهر الشامل' },
   { to: '/image-customize', icon: ImageIcon, label: 'nav.images' },

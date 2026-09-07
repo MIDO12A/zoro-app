@@ -108,17 +108,13 @@ class AppActionNavigator {
     try {
       final room = await SupabaseService().getRoom(roomId);
       if (room != null && context.mounted) {
-        Navigator.push(
+        await navigateToRoom(
           context,
-          MaterialPageRoute(
-            builder: (_) => RoomScreen(
-              roomId: room.roomId,
-              roomName: room.name,
-              hostName: room.hostName.isNotEmpty ? room.hostName : 'Host',
-              roomPassword: room.password,
-              gameDesc: room.description,
-            ),
-          ),
+          roomId: room.roomId,
+          roomName: room.name,
+          hostName: room.hostName.isNotEmpty ? room.hostName : 'Host',
+          roomPassword: room.password,
+          gameDesc: room.description,
         );
       } else if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

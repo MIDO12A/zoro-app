@@ -46,7 +46,7 @@ export function detectAssetType(fileName: string): string {
   const match = fileName.match(/[?&]assetType=(\w+)/i);
   if (match) {
     const val = match[1].toLowerCase();
-    if (['svga', 'vap', 'mp4', 'webp', 'gif', 'png', 'jpg', 'zip', 'json', 'other'].includes(val)) return val;
+    if (['svga', 'vap', 'mp4', 'webp', 'gif', 'png', 'jpg', 'zip', 'json', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'audio', 'other'].includes(val)) return val;
   }
   const withoutParams = fileName.includes('?') ? fileName.slice(0, fileName.indexOf('?')) : fileName;
   const lower = withoutParams.toLowerCase();
@@ -59,6 +59,11 @@ export function detectAssetType(fileName: string): string {
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'jpg';
   if (lower.endsWith('.zip')) return 'zip';
   if (lower.endsWith('.json')) return 'json';
+  if (lower.endsWith('.mp3')) return 'mp3';
+  if (lower.endsWith('.wav')) return 'wav';
+  if (lower.endsWith('.ogg')) return 'ogg';
+  if (lower.endsWith('.m4a')) return 'm4a';
+  if (lower.endsWith('.aac')) return 'aac';
   return 'other';
 }
 
@@ -68,6 +73,7 @@ const FOLDERS = {
   storeIcon: 'store_icons',
   storeFile: 'store_files',
   appAsset: 'app_assets',
+  appSound: 'app_sounds',
   config: 'app_config',
   userPhoto: 'user_photos',
   roomPhoto: 'room_photos',
@@ -80,7 +86,7 @@ const FOLDERS = {
 function resourceTypeFor(file: File): 'auto' | 'image' | 'video' | 'raw' {
   const t = detectAssetType(file.name);
   if (t === 'svga' || t === 'vap' || t === 'zip' || t === 'json') return 'raw';
-  if (t === 'mp4' || t === 'webm' || t === 'mov') return 'video';
+  if (t === 'mp4' || t === 'webm' || t === 'mov' || t === 'mp3' || t === 'wav' || t === 'ogg' || t === 'm4a' || t === 'aac' || t === 'audio') return 'video';
   return 'auto';
 }
 
@@ -287,3 +293,6 @@ export async function uploadSplash(file: File, splashId: string, onProgress?: (p
   return uploadAny(file, 'splash', onProgress);
 }
 
+export async function uploadSound(file: File, soundId: string, onProgress?: (pct: number) => void): Promise<string> {
+  return uploadAny(file, FOLDERS.appSound, onProgress);
+}

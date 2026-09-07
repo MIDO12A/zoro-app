@@ -326,6 +326,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             receiverName: receiverName,
             value: gift.value,
             count: count,
+            comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
+            comboCount: _roomComboMultiplier,
           );
         }
       }
