@@ -90,7 +90,22 @@ class _UserProfileState extends State<UserProfile> {
   @override
   void initState() {
     super.initState();
+    _extraUserData = Map<String, dynamic>.from(widget.user);
     _fetchData();
+  }
+
+  @override
+  void didUpdateWidget(UserProfile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldUid = oldWidget.user['id']?.toString() ?? oldWidget.user['uid']?.toString();
+    final newUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString();
+    if (oldUid != newUid) {
+      setState(() {
+        _extraUserData = Map<String, dynamic>.from(widget.user);
+        _dataLoaded = false;
+      });
+      _fetchData();
+    }
   }
 
   Future<void> _fetchData() async {

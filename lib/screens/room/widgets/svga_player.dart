@@ -33,13 +33,18 @@ class SvgaPlayer extends StatefulWidget {
     this.defaultImageUrl,
   });
 
+  static final Map<String, Uint8List> _bytesMemoryCache = {};
+
   /// Pre-downloads an SVGA [url] into the shared cache so future plays are instant.
   /// Returns the local file path if cached, or null on failure.
   static Future<String?> prefetch(String url) async {
     if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
     try {
+      if (_bytesMemoryCache.containsKey(url)) return url;
       final cachedFile = await _cachedFileFor(url);
       if (await cachedFile.exists() && (await cachedFile.length()) > 0) {
+        final bytes = await cachedFile.readAsBytes();
+        _bytesMemoryCache[url] = bytes;
         return cachedFile.path;
       }
       final dio = Dio(BaseOptions(
@@ -49,6 +54,7 @@ class SvgaPlayer extends StatefulWidget {
       ));
       final response = await dio.get<Uint8List>(url);
       if (response.statusCode != 200 || response.data == null) return null;
+      _bytesMemoryCache[url] = response.data!;
       await cachedFile.writeAsBytes(response.data!);
       return cachedFile.path;
     } catch (e) {
@@ -191,7 +197,6 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
       if (widget.textReplacement != null) {
         for (final entry in widget.textReplacement!.entries) {
           if (entry.key.isEmpty || entry.value.isEmpty) continue;
-          print('SVGA setText: key="${entry.key}" value="${entry.value}"');
           final painter = TextPainter(
             text: TextSpan(
               text: entry.value,
@@ -211,20 +216,13 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
       if (widget.imageReplacement != null) {
         for (final entry in widget.imageReplacement!.entries) {
           if (entry.key.isEmpty || entry.value.isEmpty) continue;
-          print('SVGA setImage: key="${entry.key}" url="${entry.value}"');
           try {
             await dynamicItem.setImageWithUrl(entry.value, entry.key);
-            print('SVGA setImage SUCCESS: key="${entry.key}"');
           } catch (e) {
-            print('SVGA setImage ERROR: $e');
             if (widget.defaultImageUrl != null && widget.defaultImageUrl!.isNotEmpty) {
-              print('SVGA trying defaultImage: ${widget.defaultImageUrl}');
               try {
                 await dynamicItem.setImageWithUrl(widget.defaultImageUrl!, entry.key);
-                print('SVGA defaultImage SUCCESS');
-              } catch (e2) {
-                print('SVGA defaultImage ERROR: $e2');
-              }
+              } catch (_) {}
             }
           }
         }
@@ -235,11 +233,21 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
   }
 
   Future<MovieEntity> _loadFromUrl(String url) async {
+    if (SvgaPlayer._bytesMemoryCache.containsKey(url)) {
+      try {
+        final cachedBytes = SvgaPlayer._bytesMemoryCache[url]!;
+        return await SVGAParser.shared.decodeFromBuffer(cachedBytes);
+      } catch (e) {
+        print('SVGA memory cache decode error: $e');
+      }
+    }
+
     final cachedFile = await SvgaPlayer._cachedFileFor(url);
 
     if (await cachedFile.exists()) {
       try {
         final bytes = await cachedFile.readAsBytes();
+        SvgaPlayer._bytesMemoryCache[url] = bytes;
         print('SVGA loaded from cache: ${cachedFile.path} (${bytes.length} bytes)');
         return await SVGAParser.shared.decodeFromBuffer(bytes);
       } catch (e) {
@@ -257,6 +265,7 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
       throw Exception('HTTP ${response.statusCode}');
     }
     print('SVGA downloaded: ${response.data!.length} bytes');
+    SvgaPlayer._bytesMemoryCache[url] = response.data!;
     try {
       await cachedFile.writeAsBytes(response.data!);
       print('SVGA cached to: ${cachedFile.path}');

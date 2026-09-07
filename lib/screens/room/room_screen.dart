@@ -966,11 +966,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _playEntranceEffectRaw(Map<String, dynamic> data, String url) {
     if (!mounted) return;
+    final userName = data['name']?.toString() ?? '';
+    final userPhoto = data['photoUrl']?.toString() ?? '';
     setState(() {
       _entranceItemAnimAsset = url;
       _showEntranceItemAnim = true;
-      _entranceItemTextReplacement = null;
-      _entranceItemImageReplacement = null;
+      _entranceItemTextReplacement = userName.isNotEmpty ? {'test': userName, 'name': userName, 'nickname': userName} : null;
+      _entranceItemImageReplacement = userPhoto.isNotEmpty ? {'Avatar': userPhoto, 'avatar': userPhoto, 'user_head': userPhoto, 'img_head': userPhoto} : null;
       _entranceItemDefaultImage = null;
     });
   }
@@ -980,27 +982,52 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final nameKey = storeItem.nameKey;
     final photoKey = storeItem.photoKey;
     final enteringUser = uid != null ? _cachedUsers[uid] : null;
-    Map<String, String>? textReplacement;
-    Map<String, String>? imageReplacement;
-    if (nameKey != null && nameKey.isNotEmpty && enteringUser != null) {
-      textReplacement = <String, String>{nameKey: enteringUser.name};
-    }
-    if (photoKey != null && photoKey.isNotEmpty && enteringUser != null && enteringUser.photoUrl.isNotEmpty) {
-      imageReplacement = <String, String>{photoKey: enteringUser.photoUrl};
-    }
+    final userName = (enteringUser != null && enteringUser.name.isNotEmpty)
+        ? enteringUser.name
+        : (data['name']?.toString() ?? '');
+    final userPhoto = (enteringUser != null && enteringUser.photoUrl.isNotEmpty)
+        ? enteringUser.photoUrl
+        : (data['photoUrl']?.toString() ?? '');
+
+    final Map<String, String> textReplacement = {
+      if (nameKey != null && nameKey.isNotEmpty && userName.isNotEmpty) nameKey: userName,
+      if (userName.isNotEmpty) ...{
+        'test': userName,
+        'name': userName,
+        'nickname': userName,
+        'user_name': userName,
+        'user': userName,
+      },
+    };
+    final Map<String, String> imageReplacement = {
+      if (photoKey != null && photoKey.isNotEmpty && userPhoto.isNotEmpty) photoKey: userPhoto,
+      if (userPhoto.isNotEmpty) ...{
+        'Avatar': userPhoto,
+        'user_r': userPhoto,
+        'user_l': userPhoto,
+        'user_head': userPhoto,
+        'img_head': userPhoto,
+        'head_img': userPhoto,
+        'avatar': userPhoto,
+        'photo': userPhoto,
+        'user_img': userPhoto,
+        'user': userPhoto,
+      },
+    };
+
     final isCar = storeItem.category == 'car';
     setState(() {
       if (isCar) {
         _entranceAnimAsset = storeItem.animationUrl;
         _showEntranceAnim = true;
-        _entranceTextReplacement = textReplacement;
-        _entranceImageReplacement = imageReplacement;
+        _entranceTextReplacement = textReplacement.isNotEmpty ? textReplacement : null;
+        _entranceImageReplacement = imageReplacement.isNotEmpty ? imageReplacement : null;
         _entranceDefaultImage = storeItem.defaultImage;
       } else {
         _entranceItemAnimAsset = storeItem.animationUrl;
         _showEntranceItemAnim = true;
-        _entranceItemTextReplacement = textReplacement;
-        _entranceItemImageReplacement = imageReplacement;
+        _entranceItemTextReplacement = textReplacement.isNotEmpty ? textReplacement : null;
+        _entranceItemImageReplacement = imageReplacement.isNotEmpty ? imageReplacement : null;
         _entranceItemDefaultImage = storeItem.defaultImage;
       }
     });
@@ -1207,28 +1234,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return;
     }
 
-    // Default fallback: show strip for any gift (no threshold check)
-    setState(() {
-      _giftBannerAsset = 'assets/svga/gift_banner_strip.svga';
-      _giftBannerSenderPhoto = data['senderPhotoUrl']?.toString();
-      _giftBannerReceiverPhoto = receiverPhoto;
-      _giftBannerGiftImage = data['defaultImage']?.toString();
-      _giftBannerCount = giftCount;
-      _giftBannerUserRKey = 'user_r';
-      _giftBannerUserLKey = 'user_l';
-      _giftBannerNumberKey = 'number';
-      _giftBannerGiftKey = 'gift';
-      _showGiftBanner = true;
-    });
-    _bannerHideTimer?.cancel();
-    _bannerHideTimer = Timer(const Duration(seconds: 8), () {
-      if (mounted && _showGiftBanner) {
-        setState(() {
-          _showGiftBanner = false;
-          _giftBannerAsset = null;
-        });
-      }
-    });
+    // لا نظهر شريط البانر للهدايا العادية الصغيرة (يظهر فقط للهدايا الكبيرة 500+ عملة)
+    if (totalCost >= 500) {
+      setState(() {
+        _giftBannerAsset = 'assets/svga/gift_banner_strip.svga';
+        _giftBannerSenderPhoto = data['senderPhotoUrl']?.toString();
+        _giftBannerReceiverPhoto = receiverPhoto;
+        _giftBannerGiftImage = data['defaultImage']?.toString();
+        _giftBannerCount = giftCount;
+        _giftBannerUserRKey = 'user_r';
+        _giftBannerUserLKey = 'user_l';
+        _giftBannerNumberKey = 'number';
+        _giftBannerGiftKey = 'gift';
+        _showGiftBanner = true;
+      });
+      _bannerHideTimer?.cancel();
+      _bannerHideTimer = Timer(const Duration(seconds: 8), () {
+        if (mounted && _showGiftBanner) {
+          setState(() {
+            _showGiftBanner = false;
+            _giftBannerAsset = null;
+          });
+        }
+      });
+    }
   }
 
   void _sendMessage() {
@@ -3636,37 +3665,161 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ── Gift count popup ──────────────────────────────────────────
   void _showGiftCountMenu() {
-    const counts = [1, 9, 99, 999];
+    const presetCounts = [
+      {'count': 1, 'label': '1 (مفرد)'},
+      {'count': 10, 'label': '10 (عشرة)'},
+      {'count': 66, 'label': '66 (سلسلة)'},
+      {'count': 88, 'label': '88 (حظ كبير)'},
+      {'count': 100, 'label': '100 (مائة)'},
+      {'count': 520, 'label': '520 (أحبك)'},
+      {'count': 1314, 'label': '1314 (إلى الأبد)'},
+    ];
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF372928),
+      backgroundColor: const Color(0xFF231B2A),
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(8)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: counts
-              .map(
-                (c) => GestureDetector(
-                  onTap: () {
-                    setState(() => _giftCount = c);
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '$c',
-                      style: const TextStyle(fontSize: 14, color: Colors.white),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const Text(
+                'اختر كمية الإرسال',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ...presetCounts.map(
+                    (p) => GestureDetector(
+                      onTap: () {
+                        setState(() => _giftCount = p['count'] as int);
+                        Navigator.pop(ctx);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _giftCount == (p['count'] as int)
+                              ? const Color(0xFFD3A350)
+                              : Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: _giftCount == (p['count'] as int)
+                                ? const Color(0xFFFFD700)
+                                : Colors.white12,
+                          ),
+                        ),
+                        child: Text(
+                          '${p['label']}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: _giftCount == (p['count'] as int)
+                                ? Colors.black
+                                : Colors.white,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              )
-              .toList(),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _showCustomCountDialog();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFD3A350), width: 1.2),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.edit, size: 12, color: Color(0xFFD3A350)),
+                          SizedBox(width: 4),
+                          Text(
+                            'كتابة رقم مخصص...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFFD3A350),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  void _showCustomCountDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF231B2A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('أدخل كمية الإرسال', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          style: const TextStyle(color: Colors.white, fontSize: 18),
+          decoration: InputDecoration(
+            hintText: 'مثال: 50, 100, 500, 999...',
+            hintStyle: const TextStyle(color: Colors.white38, fontSize: 14),
+            filled: true,
+            fillColor: Colors.white.withValues(alpha: 0.08),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD3A350),
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              final val = int.tryParse(controller.text.trim());
+              if (val != null && val > 0) {
+                setState(() => _giftCount = val);
+              }
+              Navigator.pop(dCtx);
+            },
+            child: const Text('تأكيد'),
+          ),
+        ],
       ),
     );
   }

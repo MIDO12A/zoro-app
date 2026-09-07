@@ -68,8 +68,8 @@ class LuckyGiftService {
       );
     }
 
-    // 3. إذا كان فوزاً كبيراً، نعرض بانر الفوز الأسطوري لكافة الغرف
-    if (nextData.isBigWin) {
+    // 3. إذا كان فوزاً كبيراً بمضاعف 100X فما فوق، نعرض بانر الفوز العام الأسطوري لكافة الغرف
+    if (nextData.isBigWin && nextData.maxMultiplier >= 100) {
       showBigWinBanner(
         context,
         senderName: nextData.senderName,
@@ -158,6 +158,7 @@ class LuckyGiftService {
     required int multiplier,
     required int totalWon,
   }) {
+    if (multiplier < 100) return; // حصراً 100X فما فوق
     _bannerOverlay?.remove();
     final overlay = Overlay.of(context, rootOverlay: true);
     _bannerOverlay = OverlayEntry(
@@ -182,13 +183,15 @@ class LuckyGiftService {
   void listenToGlobalBigWins(BuildContext context, Stream<Map<String, dynamic>> globalStream) {
     _globalSub?.cancel();
     _globalSub = globalStream.listen((data) {
+      final mult = data['multiplier'] is int ? data['multiplier'] as int : int.tryParse(data['multiplier']?.toString() ?? '0') ?? 0;
+      if (mult < 100) return; // البانر العام يظهر فقط لـ 100X فما فوق
       if (context.mounted) {
         showBigWinBanner(
           context,
           senderName: data['sender_name'] ?? '',
           senderAvatar: data['sender_avatar'] ?? '',
           giftName: data['gift_name'] ?? '',
-          multiplier: data['multiplier'] ?? 0,
+          multiplier: mult,
           totalWon: data['total_won'] ?? 0,
         );
       }

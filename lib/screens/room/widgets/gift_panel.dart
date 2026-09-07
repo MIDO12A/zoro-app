@@ -897,9 +897,24 @@ class _GiftPanelState extends State<GiftPanel> {
                                 : (dc.giftPanelComboIdleImage.isNotEmpty
                                     ? R.loadImage(dc.giftPanelComboIdleImage, width: 76, height: 76, fit: BoxFit.contain)
                                     : Image.asset(R.comboIdle, width: 76, height: 76, fit: BoxFit.contain, gaplessPlayback: true)),
+                            // صورة الهدية المختارة في المنتصف
+                            if (gift != null)
+                              Positioned(
+                                top: 16,
+                                child: SizedBox(
+                                  width: 34,
+                                  height: 34,
+                                  child: R.loadImage(
+                                    gift.iconAsset.isNotEmpty ? gift.iconAsset : (gift.defaultImage ?? ''),
+                                    width: 34,
+                                    height: 34,
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ),
                             // رقم العداد التنازلي التبادلي (10s) ورقم الكومبو
                             Positioned(
-                              bottom: 14,
+                              bottom: 12,
                               child: Text(
                                 '${_comboSeconds}s',
                                 style: const TextStyle(
