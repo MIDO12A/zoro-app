@@ -105,11 +105,29 @@ class CpService {
       final u1 = await FirebaseService().getUser(d['user1_uid'] as String? ?? '');
       final u2 = await FirebaseService().getUser(d['user2_uid'] as String? ?? '');
 
+      int days = 1;
+      try {
+        if (d['created_at'] is Timestamp) {
+          days = DateTime.now().difference((d['created_at'] as Timestamp).toDate()).inDays + 1;
+        } else if (d['created_at'] is String) {
+          days = DateTime.now().difference(DateTime.parse(d['created_at'])).inDays + 1;
+        } else if (d['created_at'] is int) {
+          days = DateTime.now().difference(DateTime.fromMillisecondsSinceEpoch(d['created_at'])).inDays + 1;
+        }
+      } catch (_) {}
+
       rows.add(<String, dynamic>{
         'rank': rows.length + 1,
         'user1': <String, dynamic>{'name': u1?.name ?? '', 'avatar': u1?.photoUrl ?? ''},
         'user2': <String, dynamic>{'name': u2?.name ?? '', 'avatar': u2?.photoUrl ?? ''},
+        'avatar1': u1?.photoUrl ?? '',
+        'avatar2': u2?.photoUrl ?? '',
+        'name1': u1?.name ?? '',
+        'name2': u2?.name ?? '',
+        'user1_uid': d['user1_uid'] ?? '',
+        'user2_uid': d['user2_uid'] ?? '',
         'score': (d[scoreField] as num?)?.toInt() ?? 0,
+        'cp_days': days,
       });
     }
 

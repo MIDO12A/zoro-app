@@ -416,32 +416,124 @@ function ImagesSection({ config, updateField }: { config: AppConfig; updateField
           placeholder="أو ألصق رابط..." className="w-full mt-2 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white font-mono" />
       </div>
 
-      {/* Splash */}
-      <div className="border-t border-white/5 pt-4">
-        <h4 className="text-xs text-indigo-300 font-semibold mb-3">شاشة البداية (Splash)</h4>
-        <div className="flex items-center gap-4">
-          {config.splashGifUrl ? (
-            <div className="relative">
-              <img src={config.splashGifUrl} className="w-32 h-32 object-contain rounded-lg border border-white/5 bg-black/20"
-                onError={e => { (e.target as HTMLImageElement).src = ''; }} />
-              <button onClick={() => updateField('splashGifUrl', '')}
-                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px]">×</button>
-            </div>
-          ) : (
-            <label className="w-32 h-32 rounded-lg border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all">
-              <Upload className="w-6 h-6 text-slate-500 mb-1" />
-              <span className="text-[9px] text-slate-600">رفع</span>
-              <input type="file" accept="image/*,.svga,.gif,.mp4" onChange={async e => {
-                const file = e.target.files?.[0]; if (!file) return;
-                const url = await uploadToCloudinary(file, 'config');
-                updateField('splashGifUrl', url);
-              }} className="hidden" />
-            </label>
-          )}
+      {/* Splash Screen Manager */}
+      <div className="border-t border-white/5 pt-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-xs text-indigo-300 font-semibold">شاشة البداية والترحيب (Splash Screen)</h4>
+            <p className="text-[10px] text-slate-500 mt-0.5">عند تفعيلها، ستظهر للمستخدم لمدة محددة (افتراضياً 3 ثوانٍ) بدلاً من شعار التطبيق الافتراضي مع زر التخطي.</p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-xs text-slate-300">تفعيل الشاشة المخصصة</span>
+            <input
+              type="checkbox"
+              checked={config.splash_enabled === true || config.splash_enabled === 'true'}
+              onChange={e => updateField('splash_enabled', e.target.checked)}
+              className="w-4 h-4 rounded text-indigo-600 bg-[#161618] border-white/10"
+            />
+          </label>
         </div>
-        <input type="text" value={config.splashGifUrl || ''}
-          onChange={e => updateField('splashGifUrl', e.target.value)}
-          placeholder="أو ألصق رابط..." className="w-full mt-2 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white font-mono" />
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">صورة / GIF الشاشة الترحيبية</label>
+            <div className="flex items-center gap-4">
+              {config.splashGifUrl || config.splash_image_url ? (
+                <div className="relative">
+                  <img
+                    src={config.splash_image_url || config.splashGifUrl}
+                    className="w-28 h-28 object-contain rounded-lg border border-white/5 bg-black/20"
+                    onError={e => { (e.target as HTMLImageElement).src = ''; }}
+                  />
+                  <button
+                    onClick={() => {
+                      updateField('splashGifUrl', '');
+                      updateField('splash_image_url', '');
+                    }}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px]"
+                  >×</button>
+                </div>
+              ) : (
+                <label className="w-28 h-28 rounded-lg border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all">
+                  <Upload className="w-6 h-6 text-slate-500 mb-1" />
+                  <span className="text-[9px] text-slate-600">رفع صورة/GIF</span>
+                  <input
+                    type="file"
+                    accept="image/*,.gif"
+                    onChange={async e => {
+                      const file = e.target.files?.[0]; if (!file) return;
+                      const url = await uploadToCloudinary(file, 'config');
+                      updateField('splash_image_url', url);
+                      updateField('splashGifUrl', url);
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+            <input
+              type="text"
+              value={config.splash_image_url || config.splashGifUrl || ''}
+              onChange={e => {
+                updateField('splash_image_url', e.target.value);
+                updateField('splashGifUrl', e.target.value);
+              }}
+              placeholder="رابط الصورة أو GIF..."
+              className="w-full mt-2 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-slate-400 font-bold mb-1.5">ملف SVGA الترحيبي (اختياري)</label>
+            <div className="flex items-center gap-4">
+              {config.splash_svga_url ? (
+                <div className="relative">
+                  <div className="w-28 h-28 rounded-lg border border-white/5 bg-indigo-950/40 flex flex-col items-center justify-center text-[10px] text-indigo-300 p-2 text-center break-all font-mono">
+                    SVGA نشط
+                  </div>
+                  <button
+                    onClick={() => updateField('splash_svga_url', '')}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px]"
+                  >×</button>
+                </div>
+              ) : (
+                <label className="w-28 h-28 rounded-lg border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-500/50 transition-all">
+                  <Upload className="w-6 h-6 text-slate-500 mb-1" />
+                  <span className="text-[9px] text-slate-600">رفع SVGA</span>
+                  <input
+                    type="file"
+                    accept=".svga"
+                    onChange={async e => {
+                      const file = e.target.files?.[0]; if (!file) return;
+                      const url = await uploadToCloudinary(file, 'config');
+                      updateField('splash_svga_url', url);
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              )}
+            </div>
+            <input
+              type="text"
+              value={config.splash_svga_url || ''}
+              onChange={e => updateField('splash_svga_url', e.target.value)}
+              placeholder="رابط ملف SVGA..."
+              className="w-full mt-2 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white font-mono"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] text-slate-400 font-bold mb-1">مدة ظهور الشاشة (بالثواني)</label>
+          <input
+            type="number"
+            value={config.splash_duration_seconds || 3}
+            onChange={e => updateField('splash_duration_seconds', Number(e.target.value))}
+            min={1}
+            max={10}
+            className="w-32 bg-[#161618] border border-white/10 rounded-lg py-1.5 px-2 text-xs text-white"
+          />
+        </div>
       </div>
 
       {/* Font & Border */}

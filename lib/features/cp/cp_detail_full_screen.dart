@@ -265,10 +265,13 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
 
   Widget _buildFirstPlace(DynamicConfigService cfg) {
     final top = _ranking.isNotEmpty ? _ranking[0] : null;
-    final avatar1 = top?['avatar1'] as String? ?? '';
-    final avatar2 = top?['avatar2'] as String? ?? '';
+    final avatar1 = (top?['user1'] is Map ? top!['user1']['avatar'] : null) ?? top?['avatar1']?.toString() ?? '';
+    final avatar2 = (top?['user2'] is Map ? top!['user2']['avatar'] : null) ?? top?['avatar2']?.toString() ?? '';
     final badgeImg = _rewardImg(1, 'badge', '');
     final necklaceImg = _rewardImg(1, 'necklace', '');
+    final userFrame = _rewardSvg(1, 'frame_svga', _userFrameSvg);
+    final partnerFrame = _rewardSvg(1, 'frame_svga', _partnerFrameSvg);
+    final centerAnim = _rewardSvg(1, 'center_svga', _centerFrameSvg);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -310,8 +313,8 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
                       backgroundColor: Colors.white.withValues(alpha: 0.1),
                       backgroundImage: EncryptedImageProvider(avatar2) as ImageProvider,
                     ),
-                    if (_userFrameSvg.isNotEmpty)
-                      SvgaFrame(svgaPath: _userFrameSvg, size: 70),
+                    if (partnerFrame.isNotEmpty)
+                      SvgaFrame(svgaPath: partnerFrame, size: 70),
                     if (badgeImg.isNotEmpty)
                       Positioned(
                         bottom: 0,
@@ -331,7 +334,7 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SvgaFrame(svgaPath: _centerFrameSvg, size: 48, fit: BoxFit.contain),
+                  SvgaFrame(svgaPath: centerAnim, size: 48, fit: BoxFit.contain),
                   ShaderMask(
                     shaderCallback: (bounds) => const LinearGradient(
                       colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
@@ -360,8 +363,8 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
                       backgroundColor: Colors.white.withValues(alpha: 0.1),
                       backgroundImage: EncryptedImageProvider(avatar1) as ImageProvider,
                     ),
-                    if (_partnerFrameSvg.isNotEmpty)
-                      SvgaFrame(svgaPath: _partnerFrameSvg, size: 70),
+                    if (userFrame.isNotEmpty)
+                      SvgaFrame(svgaPath: userFrame, size: 70),
                     if (necklaceImg.isNotEmpty)
                       Positioned(
                         top: 0,
@@ -425,11 +428,14 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
   }
 
   Widget _buildCpCard(Map<String, dynamic> data, DynamicConfigService cfg, {int rankPosition = 2}) {
-    final avatar1 = data['avatar1'] as String? ?? '';
-    final avatar2 = data['avatar2'] as String? ?? '';
-    final days = data['cp_days'] as int? ?? 0;
+    final avatar1 = (data['user1'] is Map ? data['user1']['avatar'] : null) ?? data['avatar1']?.toString() ?? '';
+    final avatar2 = (data['user2'] is Map ? data['user2']['avatar'] : null) ?? data['avatar2']?.toString() ?? '';
+    final days = (data['cp_days'] as num?)?.toInt() ?? 0;
     final badgeImg = _rewardImg(rankPosition, 'badge', '');
     final necklaceImg = _rewardImg(rankPosition, 'necklace', '');
+    final userFrame = _rewardSvg(rankPosition, 'frame_svga', _userFrameSvg);
+    final partnerFrame = _rewardSvg(rankPosition, 'frame_svga', _partnerFrameSvg);
+    final centerAnim = _rewardSvg(rankPosition, 'center_svga', _centerFrameSvg);
 
     return Container(
       height: 100,
@@ -453,8 +459,8 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
                     ? EncryptedImageProvider(avatar1) as ImageProvider
                     : const AssetImage('assets/cp/ic_cp_ranking_default_header.webp'),
               ),
-              if (_userFrameSvg.isNotEmpty)
-                SvgaFrame(svgaPath: _userFrameSvg, size: 56),
+              if (userFrame.isNotEmpty)
+                SvgaFrame(svgaPath: userFrame, size: 56),
               if (badgeImg.isNotEmpty)
                 Positioned(bottom: 0, right: 0, child: Image.asset(badgeImg, width: 20, height: 20)),
             ],
@@ -463,7 +469,7 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SvgaFrame(svgaPath: _centerFrameSvg, size: 48, fit: BoxFit.contain),
+                  SvgaFrame(svgaPath: centerAnim, size: 48, fit: BoxFit.contain),
                   Text(
                     '$days يوم',
                   textAlign: TextAlign.center,
@@ -486,8 +492,8 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
                     ? EncryptedImageProvider(avatar2) as ImageProvider
                     : const AssetImage('assets/cp/ic_cp_ranking_default_header.webp'),
               ),
-              if (_partnerFrameSvg.isNotEmpty)
-                SvgaFrame(svgaPath: _partnerFrameSvg, size: 56),
+              if (partnerFrame.isNotEmpty)
+                SvgaFrame(svgaPath: partnerFrame, size: 56),
               if (necklaceImg.isNotEmpty)
                 Positioned(top: 0, left: 0, child: Image.asset(necklaceImg, width: 24, height: 24)),
             ],

@@ -21,6 +21,10 @@ class DynamicConfigService extends ChangeNotifier {
   String _appName = 'Zero';
   String _logoUrl = '';
   String _splashUrl = '';
+  bool _splashEnabled = false;
+  String _splashImageUrl = '';
+  String _splashSvgaUrl = '';
+  int _splashDurationSeconds = 3;
   Color _splashNameColor = const Color(0xFF16151A);
 
   // Mini Profile overrides
@@ -346,6 +350,10 @@ class DynamicConfigService extends ChangeNotifier {
   String get appName => _appName;
   String get logoUrl => _logoUrl;
   String get splashUrl => _splashUrl;
+  bool get splashEnabled => _splashEnabled;
+  String get splashImageUrl => _splashImageUrl;
+  String get splashSvgaUrl => _splashSvgaUrl;
+  int get splashDurationSeconds => _splashDurationSeconds;
   Color get splashNameColor => _splashNameColor;
   String get miniProfileFollowIcon => _miniProfileFollowIcon;
   String get miniProfileMessageIcon => _miniProfileMessageIcon;
@@ -890,7 +898,11 @@ class DynamicConfigService extends ChangeNotifier {
 
       _appName = config['appName'] as String? ?? _appName;
       _logoUrl = config['logoUrl'] as String? ?? _logoUrl;
-      _splashUrl = config['splashGifUrl'] as String? ?? _splashUrl;
+      _splashEnabled = config['splash_enabled'] == true || config['splash_enabled'] == 'true' || config['splashEnabled'] == true || config['splashEnabled'] == 'true';
+      _splashImageUrl = config['splash_image_url'] as String? ?? config['splashImageUrl'] as String? ?? config['splashGifUrl'] as String? ?? '';
+      _splashSvgaUrl = config['splash_svga_url'] as String? ?? config['splashSvgaUrl'] as String? ?? '';
+      _splashDurationSeconds = (config['splash_duration_seconds'] as num?)?.toInt() ?? (config['splashDurationSeconds'] as num?)?.toInt() ?? 3;
+      _splashUrl = _splashImageUrl.isNotEmpty ? _splashImageUrl : (config['splashGifUrl'] as String? ?? _splashUrl);
       _splashNameColor = _parseColor(config['splashNameColor'], _splashNameColor);
 
       _primaryBg = _parseColor(config['primaryBg'], _primaryBg);

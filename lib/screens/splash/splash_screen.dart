@@ -9,6 +9,7 @@ import '../../services/dynamic_config_service.dart';
 import '../../services/update_service.dart';
 import '../../providers/user_provider.dart';
 import '../../widgets/app_update_dialog.dart';
+import '../room/widgets/svga_frame.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.onNavigate});
@@ -85,10 +86,14 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     final config = DynamicConfigService();
-    if (config.splashUrl.isNotEmpty) {
+    final hasCustomSplash = config.splashEnabled &&
+        (config.splashSvgaUrl.isNotEmpty || config.splashImageUrl.isNotEmpty || config.splashUrl.isNotEmpty);
+
+    if (hasCustomSplash) {
       if (mounted) {
         setState(() {
           _showingAd = true;
+          _adCountdown = config.splashDurationSeconds > 0 ? config.splashDurationSeconds : 3;
         });
         _adTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
           if (!mounted) {
@@ -177,15 +182,38 @@ class _SplashScreenState extends State<SplashScreen> {
     }
 
     if (_showingAd) {
+      final svgaUrl = config.splashSvgaUrl.isNotEmpty
+          ? config.splashSvgaUrl
+          : (config.splashUrl.toLowerCase().endsWith('.svga') ? config.splashUrl : '');
+      final imageUrl = config.splashImageUrl.isNotEmpty
+          ? config.splashImageUrl
+          : config.splashUrl;
+
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
           children: [
             Positioned.fill(
-              child: Image(
-                image: R.cachedImage(config.splashUrl),
-                fit: BoxFit.cover,
-              ),
+              child: svgaUrl.isNotEmpty
+                  ? SvgaFrame(
+                      svgaPath: svgaUrl,
+                      size: double.infinity,
+                      fit: BoxFit.cover,
+                    )
+                  : Image(
+                      image: R.cachedImage(imageUrl),
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, stack) => Center(
+                        child: Text(
+                          config.appName,
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
             ),
             SafeArea(
               child: Align(

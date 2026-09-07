@@ -110,6 +110,8 @@ export default function CpFeaturesPage() {
   const [rewardConfig, setRewardConfig] = useState<any>(null);
   const [activeRewardsCount, setActiveRewardsCount] = useState(0);
   const [history, setHistory] = useState<any[]>([]);
+  const [distributing, setDistributing] = useState(false);
+  const [expiring, setExpiring] = useState(false);
 
   // Settings state
   const [cpSettings, setCpSettings] = useState<Record<string, string>>({});
