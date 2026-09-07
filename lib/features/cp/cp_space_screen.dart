@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../config/r.dart';
 import '../../providers/user_provider.dart';
+import '../../screens/room/widgets/svga_frame.dart';
 import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
 import 'cp_record_screen.dart';
@@ -122,108 +123,117 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
           colors: [Color(0xFF4a1020), Color(0xFF2e0d15)],
         ),
       ),
-      child: Column(
+      child: Stack(
+        alignment: Alignment.topCenter,
         children: [
-          const SizedBox(height: 8),
-          // Level badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFFfff19f), Color(0xFFffb565)],
-              ),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              'Lv.${_calcLevel(int.tryParse(totalScore) ?? 0)}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF4a1020),
+          // Top animated SVGA background
+          const Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 220,
+            child: IgnorePointer(
+              child: SvgaFrame(
+                svgaPath: 'assets/svga/relationship_act_top_bg.svga',
+                size: 220,
+                fit: BoxFit.cover,
               ),
             ),
           ),
-          const SizedBox(height: 18),
-          // RS Panel: avatars + heartbeat + token
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          Column(
             children: [
-              _buildAvatarFrame(myAvatar, myName, isMe: true),
-              // Heartbeat line + token (overlapping avatars)
-              Transform.translate(
-                offset: const Offset(-12, 0),
-                child: SizedBox(
-                width: 106,
-                height: 72,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      height: 2,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.pink.withValues(alpha: 0.3),
-                            Colors.pink,
-                            Colors.pink.withValues(alpha: 0.3),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Token icon
-                    Container(
-                      width: 65,
-                      height: 65,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFff6b9d), Color(0xFFd32a43)],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.pink.withValues(alpha: 0.5),
-                            blurRadius: 12,
+              const SizedBox(height: 8),
+              // Level badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFfff19f), Color(0xFFffb565)],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  'Lv.${_calcLevel(int.tryParse(totalScore) ?? 0)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4a1020),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              // RS Panel: avatars + heartbeat + token
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildAvatarFrame(myAvatar, myName, isMe: true),
+                  // Heartbeat line + SVGA center animation (d33.svga)
+                  Transform.translate(
+                    offset: const Offset(-12, 0),
+                    child: SizedBox(
+                      width: 106,
+                      height: 72,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            height: 2,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.pink.withValues(alpha: 0.3),
+                                  Colors.pink,
+                                  Colors.pink.withValues(alpha: 0.3),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Center SVGA Heart Animation
+                          const SvgaFrame(
+                            svgaPath: 'assets/svga/d33.svga',
+                            size: 68,
+                            fit: BoxFit.contain,
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.favorite, color: Colors.white, size: 32),
                     ),
-                  ],
-                ),
-              ),
-              ),
-              Transform.translate(
-                offset: const Offset(-12, 0),
-                child: _buildAvatarFrame(partnerAvatar, partnerName, isMe: false),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          // Days together badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFFd32a43).withValues(alpha: 0.3),
-                  const Color(0xFF7d102b).withValues(alpha: 0.3),
+                  ),
+                  Transform.translate(
+                    offset: const Offset(-12, 0),
+                    child: _buildAvatarFrame(partnerAvatar, partnerName, isMe: false),
+                  ),
                 ],
               ),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFa31b44), width: 1),
-            ),
-            child: Text(
-              '$daysTogether يوم معاً',
-              style: const TextStyle(color: Colors.white, fontSize: 10),
-            ),
+              const SizedBox(height: 14),
+              // Days together badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFFd32a43).withValues(alpha: 0.3),
+                      const Color(0xFF7d102b).withValues(alpha: 0.3),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFa31b44), width: 1),
+                ),
+                child: Text(
+                  '$daysTogether يوم معاً',
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
   Widget _buildAvatarFrame(String? avatarUrl, String name, {bool isMe = true}) {
+    final svgaFrame = isMe ? 'assets/svga/d28.svga' : 'assets/svga/d29.svga';
+
     return SizedBox(
       width: 120,
       child: Column(
@@ -236,18 +246,6 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                // Border frame
-                Container(
-                  width: 102,
-                  height: 102,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isMe ? const Color(0xFFffb565) : const Color(0xFFff6b9d),
-                      width: 3,
-                    ),
-                  ),
-                ),
                 // Avatar
                 ClipOval(
                   child: R.loadImage(
@@ -256,6 +254,12 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
                     height: 70,
                     fit: BoxFit.cover,
                   ),
+                ),
+                // SVGA Frame on top of Avatar (d28 / d29)
+                SvgaFrame(
+                  svgaPath: svgaFrame,
+                  size: 102,
+                  fit: BoxFit.contain,
                 ),
               ],
             ),

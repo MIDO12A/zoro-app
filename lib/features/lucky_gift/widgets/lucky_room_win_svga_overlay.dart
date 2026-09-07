@@ -30,15 +30,15 @@ class LuckyRoomWinSvgaOverlay extends StatefulWidget {
   }
 
   /// إرجاع مسار الـ SVGA الأنسب لقيمة المضاعف
-  static String? getWinSvgaPath(int multiplier) {
+  static String? getWinSvgaPath(int multiplier, {bool isArabic = true}) {
     if (multiplier >= 1000) {
-      return 'assets/svga/gift_1000.svga';
+      return isArabic ? 'assets/svga/ar1000.svga' : 'assets/svga/en1000.svga';
     } else if (multiplier >= 500) {
-      return 'assets/svga/gift_500.svga';
+      return isArabic ? 'assets/svga/ar500.svga' : 'assets/svga/en500.svga';
     } else if (multiplier >= 250) {
-      return 'assets/svga/gift_250.svga';
+      return isArabic ? 'assets/svga/ar250.svga' : 'assets/svga/en250.svga';
     } else if (multiplier >= 100) {
-      return 'assets/svga/gift_100.svga';
+      return isArabic ? 'assets/svga/ar100.svga' : 'assets/svga/en100.svga';
     } else if (multiplier >= 50) {
       return 'assets/svga/gift_50.svga';
     } else if (multiplier >= 20) {
@@ -90,7 +90,8 @@ class _LuckyRoomWinSvgaOverlayState extends State<LuckyRoomWinSvgaOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final svgaPath = LuckyRoomWinSvgaOverlay.getWinSvgaPath(widget.multiplier);
+    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+    final svgaPath = LuckyRoomWinSvgaOverlay.getWinSvgaPath(widget.multiplier, isArabic: isAr);
 
     if (svgaPath == null) {
       return const SizedBox.shrink();

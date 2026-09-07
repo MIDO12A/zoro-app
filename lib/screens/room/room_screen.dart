@@ -2140,24 +2140,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           // ── زر الكومبو العائم (Floating Combo Button) ──
           if (_roomComboSeconds > 0 && _lastGiftComboData != null)
             Positioned(
-              bottom: 72,
-              right: 14,
+              bottom: 74,
+              right: 12,
               child: GestureDetector(
                 onTap: _onRoomComboTap,
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: 92,
+                  height: 92,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
                       Image.asset(
                         _roomComboFiring ? R.comboFire : R.comboIdle,
-                        width: 80,
-                        height: 80,
+                        width: 92,
+                        height: 92,
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => Container(
-                          width: 64,
-                          height: 64,
+                          width: 74,
+                          height: 74,
                           decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: LinearGradient(
@@ -2165,18 +2165,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ),
                           ),
                           child: const Center(
-                            child: Text('COMBO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                            child: Text('COMBO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
                           ),
                         ),
                       ),
                       Positioned(
-                        top: 10,
+                        top: 12,
                         child: Text(
                           'x$_roomComboMultiplier',
                           style: const TextStyle(
                             color: Color(0xFFFFD700),
                             fontWeight: FontWeight.w900,
-                            fontSize: 15,
+                            fontSize: 17,
                             shadows: [
                               Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
                             ],
@@ -2186,18 +2186,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       Positioned(
                         bottom: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
+                            color: Colors.black.withOpacity(0.75),
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFFFD700), width: 0.8),
+                            border: Border.all(color: const Color(0xFFFFD700), width: 1.0),
                           ),
                           child: Text(
                             '${_roomComboSeconds}s',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
-                              fontSize: 10,
+                              fontSize: 11,
                             ),
                           ),
                         ),
@@ -3605,6 +3605,161 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         ),
       ],
     );
+  }
+
+  // ── Gift Seat Flight & Room Combo Handlers ──────────────────
+  Offset _calculateSeatOffset(int seatIndex) {
+    final screenSize = MediaQuery.of(context).size;
+    final statusH = MediaQuery.of(context).padding.top;
+    final headerTop = statusH + 54;
+
+    if (_roomSeatStyle == seat_model.SeatStyle.circle) {
+      final centerX = screenSize.width / 2;
+      final centerY = headerTop + 210;
+      const radius = 140.0;
+      if (seatIndex == 0) {
+        return Offset(centerX, centerY);
+      }
+      final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+      double angle = 0.0;
+      switch (seatIndex) {
+        case 2: angle = -90 * math.pi / 180; break;
+        case 3: angle = -50 * math.pi / 180; break;
+        case 4: angle = -10 * math.pi / 180; break;
+        case 5: angle = 30 * math.pi / 180; break;
+        case 6: angle = 70 * math.pi / 180; break;
+        case 7: angle = 110 * math.pi / 180; break;
+        case 8: angle = 150 * math.pi / 180; break;
+        case 9: angle = 190 * math.pi / 180; break;
+        case 1: angle = 230 * math.pi / 180; break;
+        default: angle = 0.0; break;
+      }
+      final dx = radius * math.cos(angle);
+      final dy = radius * math.sin(angle);
+      final x = isAr ? (centerX - dx) : (centerX + dx);
+      final y = centerY + dy;
+      return Offset(x, y);
+    } else {
+      const seatsPerRow = 5;
+      final rowIndex = seatIndex ~/ seatsPerRow;
+      final colIndex = seatIndex % seatsPerRow;
+      final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+      final effectiveCol = isAr ? (seatsPerRow - 1 - colIndex) : colIndex;
+      final cellWidth = screenSize.width / seatsPerRow;
+      final x = (effectiveCol + 0.5) * cellWidth;
+      final y = headerTop + 48 + (rowIndex * 94.0);
+      return Offset(x, y);
+    }
+  }
+
+  void _triggerGiftFlight({
+    required String iconUrl,
+    String? receiverId,
+    List<String>? receiverIds,
+  }) {
+    if (iconUrl.isEmpty) return;
+    final targets = <Offset>[];
+
+    if (receiverIds != null && receiverIds.isNotEmpty) {
+      for (final rid in receiverIds) {
+        final idx = _seats.indexWhere((s) => s.user?.id == rid);
+        if (idx != -1) {
+          targets.add(_calculateSeatOffset(idx));
+        }
+      }
+    } else if (receiverId != null && receiverId.isNotEmpty) {
+      final idx = _seats.indexWhere((s) => s.user?.id == receiverId);
+      if (idx != -1) {
+        targets.add(_calculateSeatOffset(idx));
+      } else if (_selectedSeatIdx != null && _selectedSeatIdx! < _seats.length) {
+        targets.add(_calculateSeatOffset(_selectedSeatIdx!));
+      } else {
+        targets.add(_calculateSeatOffset(0));
+      }
+    } else if (_selectedSeatIdx != null && _selectedSeatIdx! < _seats.length) {
+      targets.add(_calculateSeatOffset(_selectedSeatIdx!));
+    } else {
+      targets.add(_calculateSeatOffset(0));
+    }
+
+    if (targets.isEmpty) {
+      targets.add(_calculateSeatOffset(0));
+    }
+
+    setState(() {
+      _giftFlightIconUrl = iconUrl;
+      _giftFlightTargets = targets;
+      _showGiftFlight = true;
+    });
+  }
+
+  void _startRoomComboTimer(Map<String, dynamic> data) {
+    _lastGiftComboData = Map<String, dynamic>.from(data);
+    _roomComboMultiplier++;
+    _roomComboSeconds = 5;
+    _roomComboFiring = false;
+
+    _roomComboTimer?.cancel();
+    _roomComboTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        if (_roomComboSeconds > 1) {
+          _roomComboSeconds--;
+        } else {
+          _roomComboSeconds = 0;
+          _roomComboMultiplier = 0;
+          _lastGiftComboData = null;
+          _roomComboFiring = false;
+          timer.cancel();
+        }
+      });
+    });
+  }
+
+  void _onRoomComboTap() {
+    if (_lastGiftComboData == null) return;
+    final data = _lastGiftComboData!;
+    final giftId = data['giftId']?.toString() ?? '';
+    final count = (data['count'] as num?)?.toInt() ?? 1;
+    final receiverId = data['receiverId']?.toString();
+    final receiverName = data['receiverName']?.toString() ?? '';
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.currentUser;
+
+    if (user != null && giftId.isNotEmpty) {
+      setState(() {
+        _roomComboFiring = true;
+      });
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) setState(() => _roomComboFiring = false);
+      });
+
+      _startRoomComboTimer(data);
+
+      final iconUrl = data['defaultImage']?.toString() ?? data['animationAsset']?.toString() ?? '';
+      if (iconUrl.isNotEmpty) {
+        _triggerGiftFlight(
+          iconUrl: iconUrl,
+          receiverId: receiverId,
+        );
+      }
+
+      _firebaseService.sendGift(
+        widget.roomId,
+        giftId,
+        user.uid,
+        user.name,
+        receiverId,
+        receiverName,
+        count: count,
+        senderPhotoUrl: user.photoUrl,
+        animationAsset: data['animationAsset']?.toString(),
+        value: (data['giftValue'] as num?)?.toInt() ?? 0,
+      );
+    }
   }
 
   // ── Gift count popup ──────────────────────────────────────────

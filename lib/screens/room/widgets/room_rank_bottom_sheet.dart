@@ -217,12 +217,22 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
                 ),
                 const SizedBox(height: 6),
                 Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
+                    Image.asset(
+                      'assets/cp/ic_coin.webp',
+                      width: 14,
+                      height: 14,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 14, color: Color(0xFFFFD54F)),
+                    ),
                     const SizedBox(width: 6),
-                    Text(
-                      '${item['total_value']}',
-                      style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
+                    Flexible(
+                      child: Text(
+                        '${item['total_value']}',
+                        style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),

@@ -1,10 +1,12 @@
 import { useContext, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { I18nContext, langs } from '../lib/i18n';
 import { getCloudinaryStatus, saveCloudinaryConfig } from '../lib/storage';
 import { supabase, isAdminConnected } from '../lib/supabase';
-import { Save, Crown, Database } from 'lucide-react';
+import { Save, Crown, Database, Mic, ArrowLeft } from 'lucide-react';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const { t, lang, setLang } = useContext(I18nContext);
   const [cloudName, setCloudName] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -84,6 +86,28 @@ export default function Settings() {
             ))}
           </div>
           <p className="text-[9px] text-slate-600 mt-1.5">Change dashboard interface language</p>
+        </div>
+
+        <div>
+          <label className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Zego Audio & Voice Engine / محرك الصوت</label>
+          <div className="bg-[#161618] rounded-lg border border-amber-500/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-slate-300 flex items-center gap-2">
+                <Mic className="w-4 h-4 text-amber-400" />
+                <span>إدارة مفاتيح Zego AppID و AppSign وجودة ومزود الصوت في الغرف</span>
+              </p>
+              <button
+                onClick={() => navigate('/audio-settings')}
+                className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-[11px] text-black font-bold rounded-lg flex items-center gap-1.5 shadow"
+              >
+                <span>فتح لوحة تحكم الصوت</span>
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-500">
+              يتم حفظ المفاتيح سحابياً في Firebase Firestore ليتم تطبيقها فورياً على جميع مستخدمي التطبيق.
+            </p>
+          </div>
         </div>
 
         <div>

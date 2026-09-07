@@ -44,6 +44,7 @@ import RoomBackgrounds from './pages/RoomBackgrounds';
 import LuckyGiftsManager from './pages/LuckyGiftsManager';
 import TasksManager from './pages/TasksManager';
 import AppSounds from './pages/AppSounds';
+import ZegoAudioSettings from './pages/ZegoAudioSettings';
 import t from './lib/i18n';
 
 export default function App() {
@@ -133,6 +134,8 @@ export default function App() {
             <Route path="/emojis" element={<Emojis />} />
             <Route path="/room-backgrounds" element={<RoomBackgrounds />} />
             <Route path="/app-sounds" element={<AppSounds />} />
+            <Route path="/audio-settings" element={<ZegoAudioSettings />} />
+            <Route path="/zego-audio" element={<ZegoAudioSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>

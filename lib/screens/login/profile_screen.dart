@@ -665,6 +665,7 @@ class ProfileScreen extends StatelessWidget {
               () => _checkUpdatesManually(context),
             ),
           ),
+          _buildDivider(),
           FutureBuilder<DocumentSnapshot>(
             future: user != null
                 ? FirebaseFirestore.instance.collection('admin_users').doc(user.uid).get()

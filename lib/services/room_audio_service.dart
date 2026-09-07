@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:zego_express_engine/zego_express_engine.dart';
 import '../config/app_config.dart';
+import '../services/dynamic_config_service.dart';
 
 class RoomAudioService {
   static final RoomAudioService _instance = RoomAudioService._();
@@ -23,18 +24,36 @@ class RoomAudioService {
   bool get isInitialized => _initialized;
   bool get isMicEnabled => _micEnabled;
 
+  int get effectiveAppId {
+    final id = DynamicConfigService().zegoAppId;
+    return id != 0 ? id : AppConfig.zegoAppId;
+  }
+
+  String get effectiveAppSign {
+    final sign = DynamicConfigService().zegoAppSign;
+    return sign.isNotEmpty ? sign : AppConfig.zegoAppSign;
+  }
+
   void _onRoomStreamUpdate(String roomID, ZegoUpdateType updateType,
       List<ZegoStream> streamList, Map<String, dynamic> extendedData) {
-    final engine = ZegoExpressEngine.instance;
-    if (engine == null) return;
-    for (final stream in streamList) {
-      if (updateType == ZegoUpdateType.Add) {
-        engine.startPlayingStream(stream.streamID);
-        debugPrint('[ZegoAudio] Started playing stream: ${stream.streamID}');
-      } else {
-        engine.stopPlayingStream(stream.streamID);
-        debugPrint('[ZegoAudio] Stopped playing stream: ${stream.streamID}');
+    if (!_initialized || effectiveAppSign.isEmpty) return;
+    try {
+      final engine = ZegoExpressEngine.instance;
+      for (final stream in streamList) {
+        if (updateType == ZegoUpdateType.Add) {
+          engine.startPlayingStream(stream.streamID).catchError((e) {
+            debugPrint('[ZegoAudio] startPlayingStream error: $e');
+          });
+          debugPrint('[ZegoAudio] Started playing stream: ${stream.streamID}');
+        } else {
+          engine.stopPlayingStream(stream.streamID).catchError((e) {
+            debugPrint('[ZegoAudio] stopPlayingStream error: $e');
+          });
+          debugPrint('[ZegoAudio] Stopped playing stream: ${stream.streamID}');
+        }
       }
+    } catch (e) {
+      debugPrint('[RoomAudioService] _onRoomStreamUpdate error: $e');
     }
   }
 
@@ -47,8 +66,17 @@ class RoomAudioService {
 
   Future<bool> _doInitialize() async {
     try {
-      if (AppConfig.zegoAppSign.isEmpty) {
-        debugPrint('[RoomAudioService] Zego appSign missing — build with --dart-define=ZEGO_APP_SIGN');
+      final cfg = DynamicConfigService();
+      final appId = effectiveAppId;
+      final appSign = effectiveAppSign;
+
+      if (!cfg.zegoAudioEnabled) {
+        debugPrint('[RoomAudioService] Zego audio is disabled in control panel');
+        return false;
+      }
+
+      if (appSign.isEmpty) {
+        debugPrint('[RoomAudioService] Zego appSign missing — configure in Control Panel or build with --dart-define=ZEGO_APP_SIGN');
         return false;
       }
       final status = await Permission.microphone.request();
@@ -58,21 +86,35 @@ class RoomAudioService {
       }
       // If a destroy is still running from a previous room, wait for it.
       await _disposeFuture;
+
+      ZegoScenario scenario;
+      switch (cfg.zegoScenario) {
+        case 1:
+          scenario = ZegoScenario.StandardVoiceCall;
+          break;
+        case 2:
+          scenario = ZegoScenario.HighQualityChatroom;
+          break;
+        default:
+          scenario = ZegoScenario.Default;
+      }
+
       await ZegoExpressEngine.createEngineWithProfile(ZegoEngineProfile(
-        AppConfig.zegoAppId, ZegoScenario.Default, appSign: AppConfig.zegoAppSign,
+        appId, scenario, appSign: appSign,
       ));
       ZegoExpressEngine.onRoomStreamUpdate = _onRoomStreamUpdate;
       _initialized = true;
-      debugPrint('[RoomAudioService] Zego engine initialized (appId=${AppConfig.zegoAppId})');
+      debugPrint('[RoomAudioService] Zego engine initialized successfully (appId=$appId, scenario=$scenario)');
       return true;
     } catch (e) {
       debugPrint('[RoomAudioService] Init failed: $e');
+      _initialized = false;
       return false;
     }
   }
 
   Future<void> joinChannel(String channelName, String uid) async {
-    if (!_initialized) {
+    if (!_initialized || effectiveAppSign.isEmpty) {
       debugPrint('[RoomAudioService] Cannot join: not initialized');
       return;
     }
@@ -81,12 +123,11 @@ class RoomAudioService {
       _currentRoomId = channelName;
       _currentUid = uid;
 
-      final engine = ZegoExpressEngine.instance;
-      if (engine == null) {
-        debugPrint('[RoomAudioService] Engine is null');
+      if (!_initialized || effectiveAppSign.isEmpty) {
+        debugPrint('[RoomAudioService] Engine not initialized');
         return;
       }
-
+      final engine = ZegoExpressEngine.instance;
       final user = ZegoUser(uid, uid);
       await engine.loginRoom(channelName, user, config: ZegoRoomConfig(0, true, ''));
       debugPrint('[RoomAudioService] Logged into room: $channelName');
@@ -98,10 +139,9 @@ class RoomAudioService {
   }
 
   Future<void> startPublishing() async {
-    if (_isPublishing || _currentRoomId == null || _currentUid == null) return;
+    if (!_initialized || _isPublishing || _currentRoomId == null || _currentUid == null || effectiveAppSign.isEmpty) return;
     try {
       final engine = ZegoExpressEngine.instance;
-      if (engine == null) return;
       final streamId = 'audio_${_currentUid}_$_currentRoomId';
       await engine.startPublishingStream(streamId);
       await engine.enableCamera(false);
@@ -114,41 +154,43 @@ class RoomAudioService {
 
   Future<void> leaveChannel() async {
     if (_currentRoomId == null) return;
-    try {
-      final engine = ZegoExpressEngine.instance;
-      if (engine != null) {
-        engine.stopPublishingStream();
+    if (_initialized && effectiveAppSign.isNotEmpty) {
+      try {
+        final engine = ZegoExpressEngine.instance;
+        await engine.stopPublishingStream();
         await engine.logoutRoom(_currentRoomId!);
+      } catch (e) {
+        debugPrint('[RoomAudioService] leaveChannel failed: $e');
       }
-    } catch (e) {
-      debugPrint('[RoomAudioService] leaveChannel failed: $e');
     }
     _currentRoomId = null;
     _isPublishing = false;
   }
 
   Future<bool> toggleMic(bool on) async {
+    if (!_initialized || effectiveAppSign.isEmpty) {
+      _micEnabled = on;
+      return true;
+    }
     try {
       final engine = ZegoExpressEngine.instance;
-      if (engine != null) {
-        engine.mutePublishStreamAudio(!on);
-      }
+      await engine.mutePublishStreamAudio(!on);
       _micEnabled = on;
       return true;
     } catch (e) {
       debugPrint('[RoomAudioService] toggleMic failed: $e');
+      _micEnabled = on;
       return false;
     }
   }
 
-  void muteRemoteAudio(String uid, String channelName, bool muted) {
+  void muteRemoteAudio(String uid, String channelName, bool muted) async {
+    if (!_initialized || effectiveAppSign.isEmpty) return;
     try {
       final engine = ZegoExpressEngine.instance;
-      if (engine != null) {
-        final streamId = 'audio_${uid}_$channelName';
-        engine.mutePlayStreamAudio(streamId, muted);
-        debugPrint('[RoomAudioService] ${muted ? "Muted" : "Unmuted"} remote stream: $streamId');
-      }
+      final streamId = 'audio_${uid}_$channelName';
+      await engine.mutePlayStreamAudio(streamId, muted);
+      debugPrint('[RoomAudioService] ${muted ? "Muted" : "Unmuted"} remote stream: $streamId');
     } catch (e) {
       debugPrint('[RoomAudioService] muteRemoteAudio failed: $e');
     }
@@ -162,10 +204,13 @@ class RoomAudioService {
 
   /// إيقاف البث فقط لو كان مفعّلاً فعلاً — يمنع نداء native على محرك
   /// Zego غير المُهيأ (null object reference) حين يخرج المستخدم من المقعد.
-  void stopPublishingIfActive() {
-    if (!_isPublishing) return;
+  void stopPublishingIfActive() async {
+    if (!_isPublishing || !_initialized || effectiveAppSign.isEmpty) {
+      _isPublishing = false;
+      return;
+    }
     try {
-      ZegoExpressEngine.instance.stopPublishingStream();
+      await ZegoExpressEngine.instance.stopPublishingStream();
     } catch (e) {
       debugPrint('[RoomAudioService] stopPublishingIfActive failed: $e');
     }
@@ -175,11 +220,11 @@ class RoomAudioService {
   /// Pause mic publishing when the app goes to the background to save battery
   /// and avoid Zego SIGSEGV on some devices. Remote audio (listening) keeps
   /// running so the minimized room stays audible.
-  void pauseForBackground() {
-    if (!_isPublishing) return;
+  void pauseForBackground() async {
+    if (!_isPublishing || !_initialized || effectiveAppSign.isEmpty) return;
     try {
       final engine = ZegoExpressEngine.instance;
-      engine?.stopPublishingStream();
+      await engine.stopPublishingStream();
       _isPublishing = false;
       debugPrint('[RoomAudioService] Publishing paused for background');
     } catch (e) {
@@ -189,10 +234,9 @@ class RoomAudioService {
 
   /// Restore mic publishing when the app returns to the foreground.
   Future<void> resumeFromBackground() async {
-    if (_currentRoomId == null || _currentUid == null || _isPublishing) return;
+    if (!_initialized || _currentRoomId == null || _currentUid == null || _isPublishing || effectiveAppSign.isEmpty) return;
     try {
       final engine = ZegoExpressEngine.instance;
-      if (engine == null) return;
       final streamId = 'audio_${_currentUid}_$_currentRoomId';
       await engine.startPublishingStream(streamId);
       _isPublishing = true;
@@ -202,14 +246,13 @@ class RoomAudioService {
     }
   }
 
-  void stopRemoteStream(String uid, String channelName) {
+  void stopRemoteStream(String uid, String channelName) async {
+    if (!_initialized || effectiveAppSign.isEmpty) return;
     try {
       final engine = ZegoExpressEngine.instance;
-      if (engine != null) {
-        final streamId = 'audio_${uid}_$channelName';
-        engine.stopPlayingStream(streamId);
-        debugPrint('[RoomAudioService] Stopped remote stream: $streamId');
-      }
+      final streamId = 'audio_${uid}_$channelName';
+      await engine.stopPlayingStream(streamId);
+      debugPrint('[RoomAudioService] Stopped remote stream: $streamId');
     } catch (e) {
       debugPrint('[RoomAudioService] stopRemoteStream failed: $e');
     }
@@ -225,10 +268,12 @@ class RoomAudioService {
     // Wait for any in-flight init to finish before destroying.
     await _initFuture;
     await leaveChannel();
-    try {
-      ZegoExpressEngine.destroyEngine();
-    } catch (e) {
-      debugPrint('[RoomAudioService] destroy failed: $e');
+    if (_initialized && effectiveAppSign.isNotEmpty) {
+      try {
+        await ZegoExpressEngine.destroyEngine();
+      } catch (e) {
+        debugPrint('[RoomAudioService] destroy failed: $e');
+      }
     }
     _initialized = false;
     _micEnabled = true;

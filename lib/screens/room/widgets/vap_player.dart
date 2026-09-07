@@ -32,7 +32,7 @@ class VapPlayer extends StatefulWidget {
     this.defaultImageUrl,
   });
 
-  /// Pre-downloads a VAP/MP4 [url] to the same temp path used by [_resolveSource]
+  /// Pre-downloads a VAP/MP4 [url] to persistent disk cache
   /// so the first play is instant. Returns the local path or null on failure.
   static Future<String?> prefetch(String url) async {
     if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
@@ -49,10 +49,20 @@ class VapPlayer extends StatefulWidget {
   }
 
   static Future<String> _cachePathFor(String url) async {
-    final dir = await getTemporaryDirectory();
+    Directory cacheDir;
+    try {
+      final appDir = await getApplicationDocumentsDirectory();
+      cacheDir = Directory('${appDir.path}/media_cache');
+    } catch (_) {
+      final tempDir = await getTemporaryDirectory();
+      cacheDir = Directory('${tempDir.path}/media_cache');
+    }
+    if (!await cacheDir.exists()) {
+      await cacheDir.create(recursive: true);
+    }
     final cleanUrl = url.split('?')[0];
     final ext = cleanUrl.contains('.') ? '.${cleanUrl.split('.').last}' : '.mp4';
-    return '${dir.path}/vap_${url.hashCode}$ext';
+    return '${cacheDir.path}/vap_${url.hashCode}$ext';
   }
 
   @override
@@ -64,6 +74,7 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
   String? _localPath;
   bool _ready = false;
   bool _hasError = false;
+  bool _isViewCreated = false;
   late AnimationController _fadeController;
 
   @override
@@ -108,13 +119,34 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
       } else {
         _localPath = url;
       }
-      if (mounted) setState(() => _ready = true);
+      if (mounted) {
+        setState(() => _ready = true);
+        if (_isViewCreated) {
+          _playCurrent();
+        }
+      }
     } catch (e) {
       debugPrint('*** VapPlayer download error for ${widget.url}: $e');
       if (mounted) {
         setState(() => _hasError = true);
         widget.onFinished?.call();
       }
+    }
+  }
+
+  void _playCurrent() {
+    if (_localPath == null) return;
+    try {
+      _controller.play(
+        path: _localPath!,
+        sourceType: VapSourceType.file,
+        repeatCount: widget.loops ? -1 : 0,
+        deleteOnEnd: false,
+        textReplacement: widget.textReplacement,
+        imageReplacement: widget.imageReplacement,
+      );
+    } catch (e) {
+      debugPrint('*** VapPlayer play error: $e');
     }
   }
 
@@ -129,12 +161,21 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
     }
   }
 
+  Widget _buildFallback(double w, double h) {
+    if (widget.defaultImageUrl != null && widget.defaultImageUrl!.isNotEmpty) {
+      return Image.network(
+        widget.defaultImageUrl!,
+        width: w,
+        height: h,
+        fit: widget.fit,
+        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_hasError || _localPath == null) {
-      return const SizedBox.shrink();
-    }
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final screen = MediaQuery.of(context).size;
@@ -147,12 +188,23 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
                 ? constraints.maxHeight
                 : screen.height);
 
+        if (_hasError || (_ready && _localPath == null)) {
+          return _buildFallback(w, h);
+        }
+
         if (!_ready) {
+          if (widget.defaultImageUrl != null && widget.defaultImageUrl!.isNotEmpty) {
+            return _buildFallback(w, h);
+          }
           return SizedBox(
             width: w,
             height: h,
             child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFDE880F)),
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFDE880F)),
+              ),
             ),
           );
         }
@@ -164,7 +216,9 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
             controller: _controller,
             scaleType: _mapFit(),
             onVideoFinish: () {
-              if (!widget.loops) {
+              if (widget.loops) {
+                _playCurrent();
+              } else {
                 widget.onFinished?.call();
               }
             },
@@ -176,16 +230,8 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
               }
             },
             onCreateView: () {
-              if (_localPath != null) {
-                _controller.play(
-                  path: _localPath!,
-                  sourceType: VapSourceType.file,
-                  repeatCount: widget.loops ? -1 : 0,
-                  deleteOnEnd: false,
-                  textReplacement: widget.textReplacement,
-                  imageReplacement: widget.imageReplacement,
-                );
-              }
+              _isViewCreated = true;
+              _playCurrent();
             },
           ),
         );

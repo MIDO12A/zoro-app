@@ -7,6 +7,7 @@ import 'package:restart_app/restart_app.dart' show Restart;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../models/app_asset_model.dart';
+import '../config/app_config.dart';
 
 class DynamicConfigService extends ChangeNotifier {
   static final DynamicConfigService _instance = DynamicConfigService._();
@@ -395,7 +396,6 @@ class DynamicConfigService extends ChangeNotifier {
   String getScreenTitle(String key, String fallback) => _screenTitles[key] ?? fallback;
   String get cpWebUrl => _cpWebUrl;
   String get audioCompany => _audioCompany;
-  int get zegoAppId => _zegoAppId;
   String get agoraAppId => _agoraAppId;
   String get agoraToken => _agoraToken;
   String get easemobAppKey => _easemobAppKey;
@@ -1165,6 +1165,61 @@ class DynamicConfigService extends ChangeNotifier {
     final val = _rawConfig[key];
     if (val == null) return null;
     return _parseColor(val, Colors.transparent);
+  }
+
+  // ─── Audio & Zego Configurations ──────────────────────────────────────
+  int get zegoAppId {
+    final v = _rawConfig['zego_app_id'] ?? _rawConfig['zegoAppId'];
+    if (v is int) return v;
+    if (v != null) return int.tryParse(v.toString()) ?? AppConfig.zegoAppId;
+    return AppConfig.zegoAppId;
+  }
+
+  String get zegoAppSign {
+    final v = _rawConfig['zego_app_sign'] ?? _rawConfig['zegoAppSign'];
+    if (v != null && v.toString().trim().isNotEmpty) return v.toString().trim();
+    return AppConfig.zegoAppSign;
+  }
+
+  String get audioProvider => _rawConfig['audio_provider'] as String? ?? _rawConfig['audioProvider'] as String? ?? _audioCompany;
+
+  bool get zegoAudioEnabled => _rawConfig['zego_audio_enabled'] != false && _rawConfig['zegoAudioEnabled'] != false;
+
+  int get zegoScenario {
+    final v = _rawConfig['zego_scenario'] ?? _rawConfig['zegoScenario'];
+    if (v is int) return v;
+    if (v != null) return int.tryParse(v.toString()) ?? 0;
+    return 0; // 0 = Default, 1 = StandardVoiceCall, 2 = HighQualityChatroom
+  }
+
+  /// Update Zego & Audio configurations in Firestore dynamically
+  Future<void> updateAudioConfig({
+    required int appId,
+    required String appSign,
+    String? provider,
+    bool? audioEnabled,
+    int? scenario,
+  }) async {
+    final batch = _db.batch();
+    batch.set(_db.collection('app_config').doc('zego_app_id'), {'value': appId}, SetOptions(merge: true));
+    batch.set(_db.collection('app_config').doc('zego_app_sign'), {'value': appSign.trim()}, SetOptions(merge: true));
+    if (provider != null) {
+      batch.set(_db.collection('app_config').doc('audio_provider'), {'value': provider}, SetOptions(merge: true));
+    }
+    if (audioEnabled != null) {
+      batch.set(_db.collection('app_config').doc('zego_audio_enabled'), {'value': audioEnabled}, SetOptions(merge: true));
+    }
+    if (scenario != null) {
+      batch.set(_db.collection('app_config').doc('zego_scenario'), {'value': scenario}, SetOptions(merge: true));
+    }
+    await batch.commit();
+
+    _rawConfig['zego_app_id'] = appId;
+    _rawConfig['zego_app_sign'] = appSign.trim();
+    if (provider != null) _rawConfig['audio_provider'] = provider;
+    if (audioEnabled != null) _rawConfig['zego_audio_enabled'] = audioEnabled;
+    if (scenario != null) _rawConfig['zego_scenario'] = scenario;
+    notifyListeners();
   }
 
   String _normalizeKey(String path) {

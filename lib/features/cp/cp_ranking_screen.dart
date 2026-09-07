@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/r.dart';
+import '../../screens/room/widgets/svga_frame.dart';
 import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
 
@@ -74,6 +75,20 @@ class _CpRankingScreenState extends State<CpRankingScreen>
                   end: Alignment.bottomCenter,
                   colors: [Color(0xFF4a1020), Color(0xFF2e0d15)],
                 ),
+              ),
+            ),
+          ),
+          // Top animated SVGA background
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 280,
+            child: const IgnorePointer(
+              child: SvgaFrame(
+                svgaPath: 'assets/svga/relationship_act_top_bg.svga',
+                size: 280,
+                fit: BoxFit.cover,
               ),
             ),
           ),
@@ -220,41 +235,45 @@ class _CpRankingScreenState extends State<CpRankingScreen>
       _ => const Color(0xFFA1887F),
     };
 
+    final svgaRankAsset = switch (rank) {
+      1 => 'assets/svga/cp1.svga',
+      2 => 'assets/svga/cp2.svga',
+      3 => 'assets/svga/cp3.svga',
+      _ => '',
+    };
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Rank badge
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: medalColor,
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(color: medalColor.withValues(alpha: 0.4), blurRadius: 8),
-            ],
-          ),
-          child: Center(
-            child: Text('$rank',
-                style: TextStyle(
-                    color: rank == 1 ? const Color(0xFF4a1020) : Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14)),
-          ),
-        ),
-        const SizedBox(height: 6),
-        // Avatars
-        Row(
-          mainAxisSize: MainAxisSize.min,
+        // SVGA Rank Animation & Avatars
+        Stack(
+          alignment: Alignment.center,
           children: [
-            _podiumAvatar(u1?['avatar']?.toString()),
-            Transform.translate(
-              offset: const Offset(-8, 0),
-              child: _podiumAvatar(u2?['avatar']?.toString()),
+            if (svgaRankAsset.isNotEmpty)
+              Positioned(
+                top: 0,
+                child: SvgaFrame(
+                  svgaPath: svgaRankAsset,
+                  size: rank == 1 ? 110 : 96,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            Padding(
+              padding: EdgeInsets.only(top: rank == 1 ? 24 : 18),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _podiumAvatar(u1?['avatar']?.toString()),
+                  Transform.translate(
+                    offset: const Offset(-8, 0),
+                    child: _podiumAvatar(u2?['avatar']?.toString()),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         // Score
         Container(
           width: 100,

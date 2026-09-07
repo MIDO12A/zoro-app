@@ -433,7 +433,12 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 12, height: 12),
+                      Image.asset(
+                        'assets/cp/ic_coin.webp',
+                        width: 12,
+                        height: 12,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 12, color: Color(0xFFFFD54F)),
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         _formatPoints(item['points'] ?? 0),
@@ -523,8 +528,14 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                 ),
               ),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset('assets/mipmap-xxhdpi/icon_coin.webp', width: 14, height: 14),
+                  Image.asset(
+                    'assets/cp/ic_coin.webp',
+                    width: 14,
+                    height: 14,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 14, color: Color(0xFFFFD54F)),
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '${_formatPoints(item['points'])} ↑',

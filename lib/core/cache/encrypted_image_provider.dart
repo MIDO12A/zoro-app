@@ -145,23 +145,31 @@ class EncryptedImageProvider extends ImageProvider<EncryptedImageProvider> {
     );
   }
 
+  static final Uint8List _transparent1x1Png = Uint8List.fromList([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82,
+    0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137,
+    0, 0, 0, 10, 73, 68, 65, 84, 120, 156, 99, 0, 1, 0, 0, 5,
+    0, 1, 13, 10, 45, 180, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+  ]);
+
   Future<ui.Codec> _loadAsync(
       EncryptedImageProvider key, ImageDecoderCallback decode) async {
+    final lower = key.url.toLowerCase();
+    if (lower.contains('.mp4') || lower.contains('.svga') || lower.contains('assettype=vap') || lower.contains('assettype=svga')) {
+      final transparentBuffer = await ui.ImmutableBuffer.fromUint8List(_transparent1x1Png);
+      return await decode(transparentBuffer);
+    }
     try {
       final bytes = await key._fetchBytes();
       if (bytes.isEmpty) {
-        throw Exception('EncryptedImageProvider is unable to load: ${key.url}');
+        final transparentBuffer = await ui.ImmutableBuffer.fromUint8List(_transparent1x1Png);
+        return await decode(transparentBuffer);
       }
       final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
       return await decode(buffer);
-    } catch (e) {
-      FlutterError.reportError(FlutterErrorDetails(
-        exception: e,
-        stack: StackTrace.current,
-        library: 'image_provider',
-        context: ErrorDescription('while loading $url'),
-      ));
-      rethrow;
+    } catch (_) {
+      final transparentBuffer = await ui.ImmutableBuffer.fromUint8List(_transparent1x1Png);
+      return await decode(transparentBuffer);
     }
   }
 

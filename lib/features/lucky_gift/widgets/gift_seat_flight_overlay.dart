@@ -34,6 +34,7 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
   late Animation<double> _flightProgress;
   late AnimationController _burstController;
   late Animation<double> _burstScale;
+  late Animation<double> _burstOpacity;
   bool _hasArrived = false;
   bool _wasFinished = false;
   Timer? _safetyTimer;
@@ -48,12 +49,11 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
   @override
   void initState() {
     super.initState();
-    // مهلة أمان: تمنع بقاء طبقة الطيران فوق الشاشة للأبد لو تعطلت الأنيميشن.
-    _safetyTimer = Timer(const Duration(seconds: 6), _finishOnce);
+    _safetyTimer = Timer(const Duration(seconds: 4), _finishOnce);
 
     _flightController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 750),
+      duration: const Duration(milliseconds: 800),
     );
 
     _flightProgress = CurvedAnimation(
@@ -66,8 +66,11 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
       duration: const Duration(milliseconds: 400),
     );
 
-    _burstScale = Tween<double>(begin: 1.0, end: 1.6).animate(
+    _burstScale = Tween<double>(begin: 0.6, end: 1.5).animate(
       CurvedAnimation(parent: _burstController, curve: Curves.easeOutBack),
+    );
+    _burstOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _burstController, curve: Curves.easeIn),
     );
 
     _flightController.forward().then((_) {
@@ -76,10 +79,7 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
         _hasArrived = true;
       });
       _burstController.forward().then((_) {
-        // الانتظار قليلاً لانتهاء مؤثر وصول الهدية
-        Future.delayed(const Duration(milliseconds: 600), () {
-          _finishOnce();
-        });
+        Future.delayed(const Duration(milliseconds: 100), _finishOnce);
       });
     });
   }
@@ -94,14 +94,15 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
 
   // حساب مسار منحنى بيزييه الانسيابي (Bézier Curve)
   Offset _calculateBezierPoint(Offset p0, Offset p2, double t) {
-    // نقطة التحكم في الانحناء (Control Point) لعمل قوس طيران طبيعي
+    final midX = (p0.dx + p2.dx) / 2;
     final p1 = Offset(
-      (p0.dx + p2.dx) / 2 - 40,
-      min(p0.dy, p2.dy) - 60,
+      midX + (p0.dx > p2.dx ? -20 : 20),
+      min(p0.dy, p2.dy) - 70,
     );
 
-    final x = (1 - t) * (1 - t) * p0.dx + 2 * (1 - t) * t * p1.dx + t * t * p2.dx;
-    final y = (1 - t) * (1 - t) * p0.dy + 2 * (1 - t) * t * p1.dy + t * t * p2.dy;
+    final u = 1.0 - t;
+    final x = u * u * p0.dx + 2 * u * t * p1.dx + t * t * p2.dx;
+    final y = u * u * p0.dy + 2 * u * t * p1.dy + t * t * p2.dy;
     return Offset(x, y);
   }
 
@@ -113,6 +114,18 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
         builder: (context, child) {
           final t = _flightProgress.value;
 
+          // Scale: 0.7 at start -> 1.2 mid flight -> shrinks down to 0.1 at arrival
+          double flightScale;
+          double flightOpacity;
+          if (t < 0.6) {
+            flightScale = 0.7 + (t / 0.6) * 0.5; // 0.7 -> 1.2
+            flightOpacity = 1.0;
+          } else {
+            final subT = (t - 0.6) / 0.4;
+            flightScale = 1.2 * (1.0 - subT); // 1.2 -> 0.0
+            flightOpacity = (1.0 - subT).clamp(0.0, 1.0);
+          }
+
           return Stack(
             children: widget.targetOffsets.map((target) {
               final currentPos = _calculateBezierPoint(widget.startOffset, target, t);
@@ -120,58 +133,86 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
               return Positioned(
                 left: currentPos.dx - 28,
                 top: currentPos.dy - 28,
-                child: Transform.scale(
-                  scale: _hasArrived ? _burstScale.value : (0.7 + (t * 0.4)),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // توهج خلف الهدية
-                      Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFFFD700).withOpacity(_hasArrived ? 0.8 : 0.4),
-                              blurRadius: _hasArrived ? 20 : 10,
-                              spreadRadius: _hasArrived ? 6 : 2,
-                            ),
-                          ],
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // Flying Gift (scales down and disappears on arrival)
+                    if (!_hasArrived && flightOpacity > 0.01)
+                      Opacity(
+                        opacity: flightOpacity,
+                        child: Transform.scale(
+                          scale: flightScale,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Glow
+                              Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFFFD700).withOpacity(0.5 * flightOpacity),
+                                      blurRadius: 14,
+                                      spreadRadius: 3,
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              // Gift Icon
+                              ClipOval(
+                                child: widget.giftIconUrl.startsWith('http')
+                                    ? Image(
+                                        image: R.cachedImage(widget.giftIconUrl),
+                                        width: 48,
+                                        height: 48,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.amber, size: 36),
+                                      )
+                                    : Image.asset(
+                                        widget.giftIconUrl,
+                                        width: 48,
+                                        height: 48,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.amber, size: 36),
+                                      ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
 
-                      // أيقونة الهدية الطائرة
-                      ClipOval(
-                        child: widget.giftIconUrl.startsWith('http')
-                            ? Image(
-                                image: R.cachedImage(widget.giftIconUrl),
-                                width: 48,
-                                height: 48,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.amber, size: 36),
-                              )
-                            : Image.asset(
-                                widget.giftIconUrl,
-                                width: 48,
-                                height: 48,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.card_giftcard, color: Colors.amber, size: 36),
+                    // Arrival Sparkle / Star Burst (at the target seat)
+                    if (_hasArrived)
+                      Opacity(
+                        opacity: _burstOpacity.value,
+                        child: Transform.scale(
+                          scale: _burstScale.value,
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  const Color(0xFFFFE082).withOpacity(0.9),
+                                  const Color(0xFFFFB300).withOpacity(0.5),
+                                  Colors.transparent,
+                                ],
                               ),
-                      ),
-
-                      // نجوم وانفجار ضوئي عند الوصول للمقعد
-                      if (_hasArrived)
-                        const Positioned.fill(
-                          child: Center(
-                            child: Text(
-                              '✨',
-                              style: TextStyle(fontSize: 26),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                '✨',
+                                style: TextStyle(fontSize: 28),
+                              ),
                             ),
                           ),
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
               );
             }).toList(),
