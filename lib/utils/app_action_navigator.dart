@@ -4,7 +4,7 @@ import '../screens/mall/mall_screen.dart';
 import '../screens/level/level_screen.dart';
 import '../screens/backpack/backpack_screen.dart';
 import '../screens/rank/rank_screen.dart';
-import '../features/cp/cp_ranking_screen.dart';
+import '../features/cp/cp_detail_full_screen.dart';
 import '../features/cp/cp_space_screen.dart';
 import '../screens/vip/vip_center_screen.dart';
 import '../features/tasks/screens/daily_tasks_screen.dart';
@@ -37,18 +37,24 @@ class AppActionNavigator {
     }
 
     if (lower == '/cp_ranking' ||
-        lower == '/cp' ||
-        lower == 'cp' ||
         lower == 'cp_ranking' ||
         lower.contains('ترتيب cp') ||
         lower.contains('ترتيب العلاقات') ||
-        lower.contains('ارتباط') ||
-        lower.contains('علاقات')) {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => const CpRankingScreen()));
+        lower.contains('مساحة الترتيب') ||
+        lower.contains('مكافآت cp') ||
+        lower.contains('مكافات cp')) {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const CPDetailFullScreen()));
       return;
     }
 
-    if (lower == '/cp_space' || lower == 'cp_space' || lower.contains('مساحة cp') || lower.contains('مساحة العلاقات')) {
+    if (lower == '/cp_space' ||
+        lower == 'cp_space' ||
+        lower == '/cp' ||
+        lower == 'cp' ||
+        lower.contains('مساحة cp') ||
+        lower.contains('مساحة العلاقات') ||
+        lower.contains('ارتباط') ||
+        lower.contains('علاقات')) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const CpSpaceScreen()));
       return;
     }

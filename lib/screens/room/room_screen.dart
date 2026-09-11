@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,7 @@ import '../../models/gift_banner_config_model.dart';
 import '../../models/store_item_model.dart';
 import '../../services/supabase_service.dart';
 import '../../services/media_prefetch_service.dart';
+import '../../services/media_cache_service.dart';
 import '../../services/dynamic_config_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/room_audio_service.dart';
@@ -43,7 +45,13 @@ import 'widgets/bottom_bar.dart';
 import 'widgets/gift_panel.dart';
 import 'widgets/user_profile.dart';
 import 'widgets/function_panel.dart';
-import 'widgets/svga_frame.dart';
+import 'widgets/room_marquee_broadcast.dart';
+import 'widgets/room_rocket_widget.dart';
+import 'widgets/room_member_enter_banner.dart';
+import 'widgets/room_message_bottom_sheet.dart';
+import '../../features/lucky_gift/widgets/room_burst_settlement_dialog.dart';
+import 'widgets/svga_player.dart'; // ✅ لاستخدام SvgaPlayer.prefetch قبل عرض الأنيميشن
+import 'widgets/vap_player.dart'; // ✅ لاستخدام VapPlayer.prefetch قبل عرض الأنيميشن
 import '../rank/rank_screen.dart';
 import '../game/game_teaming_screen.dart';
 import '../music/music_screen.dart';
@@ -59,6 +67,9 @@ import '../../features/lucky_bag/services/lucky_bag_service.dart';
 import '../../features/lucky_bag/widgets/lucky_bag_send_dialog.dart';
 import '../../features/lucky_bag/widgets/lucky_bag_claim_dialog.dart';
 import '../../features/lucky_bag/widgets/lucky_bag_floating_widget.dart';
+import '../../core/widgets/user_id_display_widget.dart';
+import '../../widgets/user_id_widget.dart';
+import 'package:just_audio/just_audio.dart';
 
 /// Helper to navigate to a room, exiting any minimized room first
 Future<void> navigateToRoom(
@@ -151,6 +162,26 @@ Future<void> navigateToRoom(
   }
 }
 
+class _RoomGiftNotice {
+  final String senderName;
+  final String senderAvatar;
+  final String receiverName;
+  final String giftName;
+  final int giftCount;
+  final String iconAsset;
+  final String defaultImage;
+
+  _RoomGiftNotice({
+    this.senderName = '',
+    this.senderAvatar = '',
+    this.receiverName = '',
+    this.giftName = '',
+    this.giftCount = 1,
+    this.iconAsset = '',
+    this.defaultImage = '',
+  });
+}
+
 // fragment_chat_room.xml
 class RoomScreen extends StatefulWidget {
   static DateTime _lastPushAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -197,6 +228,138 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   bool _showGift = false;
   bool _showGiftAnim = false;
   String? _giftAnimAsset;
+  Timer? _giftAnimWatchdog;
+
+  void _clearGiftAnim() {
+    _giftAnimWatchdog?.cancel();
+    _giftAnimWatchdog = null;
+    if (mounted && _showGiftAnim) {
+      setState(() {
+        _showGiftAnim = false;
+        _giftAnimAsset = null; // ✅ نُصفِّر تماماً لضمان إعادة بناء SvgaPlayer عند الكومبو
+        _giftTextReplacement = null;
+        _giftImageReplacement = null;
+        _giftDefaultImage = null;
+      });
+    }
+  }
+
+  void _triggerGiftAnim(String asset, {Map<String, String>? textReplacement, Map<String, String>? imageReplacement, String? defaultImage}) {
+    if (!_giftEffectsEnabled) return;
+    _giftAnimWatchdog?.cancel();
+    // ✅ مثل التطبيق الأصلي تماماً:
+    // إذا كانت نفس الهدية قيد العرض بالفعل (مثل نقرات الكومبو السريعة)،
+    // نترك الأنيميشن يكمل تشغيله بسلاسة ونمدد فقط مؤقت الأمان دون وميض أو تجميد الشاشة
+    if (_giftAnimAsset == asset && _showGiftAnim) {
+      _giftAnimWatchdog = Timer(const Duration(seconds: 12), () {
+        _clearGiftAnim();
+      });
+      return;
+    }
+    // صمام أمان للروم: في حال تعطل ملف VAP/SVGA لا تعلق الغرفة أبداً
+    _giftAnimWatchdog = Timer(const Duration(seconds: 12), () {
+      _clearGiftAnim();
+    });
+    setState(() {
+      _giftAnimAsset = asset;
+      _showGiftAnim = true;
+      _giftTextReplacement = textReplacement;
+      _giftImageReplacement = imageReplacement;
+      _giftDefaultImage = defaultImage;
+    });
+  }
+
+  Map<String, String>? _buildTextReplacements({
+    String? nameKeys,
+    String? receiverNameKeys,
+    String? countKeys,
+    required String senderName,
+    String receiverName = '',
+    int count = 1,
+  }) {
+    final map = <String, String>{};
+    void addKeys(String? raw, String val) {
+      if (val.isEmpty) return;
+      if (raw != null && raw.isNotEmpty) {
+        for (final k in raw.split(',')) {
+          final trimmed = k.trim();
+          if (trimmed.isNotEmpty) {
+            map[trimmed] = val;
+            final clean = trimmed.replaceAll(RegExp(r'[\[\]\(\)]'), '');
+            map[clean] = val;
+            map['[$clean]'] = val;
+          }
+        }
+      }
+    }
+
+    addKeys(nameKeys, senderName);
+    if (senderName.isNotEmpty) {
+      for (final def in ['txt_name', 'name', 'userName', 'sender_name', 'senderName', 'nickname', 'user_name', 'txt_username', 'txt_sender']) {
+        map[def] = senderName;
+        map['[$def]'] = senderName;
+      }
+    }
+
+    addKeys(receiverNameKeys, receiverName);
+    if (receiverName.isNotEmpty) {
+      for (final def in ['receiver_name', 'target_name', 'txt_to', 'to_name', 'to_user', 'receiverName', 'targetName', 'txt_receiver']) {
+        map[def] = receiverName;
+        map['[$def]'] = receiverName;
+      }
+    }
+
+    final countStr = count.toString();
+    addKeys(countKeys, countStr);
+    for (final def in ['count', 'gift_count', 'num', 'quantity', 'times', 'txt_count']) {
+      map[def] = countStr;
+      map['[$def]'] = countStr;
+    }
+
+    return map.isNotEmpty ? map : null;
+  }
+
+  Map<String, String>? _buildImageReplacements({
+    String? photoKeys,
+    String? receiverPhotoKeys,
+    required String senderPhoto,
+    String receiverPhoto = '',
+  }) {
+    final map = <String, String>{};
+    void addKeys(String? raw, String val) {
+      if (val.isEmpty) return;
+      if (raw != null && raw.isNotEmpty) {
+        for (final k in raw.split(',')) {
+          final trimmed = k.trim();
+          if (trimmed.isNotEmpty) {
+            map[trimmed] = val;
+            final clean = trimmed.replaceAll(RegExp(r'[\[\]\(\)]'), '');
+            map[clean] = val;
+            map['[$clean]'] = val;
+          }
+        }
+      }
+    }
+
+    addKeys(photoKeys, senderPhoto);
+    if (senderPhoto.isNotEmpty) {
+      for (final def in ['img_avatar', 'avatar', 'user_avatar', 'sender_avatar', 'head', 'icon', 'senderAvatar', 'userAvatar', 'img_sender', 'photo']) {
+        map[def] = senderPhoto;
+        map['[$def]'] = senderPhoto;
+      }
+    }
+
+    addKeys(receiverPhotoKeys, receiverPhoto);
+    if (receiverPhoto.isNotEmpty) {
+      for (final def in ['receiver_avatar', 'target_avatar', 'to_avatar', 'receiverAvatar', 'targetAvatar', 'img_receiver', 'img_to']) {
+        map[def] = receiverPhoto;
+        map['[$def]'] = receiverPhoto;
+      }
+    }
+
+    return map.isNotEmpty ? map : null;
+  }
+
   bool _showEntranceAnim = false;
   String? _entranceAnimAsset;
 
@@ -242,38 +405,90 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   int _roomComboMultiplier = 0;
   bool _roomComboFiring = false;
   Map<String, dynamic>? _lastGiftComboData;
+  // ✅ ValueNotifier للكومبو — يُعيد رسم زر الكومبو فقط دون لمس شجرة الـ Widget الكاملة
+  final ValueNotifier<_ComboState> _comboNotifier = ValueNotifier(_ComboState(0, 0, false));
+
+  // سجل إشعارات الهدايا للغرفة
+  final List<_RoomGiftNotice> _sentGifts = [];
+
+  // مشغل صوت الهدية والاهتزاز اللمسي
+  AudioPlayer? _giftAudioPlayer;
+  void _playGiftArrivalSound() {
+    try {
+      HapticFeedback.lightImpact();
+      _giftAudioPlayer ??= AudioPlayer();
+      _giftAudioPlayer!.setAsset('assets/sounds/key_music.mp3').then((_) {
+        _giftAudioPlayer?.play().catchError((_) {});
+      }).catchError((_) {});
+    } catch (_) {}
+  }
+
+  // المعرف الرقمي لصاحب الغرفة
+  String? _hostCustomId;
+  void _resolveHostCustomId(String hostUid) {
+    if (hostUid.isEmpty) return;
+    if (UserProfile.customIdCache.containsKey(hostUid)) {
+      _hostCustomId = UserProfile.customIdCache[hostUid];
+      return;
+    }
+    for (final s in _seats) {
+      if (s.user?.id == hostUid && s.user?.customId != null && s.user!.customId!.isNotEmpty) {
+        _hostCustomId = s.user!.customId;
+        UserProfile.customIdCache[hostUid] = _hostCustomId!;
+        return;
+      }
+    }
+    SupabaseService().getUser(hostUid).then((u) {
+      if (u != null && u.customId.isNotEmpty && mounted) {
+        UserProfile.customIdCache[hostUid] = u.customId;
+        setState(() {
+          _hostCustomId = u.customId;
+        });
+      }
+    }).catchError((_) {});
+  }
 
   void _startRoomComboTimer(Map<String, dynamic> giftData) {
     _lastGiftComboData = giftData;
     _roomComboTimer?.cancel();
     _roomComboMultiplier = (_roomComboSeconds > 0) ? _roomComboMultiplier + 1 : 1;
-    setState(() => _roomComboSeconds = 10);
-    _roomComboTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _roomComboSeconds--;
-        if (_roomComboSeconds <= 0) {
-          _roomComboMultiplier = 0;
-          _lastGiftComboData = null;
-          timer.cancel();
-        }
-      });
+    _roomComboSeconds = 10;
+    // ✅ بدلاً من setState كامل — نُعلم ValueNotifier فقط لإعادة رسم زر الكومبو وحده
+    _comboNotifier.value = _ComboState(_roomComboSeconds, _roomComboMultiplier, _roomComboFiring);
+    // مؤقت واحد بعد 10 ثوانٍ لإخفاء الزر
+    _roomComboTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted) return;
+      _roomComboSeconds = 0;
+      _roomComboMultiplier = 0;
+      _lastGiftComboData = null;
+      _comboNotifier.value = _ComboState(0, 0, false);
     });
   }
 
-  void _onRoomComboTap() async {
+  void _onRoomComboTap() {
     if (_lastGiftComboData == null || _currentUserId == null) return;
-    setState(() {
-      _roomComboFiring = true;
-      _roomComboSeconds = 10;
-      _roomComboMultiplier++;
+
+    // ✅ إعادة ضبط مؤقت الـ 10 ثوانٍ مع كل ضغطة كومبو (مثل التطبيق الأصلي تماماً restartCountdown)
+    // حتى لا يختفي الزر أثناء الضغط المتتالي
+    _roomComboTimer?.cancel();
+    _roomComboSeconds = 10;
+    _roomComboMultiplier++;
+    _roomComboFiring = true;
+    _comboNotifier.value = _ComboState(_roomComboSeconds, _roomComboMultiplier, true);
+
+    _roomComboTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted) return;
+      _roomComboSeconds = 0;
+      _roomComboMultiplier = 0;
+      _lastGiftComboData = null;
+      _comboNotifier.value = _ComboState(0, 0, false);
     });
 
-    Future.delayed(const Duration(milliseconds: 250), () {
-      if (mounted) setState(() => _roomComboFiring = false);
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) {
+        _roomComboFiring = false;
+        _comboNotifier.value = _ComboState(_roomComboSeconds, _roomComboMultiplier, false);
+      }
     });
 
     final data = _lastGiftComboData!;
@@ -286,54 +501,138 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       );
     }
 
-    // Re-send gift
+    // ✅ تشغيل أو تمديد أنيميشن الهدية فوراً دون حظر واجهة المستخدم
+    final animAsset = data['animationAsset']?.toString() ?? '';
+    final defImg    = data['defaultImage']?.toString();
+    final senderPhoto = data['senderPhotoUrl']?.toString();
+    final nameKey   = data['nameKey']?.toString();
+    final photoKey  = data['photoKey']?.toString();
+    final senderName = data['senderName']?.toString() ?? '';
+    final textRepl = _buildTextReplacements(
+      nameKeys: nameKey,
+      senderName: senderName,
+      count: data['giftCount'] as int? ?? 1,
+    );
+    final imgRepl = _buildImageReplacements(
+      photoKeys: photoKey,
+      senderPhoto: senderPhoto ?? '',
+    );
+
+    if (animAsset.isNotEmpty && mounted) {
+      _triggerGiftAnim(
+        animAsset,
+        textReplacement: textRepl,
+        imageReplacement: imgRepl,
+        defaultImage: defImg,
+      );
+    }
+
+    // ✅ إرسال الهدية عبر الشبكة بشكل غير متزامن تماماً (fire-and-forget background coroutine)
+    // مثل الأصل (Dispatchers.IO) دون حظر الواجهة لسرعة إرسال فائقة
     final gift = data['gift'] as gm.GiftModel?;
     final selectedTargets = (data['selectedTargets'] as List<dynamic>?) ?? [];
     if (gift != null && widget.roomId.isNotEmpty) {
-      final fb = SupabaseService();
-      final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+      final roomId = widget.roomId;
+      final comboMultiplier = _roomComboMultiplier;
       final count = data['giftCount'] as int? ?? 1;
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final user = userProvider.currentUser;
+      final totalCost = gift.value * count * (selectedTargets.isNotEmpty ? selectedTargets.length : 1);
 
-      for (final r in selectedTargets) {
-        final receiverId = r['id']?.toString() ?? '';
-        final receiverName = r['name']?.toString() ?? '';
-        if (gift.isLucky) {
-          final cover = gift.defaultImage ?? gift.iconAsset;
-          await fb.sendLuckyGift(
-            roomId: widget.roomId,
-            giftId: gift.id,
-            giftName: gift.name,
-            giftNameAr: gift.name,
-            giftIconUrl: gift.iconAsset,
-            giftCoverUrl: cover,
-            giftBgUrl: cover,
-            svgaAnimUrl: gift.animationAsset,
-            senderId: user?.uid ?? '',
-            senderName: user?.name ?? '',
-            senderPhotoUrl: user?.photoUrl ?? '',
-            receiverId: receiverId,
-            receiverName: receiverName,
-            value: gift.value,
-            count: count,
-            comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
-            comboCount: _roomComboMultiplier,
-          );
-        } else {
-          await fb.sendGift(
-            roomId: widget.roomId,
-            giftId: gift.id,
-            giftName: gift.name,
-            animationAsset: gift.animationAsset,
-            senderId: user?.uid ?? '',
-            senderName: user?.name ?? '',
-            senderPhotoUrl: user?.photoUrl ?? '',
-            receiverId: receiverId,
-            receiverName: receiverName,
-            value: gift.value,
-            count: count,
-          );
-        }
+      if ((user?.coins ?? 0) < totalCost) {
+        return; // رصيد غير كافٍ للكومبو
       }
+
+      // خصم فوري في الذاكرة لسرعة استجابة فائقة
+      userProvider.deductCoinsLocally(totalCost);
+
+      unawaited(Future.microtask(() async {
+        final fb = SupabaseService();
+        await Future.wait(selectedTargets.map((r) async {
+          final receiverId = r['id']?.toString() ?? '';
+          final receiverName = r['name']?.toString() ?? '';
+          if (gift.isLucky || gift.type == 3) {
+            final cover = gift.defaultImage ?? gift.iconAsset;
+            final cardCount = count.clamp(1, 10);
+            final drawn = fb.drawLuckyMultipliers(cardCount);
+            final totalWon = drawn.fold<int>(0, (total, m) => total + (gift.value * m));
+            final maxMult = drawn.isEmpty ? 0 : drawn.reduce((a, b) => a > b ? a : b);
+            final cards = List.generate(drawn.length, (i) => LuckyCardResult(
+              index: i,
+              multiplier: drawn[i],
+              wonCoins: gift.value * drawn[i],
+              giftName: gift.name,
+              giftIcon: gift.iconAsset,
+            ));
+            final luckyModel = LuckyGiftModel(
+              id: gift.id,
+              giftName: gift.name,
+              giftNameAr: gift.name,
+              coinPrice: gift.value,
+              giftIconUrl: gift.iconAsset,
+              giftCoverUrl: cover,
+              giftBgUrl: cover,
+              svgaAnimUrl: gift.animationAsset,
+            );
+            final comboId = 'combo_${DateTime.now().millisecondsSinceEpoch}';
+            final localData = LuckyGiftBroadcastData(
+              roomId: roomId,
+              senderName: user?.name ?? '',
+              senderAvatar: user?.photoUrl ?? '',
+              receiverName: receiverName,
+              gift: luckyModel,
+              cards: cards,
+              totalWonCoins: totalWon,
+              maxMultiplier: maxMult,
+              isBigWin: maxMult >= 50,
+              comboId: comboId,
+              comboCount: comboMultiplier,
+            );
+
+            // عرض فوري لحظي للمرسل بدون أي تأخير في الشبكة (0ms latency)
+            if (mounted) {
+              LuckyGiftService().enqueueLuckyGift(context, localData);
+            }
+
+            await fb.sendLuckyGift(
+              roomId: roomId,
+              giftId: gift.id,
+              giftName: gift.name,
+              giftNameAr: gift.name,
+              giftIconUrl: gift.iconAsset,
+              giftCoverUrl: cover,
+              giftBgUrl: cover,
+              svgaAnimUrl: gift.animationAsset,
+              senderId: user?.uid ?? '',
+              senderName: user?.name ?? '',
+              senderPhotoUrl: user?.photoUrl ?? '',
+              receiverId: receiverId,
+              receiverName: receiverName,
+              value: gift.value,
+              count: count,
+              comboId: comboId,
+              comboCount: comboMultiplier,
+              preDrawnMultipliers: drawn,
+            );
+          } else {
+            final cover = gift.defaultImage ?? gift.iconAsset;
+            await fb.sendGift(
+              roomId: roomId,
+              giftId: gift.id,
+              giftName: gift.name,
+              animationAsset: gift.animationAsset,
+              defaultImage: cover,
+              senderId: user?.uid ?? '',
+              senderName: user?.name ?? '',
+              senderPhotoUrl: user?.photoUrl ?? '',
+              receiverId: receiverId,
+              receiverName: receiverName,
+              value: gift.value,
+              count: count,
+            );
+          }
+        }));
+      }));
     }
   }
 
@@ -428,6 +727,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   final Map<int, String> _seatEmojis = {};
   bool _showCharmValues = true;
+  bool _giftEffectsEnabled = true;
   // Track followed users
   final Set<String> _followedUsers = {};
   // Track blocked users
@@ -463,8 +763,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   StreamSubscription? _bannerConfigSub;
   StreamSubscription? _msgSub;
   StreamSubscription? _entranceSub;
+  StreamSubscription? _userBanSub;
+  StreamSubscription? _broadcastSub;
+  Map<String, dynamic>? _currentBroadcast;
+  Map<String, dynamic>? _currentEnterMember;
   Timer? _seatsRefreshTimer;
   Timer? _bannerHideTimer;
+  Timer? _presencePingTimer; // ✅ ping دوري للـ presence — يكتشف الخروج الصامت
   final RoomAudioService _roomAudio = RoomAudioService();
 
   @override
@@ -478,7 +783,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
     );
     _seats = _buildInitialSeats();
-    _loadRoomData();
+    // ✅ تأجيل العمليات الثقيلة (Firestore، Audio، Zombie cleanup) إلى ما بعد
+    //    أول إطار مكتمل — يمنع "Skipped N frames!" عند فتح الغرفة.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _loadRoomData();
+      _startPresencePing();
+    });
   }
 
   @override
@@ -489,8 +800,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     // the gift/message subscriptions when the room becomes active again.
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _roomAudio.pauseForBackground();
+      // ✅ تحديث ping عند التوقف — الـ TTL checker سيرى آخر ping
+      _updatePresencePing();
     } else if (state == AppLifecycleState.resumed) {
       _roomAudio.resumeFromBackground();
+      // ✅ تجديد الـ ping عند العودة
+      _updatePresencePing();
+    } else if (state == AppLifecycleState.detached) {
+      // ✅ التطبيق يُغلق كلياً — نظّف المستخدم فوراً من الغرفة
+      if (!_isMinimized) {
+        _cleanupUserSession();
+      }
     }
   }
 
@@ -504,19 +824,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _isOwner = false;
       _isFollowed = currentUser.followedRooms.contains(widget.roomId);
       _checkRoomBan(currentUser.uid);
+      _userBanSub?.cancel();
+      _userBanSub = _firebaseService.userRoomBanStream(widget.roomId, currentUser.uid).listen((isBanned) {
+        if (isBanned && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('تم حظرك من هذه الغرفة بواسطة المشرف'),
+              duration: Duration(seconds: 4),
+              backgroundColor: Colors.red,
+            ),
+          );
+          _exitRoom();
+        }
+      });
       // Clear any stale seats for this user before registering (await to avoid race)
       // Only on fresh joins – on minimized-room re-entry the current seat must survive.
       if (!widget.isReentry) {
         Future(() async {
-          await Supabase.instance.client
-              .from('room_seats')
-              .delete()
-              .eq('room_id', widget.roomId)
-              .eq('uid', currentUser.uid);
+          await _firebaseService.leaveSeatForUser(widget.roomId, currentUser.uid);
         });
       }
       // Register in Firebase so others see this user
       _firebaseService.joinRoom(widget.roomId, currentUser);
+      // ✅ تنظيف المستخدمين الصامتين (Zombie) عند الانضمام
+      // أي مستخدم آخر لم يرسل ping منذ أكثر من 5 دقائق يُعتبر خارجاً
+      _cleanupZombieUsers();
       if (!widget.isReentry) {
         try {
           // Log entrance effect for other users to see
@@ -578,31 +910,113 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           }
           _roomSeatStyle = room.seatStyle;
         });
+        _resolveHostCustomId(room.hostUid);
       }
     });
+
+    _broadcastSub = _firebaseService.globalBroadcastStream().listen((broadcasts) {
+      if (!mounted || broadcasts.isEmpty) return;
+      final latest = broadcasts.first;
+      final createdAt = DateTime.tryParse(latest['created_at']?.toString() ?? '');
+      if (createdAt != null && DateTime.now().difference(createdAt).inSeconds < 15) {
+        setState(() {
+          _currentBroadcast = latest;
+        });
+      }
+    });
+
     final joinedMs = _joinedAt?.millisecondsSinceEpoch ?? 0;
+    final seenMsgIds = <String>{};
     _msgSub = _firebaseService.messagesStream(widget.roomId).listen((msgs) {
       if (mounted) {
         final clearedAt = _currentRoom?.chatClearedAt ?? 0;
-        final filterTime = max(joinedMs, clearedAt);
+        final filterTime = clearedAt > 0 ? clearedAt : (joinedMs - 30000);
         setState(() {
           _chatMessages
             ..clear()
             ..addAll(msgs.where((m) => m.timestamp >= filterTime));
           _msgCount = _chatMessages.length;
         });
-        // عرض هدايا الحظ (lucky_gift) والمظاريف الحمراء (lucky_bag) لكافة أعضاء الغرفة لحظياً
+        // عرض هدايا الحظ (lucky_gift) والهدايا العادية (gift) والمظاريف الحمراء (lucky_bag) لكافة أعضاء الغرفة لحظياً
         for (final m in msgs) {
-          if (m.type == 'lucky_gift' &&
-              m.timestamp >= filterTime &&
-              m.giftPayload != null) {
+          if (m.timestamp < filterTime) continue;
+          final mId = m.msgId.isNotEmpty ? m.msgId : '${m.timestamp}_${m.senderUid}';
+          if (seenMsgIds.contains(mId)) continue;
+          seenMsgIds.add(mId);
+
+          if (m.type == 'gift') {
+            if (m.senderUid != _currentUserId) {
+              final payload = m.giftPayload ?? {};
+              final giftId = payload['gift_id']?.toString() ?? '';
+              final giftDef = _cachedGiftItems[giftId];
+              final isLucky = giftDef?.isLucky == true || giftDef?.type == 3 || giftDef?.categoryId == 'lucky';
+
+              if (!isLucky) {
+                final flyIcon = (payload['default_image']?.toString().isNotEmpty == true)
+                    ? payload['default_image'].toString()
+                    : ((payload['gift_icon']?.toString().isNotEmpty == true)
+                        ? payload['gift_icon'].toString()
+                        : (giftDef?.defaultImage ?? giftDef?.iconAsset ?? ''));
+                final receiverId = payload['receiver_id']?.toString();
+                if (flyIcon.isNotEmpty && receiverId != null && receiverId.isNotEmpty) {
+                  _triggerGiftFlight(
+                    iconUrl: flyIcon,
+                    receiverId: receiverId,
+                  );
+                }
+
+                final animAsset = (payload['animation_asset']?.toString().isNotEmpty == true)
+                    ? payload['animation_asset'].toString()
+                    : (giftDef?.animationAsset ?? giftDef?.defaultImage ?? giftDef?.iconAsset);
+
+                if (animAsset != null && animAsset.isNotEmpty) {
+                  final textRepl = _buildTextReplacements(
+                    nameKeys: giftDef?.nameKey ?? payload['name_key']?.toString() ?? payload['nameKey']?.toString(),
+                    receiverNameKeys: giftDef?.receiverNameKey ?? payload['receiver_name_key']?.toString(),
+                    countKeys: giftDef?.countKey ?? payload['count_key']?.toString(),
+                    senderName: m.senderName,
+                    receiverName: payload['receiver_name']?.toString() ?? '',
+                    count: (payload['count'] as num?)?.toInt() ?? 1,
+                  );
+
+                  final imgRepl = _buildImageReplacements(
+                    photoKeys: giftDef?.photoKey ?? payload['photo_key']?.toString() ?? payload['photoKey']?.toString(),
+                    receiverPhotoKeys: giftDef?.receiverPhotoKey ?? payload['receiver_photo_key']?.toString(),
+                    senderPhoto: m.senderPhotoUrl,
+                    receiverPhoto: payload['receiver_photo_url']?.toString() ?? '',
+                  );
+
+                  _triggerGiftAnim(
+                    animAsset,
+                    textReplacement: textRepl,
+                    imageReplacement: imgRepl,
+                    defaultImage: flyIcon,
+                  );
+                }
+
+                _playGiftArrivalSound();
+
+                final coinVal = (payload['coin_value'] as num?)?.toInt() ?? (giftDef?.value ?? 0);
+                final count = (payload['count'] as num?)?.toInt() ?? 1;
+                _checkGiftBanner({
+                  'giftValue': coinVal,
+                  'giftCount': count,
+                  'categoryId': giftDef?.categoryId,
+                  'senderPhotoUrl': m.senderPhotoUrl,
+                  'defaultImage': flyIcon,
+                  'receiverId': receiverId,
+                  'isLucky': false,
+                });
+              }
+            }
+          } else if (m.type == 'lucky_gift' && m.giftPayload != null) {
             try {
-              final data = LuckyGiftBroadcastData.fromJson(m.giftPayload!);
-              LuckyGiftService().enqueueLuckyGift(context, data);
+              if (m.senderUid != _currentUserId) {
+                final data = LuckyGiftBroadcastData.fromJson(m.giftPayload!);
+                LuckyGiftService().enqueueLuckyGift(context, data);
+              }
             } catch (_) {}
-          } else if (m.type == 'lucky_bag' &&
-              m.timestamp >= filterTime &&
-              m.luckyBagPayload != null) {
+          } else if (m.type == 'lucky_bag' && m.luckyBagPayload != null) {
             try {
               final bag = LuckyBagModel.fromJson(m.luckyBagPayload!);
               LuckyBagService().showGrabBanner(
@@ -614,6 +1028,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 },
               );
             } catch (_) {}
+          } else if (m.type == 'entrance') {
+            final isExit = m.text.contains('left') || m.text.contains('غادر');
+            if (!isExit && m.senderUid != _currentUserId) {
+              _showMemberEnterBanner(m.senderName, m.senderPhotoUrl);
+            }
+          } else if (m.type == 'room_kick' && m.giftPayload != null) {
+            final kickedUid = m.giftPayload!['kickedUid']?.toString();
+            if (kickedUid == _currentUserId && mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(m.text.isNotEmpty ? m.text : 'تم طردك من الغرفة من قبل المشرف'),
+                  duration: const Duration(seconds: 4),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              _exitRoom();
+              return;
+            }
           }
         }
         if (_chatScroll.hasClients) {
@@ -640,43 +1072,82 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       }
       _giftStreamInitial = false;
       // Show gift animation for the newest unseen gift
+      // FIX: Only show normal gift animation for non-lucky gifts
+      // Lucky gifts are handled separately by LuckyGiftService via messages stream
       if (latestNewGift != null) {
         final latest = latestNewGift;
         final giftDef = _cachedGiftItems[latest.giftId];
-        final effectiveAsset = (latest.animationAsset != null && latest.animationAsset!.isNotEmpty)
-            ? latest.animationAsset
-            : (giftDef?.iconAsset ?? giftDef?.defaultImage);
+        
+        // TODO: Critical fix - Check if gift is lucky before showing normal animation
+        // Lucky gifts (isLucky == true or type == 3) should NOT trigger normal gift animation
+        // They are handled by LuckyGiftService through the messages stream
+        final isLuckyGift = giftDef != null && (giftDef.isLucky || giftDef.type == 3);
+        
+        if (!isLuckyGift) {
+          // ── طيران الهدية إلى مقعد المستلم لكافة المتواجدين في الغرفة ──
+          final flyIcon = (latest.defaultImage != null && latest.defaultImage!.isNotEmpty)
+              ? latest.defaultImage!
+              : ((latest.iconAsset != null && latest.iconAsset!.isNotEmpty)
+                  ? latest.iconAsset!
+                  : (giftDef?.defaultImage ?? giftDef?.iconAsset ?? ''));
+          if (flyIcon.isNotEmpty && mounted && latest.senderId != _currentUserId) {
+            _triggerGiftFlight(
+              iconUrl: flyIcon,
+              receiverId: latest.receiverId,
+            );
+          }
 
-        if (effectiveAsset != null && effectiveAsset.isNotEmpty) {
-          final nameKey = giftDef?.nameKey;
-          final photoKey = giftDef?.photoKey;
-          final defaultImage = giftDef?.defaultImage ?? giftDef?.iconAsset;
-          final textReplacement = nameKey != null && nameKey.isNotEmpty && latest.senderName.isNotEmpty
-              ? <String, String>{nameKey: latest.senderName}
-              : null;
-          final imageReplacement = photoKey != null && photoKey.isNotEmpty && latest.senderPhotoUrl != null && latest.senderPhotoUrl!.isNotEmpty
-              ? <String, String>{photoKey: latest.senderPhotoUrl!}
-              : null;
-          if (mounted) setState(() {
-            _giftAnimAsset = effectiveAsset;
-            _showGiftAnim = true;
-            _giftTextReplacement = textReplacement;
-            _giftImageReplacement = imageReplacement;
-            _giftDefaultImage = defaultImage;
-          });
+          // ── أنيميشن الهدية أو صورتها الكبيرة ──
+          final effectiveAsset = (latest.animationAsset != null && latest.animationAsset!.isNotEmpty)
+              ? latest.animationAsset
+              : ((latest.defaultImage != null && latest.defaultImage!.isNotEmpty)
+                  ? latest.defaultImage
+                  : ((latest.iconAsset != null && latest.iconAsset!.isNotEmpty)
+                      ? latest.iconAsset
+                      : (giftDef?.iconAsset ?? giftDef?.defaultImage)));
+
+          if (effectiveAsset != null && effectiveAsset.isNotEmpty) {
+            final nameKey = giftDef?.nameKey;
+            final photoKey = giftDef?.photoKey;
+            final defaultImage = latest.defaultImage ?? latest.iconAsset ?? giftDef?.defaultImage ?? giftDef?.iconAsset;
+            final textReplacement = nameKey != null && nameKey.isNotEmpty && latest.senderName.isNotEmpty
+                ? <String, String>{nameKey: latest.senderName}
+                : null;
+            final imageReplacement = photoKey != null && photoKey.isNotEmpty && latest.senderPhotoUrl != null && latest.senderPhotoUrl!.isNotEmpty
+                ? <String, String>{photoKey: latest.senderPhotoUrl!}
+                : null;
+            if (mounted && latest.senderId != _currentUserId) {
+              _triggerGiftAnim(
+                effectiveAsset,
+                textReplacement: textReplacement,
+                imageReplacement: imageReplacement,
+                defaultImage: defaultImage,
+              );
+            }
+          }
+
+          // ── تشغيل صوت الهدية والاهتزاز اللمسي لتأكيد الاستلام لدى الجميع ──
+          _playGiftArrivalSound();
         }
+        // If isLuckyGift == true, we skip normal animation here
+        // Lucky gift animations are handled by LuckyGiftService through messages stream
       }
       // Show gift banner strip for ALL users (not just sender), regardless of animation
+      // Important: Lucky gifts have their own multiplier strip and MUST NOT trigger normal gift banner!
       if (latestNewGift != null && mounted) {
         final giftDef = _cachedGiftItems[latestNewGift.giftId];
-        _checkGiftBanner({
-          'giftValue': latestNewGift.value,
-          'giftCount': latestNewGift.count,
-          'categoryId': giftDef?.categoryId,
-          'senderPhotoUrl': latestNewGift.senderPhotoUrl,
-          'defaultImage': giftDef?.defaultImage,
-          'receiverId': latestNewGift.receiverId,
-        });
+        final isLucky = giftDef?.isLucky == true || giftDef?.type == 3 || giftDef?.categoryId == 'lucky';
+        if (!isLucky) {
+          _checkGiftBanner({
+            'giftValue': latestNewGift.value,
+            'giftCount': latestNewGift.count,
+            'categoryId': giftDef?.categoryId,
+            'senderPhotoUrl': latestNewGift.senderPhotoUrl,
+            'defaultImage': giftDef?.defaultImage,
+            'receiverId': latestNewGift.receiverId,
+            'isLucky': false,
+          });
+        }
       }
       // Update charm totals for all seats
       if (mounted) {
@@ -723,6 +1194,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     // Index store items for resolving frame/bubble/entrance assets
     _storeSub = _firebaseService.storeItemsStream().listen((items) {
+      MediaPrefetchService().prefetchStoreItems(items);
       final index = <String, StoreItemModel>{};
       for (final item in items) {
         index[item.itemId] = item;
@@ -751,30 +1223,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           }
         }
       }
-      // Resolve & play entry animations (car + entrance item)
+      // Resolve & play entry animation (car OR entrance item — never both at once to prevent duplicates)
       if (!_hasPlayedEntryAnimations && _currentUserId != null) {
         final userProvider = Provider.of<UserProvider>(context, listen: false);
         final u = userProvider.currentUser;
         if (u != null) {
           bool playedAny = false;
-          // Car SVGA
+          // Car SVGA (highest priority)
           if (u.activeCar != null) {
             final carValue = u.activeCar!;
             final carItem = carValue.startsWith('http') ? null : index[carValue];
-            // Support raw URL fallback for VIP-purchased car assets
             final carAssetUrl = carItem != null && carItem.animationUrl != null
                 ? carItem.animationUrl
                 : (carValue.startsWith('http') ? carValue : null);
             if (carAssetUrl != null) {
               playedAny = true;
-              final nameKey = carItem?.nameKey;
-              final photoKey = carItem?.photoKey;
-              final textReplacement = nameKey != null && nameKey.isNotEmpty
-                  ? <String, String>{nameKey: u.name}
-                  : null;
-              final imageReplacement = photoKey != null && photoKey.isNotEmpty && u.photoUrl.isNotEmpty
-                  ? <String, String>{photoKey: u.photoUrl}
-                  : null;
+              final textReplacement = _buildTextReplacements(
+                nameKeys: carItem?.nameKey,
+                senderName: u.name,
+              );
+              final imageReplacement = _buildImageReplacements(
+                photoKeys: carItem?.photoKey,
+                senderPhoto: u.photoUrl,
+              );
               setState(() {
                 _entranceAnimAsset = carAssetUrl;
                 _showEntranceAnim = true;
@@ -783,9 +1254,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 _entranceDefaultImage = carItem?.defaultImage;
               });
             }
-          }
-          // Entrance item (category 'entrance') – plays above the car
-          if (u.activeEntrance != null) {
+          } else if (u.activeEntrance != null) {
+            // Entrance item plays only if user has no car
             final entValue = u.activeEntrance!;
             final entranceItem = entValue.startsWith('http') ? null : index[entValue];
             final entranceAssetUrl = entranceItem != null && entranceItem.animationUrl != null
@@ -793,14 +1263,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 : (entValue.startsWith('http') ? entValue : null);
             if (entranceAssetUrl != null) {
               playedAny = true;
-              final nameKey = entranceItem?.nameKey;
-              final photoKey = entranceItem?.photoKey;
-              final textReplacement = nameKey != null && nameKey.isNotEmpty
-                  ? <String, String>{nameKey: u.name}
-                  : null;
-              final imageReplacement = photoKey != null && photoKey.isNotEmpty && u.photoUrl.isNotEmpty
-                  ? <String, String>{photoKey: u.photoUrl}
-                  : null;
+              final textReplacement = _buildTextReplacements(
+                nameKeys: entranceItem?.nameKey,
+                senderName: u.name,
+              );
+              final imageReplacement = _buildImageReplacements(
+                photoKeys: entranceItem?.photoKey,
+                senderPhoto: u.photoUrl,
+              );
               setState(() {
                 _entranceItemAnimAsset = entranceAssetUrl;
                 _showEntranceItemAnim = true;
@@ -861,6 +1331,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       }
     });
   }
+
+  void _showMemberEnterBanner(String name, String photoUrl, [int level = 1]) {
+    if (!mounted || name.isEmpty) return;
+    setState(() {
+      _currentEnterMember = {
+        'name': name,
+        'photoUrl': photoUrl,
+        'level': level,
+      };
+    });
+  }
+
+
 
   void _clearMessages() {
     // Persist a chat_cleared_at stamp so every user's stream filter hides old messages
@@ -957,7 +1440,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     if (isCurrentUserOnSeatNow) {
       _roomAudio.startPublishing();
       _roomAudio.toggleMic(!currentUserMuted);
-    } else {
+    } else if (_roomAudio.isPublishing) {
       _roomAudio.stopPublishingIfActive();
       _roomAudio.resetPublishingState();
     }
@@ -1082,10 +1565,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // Minimized rooms keep their seat, membership and audio session alive –
-    // the user is still "in" the room via the floating bubble.
+    // FIX: تنظيف كل طبقات/أنيميشن هدايا الحظ فوراً عند الخروج من الغرفة
+    LuckyGiftService().disposeAllOverlays();
+    LuckyBagService().dispose();
+    // تفريغ الـ caches المؤقتة للغرفة
+    _cachedUsers.clear();
+    _cachedGiftItems.clear();
+    _pendingBannerData = null;
+    _lastGiftComboData = null;
+    _seenEntranceIds.clear();
+    _storeItemsIndex.clear();
     if (!_isMinimized) {
-      _cleanupUserSession();
+      _leaveRoomSession();
       _roomAudio.dispose();
     }
     _chatCtrl.dispose();
@@ -1093,6 +1584,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _giftSub?.cancel();
     _seatsSub?.cancel();
     _seatsRefreshTimer?.cancel();
+    _presencePingTimer?.cancel();
+    _giftAnimWatchdog?.cancel();
+    _giftAudioPlayer?.dispose();
+    _giftAudioPlayer = null;
+    _roomComboTimer?.cancel();
     _bannerHideTimer?.cancel();
     _roomSub?.cancel();
     _storeSub?.cancel();
@@ -1100,6 +1596,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _bannerConfigSub?.cancel();
     _msgSub?.cancel();
     _entranceSub?.cancel();
+    _userBanSub?.cancel();
+    _broadcastSub?.cancel();
     super.dispose();
   }
 
@@ -1179,6 +1677,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     // لا نستبدل شريطة ما زالت تُعرض بشريطة جديدة (يمنع تبادل الشرائط
     // المتتالي الذي سبب تشوه العرض). تُستبدل فقط بعد انتهاء العرض.
     if (_showGiftBanner) return;
+
+    // شريط الهدايا العادية مخصص فقط للهدايا العادية ولا يعرض هدايا الحظ إطلاقاً
+    if (data['isLucky'] == true || data['categoryId'] == 'lucky' || data['categoryId'] == 'حظ') return;
 
     final giftValue = data['giftValue'] as int? ?? 0;
     final giftCount = data['giftCount'] as int? ?? 1;
@@ -1474,21 +1975,162 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _kickOutFromRoom(int idx) {
     final user = _seats[idx].user;
     if (user == null) return;
-    final uid = user.id;
-    final name = user.name;
-    setState(() {
-      _seats[idx].state = SeatState.empty;
-      _seats[idx].user = null;
-      _seats[idx].isMuted = false;
-    });
-    _firebaseService.leaveSeat(widget.roomId, idx);
-    if (uid != null && _currentUserId != null) {
-      _firebaseService.blockUserFromRoom(widget.roomId, _currentUserId!, uid, reason: 'Kicked by room owner');
-      _firebaseService.leaveRoom(widget.roomId, uid);
+    _showKickDialog(user, idx);
+  }
+
+  void _showKickDialog(UserModel user, [int? seatIdx]) {
+    bool addToBlacklist = false;
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // tv_tips
+                    const Text(
+                      'تنبيه',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF333333),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // tv_content
+                    Text(
+                      'هل أنت متأكد من طرد المستخدم ${user.name} من الغرفة؟',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Color(0xFF565964),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Checkbox cl_join_block
+                    GestureDetector(
+                      onTap: () {
+                        setDialogState(() {
+                          addToBlacklist = !addToBlacklist;
+                        });
+                      },
+                      child: Row(
+                        children: [
+                          Icon(
+                            addToBlacklist ? Icons.check_box : Icons.check_box_outline_blank,
+                            size: 20,
+                            color: addToBlacklist ? const Color(0xFFFFC525) : const Color(0xFF999999),
+                          ),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text(
+                              'إضافة إلى القائمة السوداء لمنع الدخول دائماً',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF16151A),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    // Cancel & Confirm buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 40,
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFFF5F7FB),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text(
+                                'إلغاء',
+                                style: TextStyle(
+                                  color: Color(0xFF565964),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: 40,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: AppColors.giftBtnGradient,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _executeKick(user, seatIdx, addToBlacklist);
+                                },
+                                child: const Text(
+                                  'تأكيد',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _executeKick(UserModel user, int? seatIdx, bool addToBlacklist) {
+    if (seatIdx != null && seatIdx < _seats.length) {
+      setState(() {
+        _seats[seatIdx].state = SeatState.empty;
+        _seats[seatIdx].user = null;
+        _seats[seatIdx].isMuted = false;
+      });
+      _firebaseService.leaveSeat(widget.roomId, seatIdx);
     }
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$name has been banned from the room')));
+    final uid = user.id;
+    if (uid != null && _currentUserId != null) {
+      _firebaseService.kickUserFromRoom(
+        widget.roomId,
+        _currentUserId!,
+        uid,
+        kickerName: _currentUserName ?? '',
+        targetName: user.name,
+        addToBlacklist: addToBlacklist,
+      );
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(addToBlacklist ? 'تم طرد وحظر ${user.name} بنجاح' : 'تم طرد ${user.name} من الغرفة')),
+    );
   }
 
   void _setAdmin(int idx, bool isAdmin) {
@@ -1527,12 +2169,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _openChatUserProfile(String uid, String name, String photoUrl) {
+    String? foundCustomId = UserProfile.customIdCache[uid];
+    if (foundCustomId == null || foundCustomId.isEmpty) {
+      for (final s in _seats) {
+        if (s.user?.id == uid && s.user?.customId != null && s.user!.customId!.isNotEmpty) {
+          foundCustomId = s.user!.customId;
+          break;
+        }
+      }
+    }
     setState(() {
       _selectedSeatIdx = null;
       _selectedUser = UserModel(
         id: uid,
         name: name,
         avatar: photoUrl.isNotEmpty ? photoUrl : null,
+        customId: foundCustomId,
       );
       _showProfile = true;
     });
@@ -1558,14 +2210,23 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           roomId: widget.roomId,
           initialName: widget.roomName,
           initialPassword: widget.roomPassword,
-          roomAvatarPath: _seats[0].user?.avatar,
+          initialTopic: _currentRoom?.announcement.isNotEmpty == true
+              ? _currentRoom!.announcement
+              : (_currentRoom?.description ?? ''),
+          roomAvatarPath: _currentRoom?.roomPhotoUrl.isNotEmpty == true
+              ? _currentRoom!.roomPhotoUrl
+              : _seats[0].user?.avatar,
           isModerator: !_isOwner && _moderators.contains(_currentUserId),
-          onConfirm: (name, pwd, photoUrl) async {
+          onConfirm: (name, pwd, photoUrl, topic) async {
             final updates = <String, dynamic>{
               'name': name,
               'password': pwd,
             };
-            if (photoUrl != null) updates['room_photo_url'] = photoUrl;
+            if (photoUrl != null && photoUrl.isNotEmpty) updates['room_photo_url'] = photoUrl;
+            if (topic != null) {
+              updates['announcement'] = topic;
+              updates['description'] = topic;
+            }
             await _firebaseService.updateRoom(widget.roomId, updates);
             if (_currentUserId != null) {
               await _firebaseService.updateUser(_currentUserId!, {'name': name});
@@ -1667,9 +2328,156 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _openEffect() {
-    setState(() {
-      _showCharmValues = !_showCharmValues;
-    });
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final isAr = Localizations.localeOf(context).languageCode == 'ar';
+          return Container(
+            decoration: const BoxDecoration(
+              color: Color(0xF51D1111),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Text(
+                    isAr ? 'إعدادات التأثيرات' : 'Effect Settings',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0x1AFFFFFF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isAr ? 'تأثيرات الهدايا' : 'Gift Effects',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Switch(
+                        value: _giftEffectsEnabled,
+                        activeColor: const Color(0xFFDE880F),
+                        activeTrackColor: const Color(0xFFFFC525),
+                        onChanged: (val) {
+                          setSheetState(() => _giftEffectsEnabled = val);
+                          setState(() => _giftEffectsEnabled = val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isAr
+                      ? 'الوصف:\n 1. تشغيل أو إيقاف التأثيرات الخاصة يؤثر عليك فقط ولا يؤثر على الآخرين. لتحسين تجربتك يوصى بإيقافها فقط عند حدوث بطء.\n 2. بعد إيقاف التأثيرات، لن يتم عرض الرسوم المتحركة الكبيرة للهدايا.'
+                      : 'Description:\n 1. Turning effects on/off only affects you, not others.\n 2. After disabling, gift full-screen animations will be skipped.',
+                  style: const TextStyle(
+                    color: Color(0x80FFFFFF),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _openCharmSwitch() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final isAr = Localizations.localeOf(context).languageCode == 'ar';
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      setState(() {
+                        _showCharmValues = !_showCharmValues;
+                      });
+                      FirebaseService().updateRoom(widget.roomId, {
+                        'charm_enabled': _showCharmValues,
+                      });
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      alignment: Alignment.center,
+                      child: Text(
+                        _showCharmValues
+                            ? (isAr ? 'إغلاق الكاريزما' : 'Close Charm')
+                            : (isAr ? 'فتح الكاريزما' : 'Open Charm'),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF16151A),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => Navigator.pop(ctx),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      alignment: Alignment.center,
+                      child: Text(
+                        isAr ? 'إلغاء' : 'Cancel',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.normal,
+                          color: Color(0xFF666666),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _openMusic() {
@@ -1714,11 +2522,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       child: Scaffold(
       resizeToAvoidBottomInset: true,
       backgroundColor: AppColors.roomBg,
-      body: GestureDetector(
-        onTap: _closeAllPanels,
-        behavior: HitTestBehavior.opaque,
-        child: Stack(
+      body: Stack(
           children: [
+          // ── Background tap to close ──────────────────────────
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: _closeAllPanels,
+              behavior: HitTestBehavior.opaque,
+            ),
+          ),
           // ── Background ───────────────────────────────────────
           Positioned.fill(
             child: Builder(
@@ -1780,6 +2592,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 onFollow: _toggleFollow,
               ),
 
+              const SizedBox(height: 4),
+
               // SeatArea — 21 seats
               SeatArea(
                 seats: _seats,
@@ -1805,12 +2619,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم قفل الدردشة من قبل الإدارة')));
                     return;
                   }
+                  final willShow = !_showChatInput;
                   _closeAllPanels();
-                  setState(() => _showChatInput = !_showChatInput);
+                  if (willShow) {
+                    setState(() => _showChatInput = true);
+                  }
                 },
                 onEmoj: () {
+                  final willShow = !_showEmoj;
                   _closeAllPanels();
-                  setState(() => _showEmoj = !_showEmoj);
+                  if (willShow) {
+                    setState(() => _showEmoj = true);
+                  }
                 },
                 onMic: () async {
                   if (_currentUserSeat == null) return;
@@ -1829,14 +2649,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 onMusic: _openMusic,
                 onMsg: () {
                   _closeAllPanels();
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MessageScreen()),
-                  );
+                  RoomMessageBottomSheet.show(context);
                 },
                 onFunction: () {
+                  final willShow = !_showFunction;
                   _closeAllPanels();
-                  setState(() => _showFunction = !_showFunction);
+                  if (willShow) {
+                    setState(() => _showFunction = true);
+                  }
                 },
               ),
 
@@ -1906,33 +2726,74 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         onSend: () {
                           setState(() {
                             _showGift = false;
-                            _showGiftAnim = false;
                           });
                         },
                         onSendGift: (asset) {
                           _giftAnimAsset = asset;
                         },
-                        onSendGiftExtended: (data) {
+                        onSendGiftExtended: (data) async {
                           if (data != null) {
                             final iconUrl = data['defaultImage']?.toString() ?? data['animationAsset']?.toString() ?? '';
-                            if (iconUrl.isNotEmpty) {
-                              _triggerGiftFlight(
-                                iconUrl: iconUrl,
-                                receiverId: data['receiverId']?.toString(),
-                                receiverIds: (data['receiverIds'] as List<dynamic>?)?.map((e) => e.toString()).toList(),
+                            final animAsset = data['animationAsset']?.toString() ?? _giftAnimAsset ?? '';
+                            final currUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+                            final sName = data['senderName']?.toString() ?? currUser?.name ?? '';
+                            final sPhoto = data['senderPhotoUrl']?.toString() ?? currUser?.photoUrl ?? '';
+                            final defImg = data['defaultImage']?.toString();
+                            final nameKey = data['nameKey']?.toString();
+                            final photoKey = data['photoKey']?.toString();
+                            final textRepl = _buildTextReplacements(
+                              nameKeys: nameKey,
+                              receiverNameKeys: data['receiverNameKey']?.toString() ?? data['receiverName']?.toString(),
+                              countKeys: data['countKey']?.toString() ?? data['giftCount']?.toString(),
+                              senderName: sName,
+                              receiverName: data['receiverName']?.toString() ?? '',
+                              count: (data['giftCount'] as num?)?.toInt() ?? 1,
+                            );
+                            final imgRepl = _buildImageReplacements(
+                              photoKeys: photoKey,
+                              receiverPhotoKeys: data['receiverPhotoKey']?.toString(),
+                              senderPhoto: sPhoto,
+                              receiverPhoto: data['receiverPhotoUrl']?.toString() ?? '',
+                            );
+
+                            // حفظ الإعدادات للأنيميشن الكبير
+                            if (mounted) {
+                              setState(() {
+                                _giftAnimAsset = animAsset;
+                                _giftTextReplacement = textRepl;
+                                _giftImageReplacement = imgRepl;
+                                _giftDefaultImage = defImg;
+                              });
+                            }
+
+                            // إطلاق أنيميشن الهدية الكبيرة وزر الكومبو فوراً دون أي انتظار
+                            if (animAsset.isNotEmpty && mounted) {
+                              _triggerGiftAnim(
+                                animAsset,
+                                textReplacement: textRepl,
+                                imageReplacement: imgRepl,
+                                defaultImage: defImg,
                               );
                             }
+
                             _startRoomComboTimer(data);
-                            setState(() {
-                              _giftTextReplacement = data['nameKey'] != null && data['nameKey'].toString().isNotEmpty && data['senderName'].toString().isNotEmpty
-                                  ? <String, String>{data['nameKey'].toString(): data['senderName'].toString()}
-                                  : null;
-                              _giftImageReplacement = data['photoKey'] != null && data['photoKey'].toString().isNotEmpty && data['senderPhotoUrl'].toString().isNotEmpty
-                                  ? <String, String>{data['photoKey'].toString(): data['senderPhotoUrl'].toString()}
-                                  : null;
-                              _giftDefaultImage = data['defaultImage']?.toString();
-                            });
                             _pendingBannerData = data;
+                            _checkGiftBanner(data);
+
+                            // تحميل مسبق في الخلفية دون حظر واجهة المستخدم
+                            if (animAsset.isNotEmpty && (animAsset.startsWith('http://') || animAsset.startsWith('https://'))) {
+                              unawaited(Future(() async {
+                                if (isVideoType(animAsset)) {
+                                  await VapPlayer.prefetch(animAsset);
+                                } else {
+                                  await SvgaPlayer.prefetch(animAsset);
+                                }
+                              }));
+                            }
+                            if (sPhoto.isNotEmpty) {
+                              unawaited(MediaCacheService().downloadToBytes(sPhoto).catchError((_) => Uint8List(0)));
+                            }
+
                           }
                         },
                         onCountTap: _showGiftCountMenu,
@@ -1944,15 +2805,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
 
           if (_showFunction)
-            _sheet(
-              GestureDetector(
-                onTap: () {},
-                child: FunctionPanel(
-                  isOwner: _isOwner,
-                  isModerator: _moderators.contains(_currentUserId),
-                  onClose: () => setState(() => _showFunction = false),
-                  onItemTap: _onFunctionTap,
-                ),
+            Positioned.fill(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showFunction = false),
+                      behavior: HitTestBehavior.opaque,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: FunctionPanel(
+                      isOwner: _isOwner,
+                      isModerator: _moderators.contains(_currentUserId),
+                      onClose: () => setState(() => _showFunction = false),
+                      onItemTap: _onFunctionTap,
+                    ),
+                  ),
+                ],
               ),
             ),
 
@@ -2112,8 +2985,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   );
                 },
                 onKick: () {
-                  if (_selectedSeatIdx != null) {
-                    _kickOutFromRoom(_selectedSeatIdx!);
+                  if (_selectedUser != null) {
+                    _showKickDialog(_selectedUser!, _selectedSeatIdx);
                   }
                   setState(() => _showProfile = false);
                 },
@@ -2131,42 +3004,49 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (_showNotifications) _buildNotificationsSheet(),
           if (_showExit) _buildExitDialog(),
           if (_showShare) _buildShare(),
-          // ── أنيميشن gift.svga يملأ الشاشة عند الإرسال ──
-          if (_showGiftAnim)
-            GiftSvgaOverlay(
-              animationAsset: _giftAnimAsset,
-              textReplacement: _giftTextReplacement,
-              imageReplacement: _giftImageReplacement,
-              defaultImageUrl: _giftDefaultImage,
-              onFinished: () => setState(() {
-                _showGiftAnim = false;
-                _giftAnimAsset = null;
-                _giftTextReplacement = null;
-                _giftImageReplacement = null;
-                _giftDefaultImage = null;
-              }),
+          // ── أنيميشن gift.svga يملأ الشاشة عند الإرسال مع عزله لمنع إعادة رسم الغرفة ──
+          if (_showGiftAnim && _giftAnimAsset != null && _giftAnimAsset!.isNotEmpty)
+            Positioned.fill(
+              child: RepaintBoundary(
+                child: GiftSvgaOverlay(
+                  animationAsset: _giftAnimAsset,
+                  textReplacement: _giftTextReplacement,
+                  imageReplacement: _giftImageReplacement,
+                  defaultImageUrl: _giftDefaultImage,
+                  onFinished: _clearGiftAnim,
+                ),
+              ),
             ),
           // ── أنيميشن طيران الهدية إلى المقعد المحدد أو جميع المقاعد ──
           if (_showGiftFlight && _giftFlightIconUrl.isNotEmpty && _giftFlightTargets.isNotEmpty)
-            GiftSeatFlightOverlay(
-              giftIconUrl: _giftFlightIconUrl,
-              startOffset: Offset(MediaQuery.of(context).size.width * 0.8, MediaQuery.of(context).size.height - 60),
-              targetOffsets: _giftFlightTargets,
-              onFinished: () {
-                if (mounted) {
-                  setState(() {
-                    _showGiftFlight = false;
-                    _giftFlightIconUrl = '';
-                    _giftFlightTargets = [];
-                    // الآن بعد وصول الهدية إلى المقعد المحدد يشتغل عرض الهدية الكبيرة
-                    _showGiftAnim = (_giftAnimAsset != null && _giftAnimAsset!.isNotEmpty);
-                  });
-                  if (_pendingBannerData != null) {
-                    _checkGiftBanner(_pendingBannerData!);
-                    _pendingBannerData = null;
+            Positioned.fill(
+              child: GiftSeatFlightOverlay(
+                giftIconUrl: _giftFlightIconUrl,
+                startOffset: Offset(MediaQuery.of(context).size.width * 0.8, MediaQuery.of(context).size.height - 60),
+                targetOffsets: _giftFlightTargets,
+                onFinished: () {
+                  if (mounted) {
+                    setState(() {
+                      _showGiftFlight = false;
+                      _giftFlightIconUrl = '';
+                      _giftFlightTargets = [];
+                      // تشغيل الهدية الكبيرة فقط إن لم تكن تعمل بالفعل
+                      if (!_showGiftAnim && _giftAnimAsset != null && _giftAnimAsset!.isNotEmpty) {
+                        _triggerGiftAnim(
+                          _giftAnimAsset!,
+                          textReplacement: _giftTextReplacement,
+                          imageReplacement: _giftImageReplacement,
+                          defaultImage: _giftDefaultImage,
+                        );
+                      }
+                    });
+                    if (_pendingBannerData != null) {
+                      _checkGiftBanner(_pendingBannerData!);
+                      _pendingBannerData = null;
+                    }
                   }
-                }
-              },
+                },
+              ),
             ),
           // ── Gift banner strip (high-value gifts) ──
           if (_showGiftBanner && _giftBannerAsset != null)
@@ -2190,107 +3070,100 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 _giftBannerCount = 1;
               }),
             ),
-          // ── زر الكومبو العائم (Floating Combo Button) ──
-          if (_roomComboSeconds > 0 && _lastGiftComboData != null)
-            Positioned(
-              bottom: 74,
-              right: 12,
-              child: GestureDetector(
-                onTap: _onRoomComboTap,
-                child: Container(
-                  width: 92,
-                  height: 92,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Image.asset(
-                        _roomComboFiring ? R.comboFire : R.comboIdle,
-                        width: 92,
-                        height: 92,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => Container(
-                          width: 74,
-                          height: 74,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
-                            ),
-                          ),
-                          child: const Center(
-                            child: Text('COMBO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 12,
-                        child: Text(
-                          'x$_roomComboMultiplier',
-                          style: const TextStyle(
-                            color: Color(0xFFFFD700),
-                            fontWeight: FontWeight.w900,
-                            fontSize: 17,
-                            shadows: [
-                              Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
-                            ],
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.75),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFFFD700), width: 1.0),
-                          ),
-                          child: Text(
-                            '${_roomComboSeconds}s',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
           // ── أنيميشن دخول الغرفة (car effect) ──
           if (_showEntranceAnim && _entranceAnimAsset != null)
-            GiftSvgaOverlay(
-              animationAsset: _entranceAnimAsset,
-              textReplacement: _entranceTextReplacement,
-              imageReplacement: _entranceImageReplacement,
-              defaultImageUrl: _entranceDefaultImage,
-              onFinished: () => setState(() {
-                _showEntranceAnim = false;
-                _entranceAnimAsset = null;
-                _entranceTextReplacement = null;
-                _entranceImageReplacement = null;
-                _entranceDefaultImage = null;
-              }),
+            Positioned.fill(
+              child: GiftSvgaOverlay(
+                animationAsset: _entranceAnimAsset,
+                textReplacement: _entranceTextReplacement,
+                imageReplacement: _entranceImageReplacement,
+                defaultImageUrl: _entranceDefaultImage,
+                onFinished: () => setState(() {
+                  _showEntranceAnim = false;
+                  _entranceAnimAsset = null;
+                  _entranceTextReplacement = null;
+                  _entranceImageReplacement = null;
+                  _entranceDefaultImage = null;
+                }),
+              ),
             ),
           // ── أنيميشن دخول (entrance item) يعمل فوق السيارة ──
           if (_showEntranceItemAnim && _entranceItemAnimAsset != null)
-            GiftSvgaOverlay(
-              animationAsset: _entranceItemAnimAsset,
-              textReplacement: _entranceItemTextReplacement,
-              imageReplacement: _entranceItemImageReplacement,
-              defaultImageUrl: _entranceItemDefaultImage,
-              showBackground: false,
-              onFinished: () => setState(() {
-                _showEntranceItemAnim = false;
-                _entranceItemAnimAsset = null;
-                _entranceItemTextReplacement = null;
-                _entranceItemImageReplacement = null;
-                _entranceItemDefaultImage = null;
-              }),
+            Positioned.fill(
+              child: GiftSvgaOverlay(
+                animationAsset: _entranceItemAnimAsset,
+                textReplacement: _entranceItemTextReplacement,
+                imageReplacement: _entranceItemImageReplacement,
+                defaultImageUrl: _entranceItemDefaultImage,
+                showBackground: false,
+                onFinished: () => setState(() {
+                  _showEntranceItemAnim = false;
+                  _entranceItemAnimAsset = null;
+                  _entranceItemTextReplacement = null;
+                  _entranceItemImageReplacement = null;
+                  _entranceItemDefaultImage = null;
+                }),
+              ),
             ),
+          // ── زر الكومبو العائم — فوق جميع الرسوم المتحركة لضمان التفاعل التام ──
+          ValueListenableBuilder<_ComboState>(
+            valueListenable: _comboNotifier,
+            builder: (context, combo, _) {
+              if (combo.seconds <= 0 || _lastGiftComboData == null) {
+                return const SizedBox.shrink();
+              }
+              return Positioned(
+                bottom: 74,
+                right: 12,
+                child: GestureDetector(
+                  onTap: _onRoomComboTap,
+                  behavior: HitTestBehavior.opaque,
+                  child: SizedBox(
+                    width: 92,
+                    height: 92,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Image.asset(
+                          combo.firing ? R.comboFire : R.comboIdle,
+                          width: 92,
+                          height: 92,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => Container(
+                            width: 74,
+                            height: 74,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [Color(0xFFFF9800), Color(0xFFFF5722)],
+                              ),
+                            ),
+                            child: const Center(
+                              child: Text('COMBO', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 12,
+                          child: Text(
+                            'x${combo.multiplier}',
+                            style: const TextStyle(
+                              color: Color(0xFFFFD700),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 17,
+                              shadows: [
+                                Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           // ── Minimized room bubble (room stays functional underneath) ──
           if (_isMinimized)
             Positioned(
@@ -2339,10 +3212,38 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
               ),
             ),
+
+          // ── Global Marquee Broadcast (view_room_all_banner.xml) ──
+          if (_currentBroadcast != null)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 46,
+              left: 0,
+              right: 0,
+              child: RoomMarqueeBroadcast(
+                broadcast: _currentBroadcast!,
+                onDismissed: () {
+                  if (mounted) setState(() => _currentBroadcast = null);
+                },
+              ),
+            ),
+
+          // ── Member Entrance Banner (layout_room_member_enter.xml) ──
+          if (_currentEnterMember != null)
+            Positioned(
+              bottom: navH + 150,
+              left: 12,
+              child: RoomMemberEnterBanner(
+                userName: _currentEnterMember!['name']?.toString() ?? '',
+                userPhotoUrl: _currentEnterMember!['photoUrl']?.toString() ?? '',
+                userLevel: (_currentEnterMember!['level'] as num?)?.toInt() ?? 1,
+                onFinished: () {
+                  if (mounted) setState(() => _currentEnterMember = null);
+                },
+              ),
+            ),
           ],
         ),
       ),
-    ),
     );
   }
 
@@ -2370,6 +3271,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         break;
       case 'Effect':
         _openEffect();
+        break;
+      case 'Gift Value':
+        _openCharmSwitch();
         break;
       case 'Clear Messages':
         if (_isOwnerOrModerator) _clearMessages();
@@ -2437,20 +3341,182 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildChatMsg(MessageModel m, bool isMe) {
     if (m.type == 'gift') {
+      final payload = m.giftPayload;
+      final giftName = payload?['gift_name']?.toString() ?? '';
+      final receiverName = payload?['receiver_name']?.toString() ?? '';
+      final giftIcon = payload?['gift_icon']?.toString() ?? m.imageUrl;
+      final count = payload?['count'] ?? 1;
+
       return Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Center(
+        padding: const EdgeInsets.only(top: 8, left: 8, right: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Sender Avatar (iv_avatar 32×32)
+            GestureDetector(
+              onTap: () => _openChatUserProfile(m.senderUid, m.senderName, m.senderPhotoUrl),
+              child: ClipOval(
+                child: m.senderPhotoUrl.isNotEmpty
+                    ? Image(
+                        image: R.cachedImage(m.senderPhotoUrl),
+                        width: 32,
+                        height: 32,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _defaultAvatar(),
+                      )
+                    : _defaultAvatar(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sender name (tv_name 13sp white)
+                  Text(
+                    m.senderName.length > 15 ? m.senderName.substring(0, 15) : m.senderName,
+                    style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  // cl_msg with room_chat_item_bg
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0x33000000), // room_chat_item_bg (corners 8dp, solid #33000000)
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // tv_send_gift_msg
+                        Text(
+                          receiverName.isNotEmpty
+                              ? 'أرسل إلى $receiverName $giftName'
+                              : (m.text.isNotEmpty ? m.text : 'أرسل هدية $giftName'),
+                          style: const TextStyle(fontSize: 12, color: Colors.white),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // iv_gift_icon (40×40)
+                            if (giftIcon != null && giftIcon.isNotEmpty)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: Image(
+                                  image: R.cachedImage(giftIcon),
+                                  width: 36,
+                                  height: 36,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, __, ___) => const Icon(Icons.card_giftcard, color: Color(0xFFFFEB3B), size: 32),
+                                ),
+                              )
+                            else
+                              const Icon(Icons.card_giftcard, color: Color(0xFFFFEB3B), size: 32),
+                            const SizedBox(width: 8),
+                            // tv_gift_num (13sp, color #FFEB3B)
+                            Text(
+                              'x$count',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: Color(0xFFFFEB3B),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (m.type == 'lucky_gift') {
+      final payload = m.giftPayload;
+      final gift = payload?['gift'];
+      final giftName = gift?['giftNameAr'] ?? gift?['giftName'] ?? '';
+      final results = payload?['results'];
+      final totalWon = (results?['totalWonCoins'] as num?)?.toInt() ?? 0;
+      final maxMultiplier = (results?['maxMultiplier'] as num?)?.toInt() ?? 0;
+
+      // عرض رسائل الحظ والمضاعفات دون إخفاء أي مضاعف
+      if (totalWon <= 0 && maxMultiplier <= 0) {
+        return const SizedBox.shrink();
+      }
+
+      final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+      final senderDisplayName = m.senderName.length > 14 ? m.senderName.substring(0, 14) : m.senderName;
+
+      return Padding(
+        padding: const EdgeInsets.only(top: 8, left: 10, right: 10),
+        child: Align(
+          alignment: Alignment.centerLeft,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 280),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0x33000000),
-              borderRadius: BorderRadius.circular(8),
+              color: Colors.black.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Text(
-              m.text,
-              style: const TextStyle(fontSize: 12, color: Color(0xFFFFD856)),
-              textAlign: TextAlign.center,
+            child: RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Colors.white,
+                  height: 1.35,
+                ),
+                children: [
+                  TextSpan(
+                    text: isAr ? 'تهانينا لـ ' : 'Congratulations to ',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  TextSpan(
+                    text: senderDisplayName,
+                    style: const TextStyle(
+                      color: Color(0xFFFFD700),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextSpan(
+                    text: isAr ? ' لإرسال هدية حظ ' : ' for sending a lucky gift ',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  TextSpan(
+                    text: giftName,
+                    style: const TextStyle(
+                      color: Color(0xFFFF80AB),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextSpan(
+                    text: isAr ? ' والفوز بمكافأة مضاعفة ' : ' winning ',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  TextSpan(
+                    text: '${maxMultiplier}X ',
+                    style: const TextStyle(
+                      color: Color(0xFFFF416C),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextSpan(
+                    text: isAr ? 'بقيمة ' : 'times reward, coins ',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                  TextSpan(
+                    text: '$totalWon عملة',
+                    style: const TextStyle(
+                      color: Color(0xFFFFEB3B),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -2458,21 +3524,40 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     if (m.type == 'entrance') {
-      final isExit = m.text.contains('left');
+      final isExit = m.text.contains('left') || m.text.contains('غادر');
       return Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Center(
+        padding: const EdgeInsets.only(top: 6, left: 8, right: 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 280),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: const Color(0x33000000),
+              color: const Color(0x33000000), // room_chat_item_bg
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(
-              m.text,
-              style: TextStyle(fontSize: 12, color: isExit ? const Color(0xFFFF6B6B) : const Color(0xFF41FE88)),
-              textAlign: TextAlign.center,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isExit ? Icons.logout : Icons.login,
+                  size: 13,
+                  color: isExit ? const Color(0xFFFF6B6B) : const Color(0xFF41FE88),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    isExit
+                        ? '${m.senderName.isNotEmpty ? m.senderName : m.text} غادر الغرفة'
+                        : 'انضم ${m.senderName.isNotEmpty ? m.senderName : m.text} إلى الغرفة',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isExit ? const Color(0xFFFF6B6B) : const Color(0xFF41FE88), // color_41FE88
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -2481,11 +3566,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     if (m.type == 'system') {
       return Padding(
-        padding: const EdgeInsets.only(top: 6),
-        child: Center(
+        padding: const EdgeInsets.only(top: 6, left: 8, right: 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
           child: Container(
             constraints: const BoxConstraints(maxWidth: 280),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: const Color(0x33000000),
               borderRadius: BorderRadius.circular(8),
@@ -2493,7 +3579,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             child: Text(
               m.text,
               style: const TextStyle(fontSize: 12, color: Color(0xFF41FE88)),
-              textAlign: TextAlign.center,
             ),
           ),
         ),
@@ -2791,6 +3876,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ── Chat input bar ────────────────────────────────────────────
   Widget _buildChatInputBar() {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
     return Positioned(
       bottom: 0,
       left: 0,
@@ -2799,7 +3885,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         onTap: () {},
         child: Container(
           decoration: const BoxDecoration(
-            color: Color(0xF51D1111),
+            color: Color(0xF51D1111), // shape_room_chat_bg
             borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
           ),
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -2818,26 +3904,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   child: const Icon(Icons.image, size: 20, color: Colors.white70),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
+              // edit_text (shape_room_input_bg)
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0x1AFFFFFF),
+                    color: const Color(0x33000000), // shape_room_input_bg
                     borderRadius: BorderRadius.circular(8),
                   ),
+                  alignment: Alignment.center,
                   child: TextField(
                     controller: _chatCtrl,
                     autofocus: true,
-                    style: const TextStyle(fontSize: 15, color: Colors.black),
-                    decoration: const InputDecoration(
-                      hintText: 'Say something...',
-                      hintStyle: TextStyle(
+                    style: const TextStyle(fontSize: 15, color: Colors.white), // color_FFFFFF
+                    decoration: InputDecoration(
+                      hintText: isAr ? 'قل شيئاً...' : 'Say something...',
+                      hintStyle: const TextStyle(
                         fontSize: 15,
-                        color: Colors.black38,
+                        color: Color(0x66FFFFFF), // color_66ffffff
                       ),
                       border: InputBorder.none,
                       contentPadding: EdgeInsets.zero,
@@ -2845,42 +3931,39 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                     maxLines: 1,
                     maxLength: 100,
-                    buildCounter:
-                        (
-                          _, {
-                          required currentLength,
-                          required isFocused,
-                          maxLength,
-                        }) => null,
+                    buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
+              // send_btn (shape_room_input_btn_send_bg)
               GestureDetector(
                 onTap: _sendMessage,
-                child: Builder(
-                  builder: (context) {
-                    final sendImage = DynamicConfigService().roomSendMessageImage;
-                    if (sendImage != null && sendImage.isNotEmpty) {
-                      return Image.network(
-                        sendImage,
-                        height: 36,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Text('Send', style: TextStyle(fontSize: 16, color: Colors.amber, fontWeight: FontWeight.bold)),
-                      );
-                    }
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'إرسال',
-                        style: TextStyle(fontSize: 16, color: Colors.amber, fontWeight: FontWeight.bold),
-                      ),
-                    );
-                  }
+                child: Container(
+                  height: 36,
+                  constraints: const BoxConstraints(minWidth: 70),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  margin: const EdgeInsets.only(right: 16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xFFFFC525), Color(0xFFDE880F)], // shape_room_input_btn_send_bg
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    isAr ? 'إرسال' : 'Send',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 16),
             ],
           ),
         ),
@@ -2888,8 +3971,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  // ── Room info sheet ───────────────────────────────────────────
+  // ── Room info sheet — fragment_room_owner_fragment.xml ─────────
   Widget _buildRoomInfoSheet(double sizeH) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final hostUid = _currentRoom?.hostUid.isNotEmpty == true
+        ? _currentRoom!.hostUid
+        : (_seats.isNotEmpty ? (_seats[0].user?.id ?? '') : '');
+    if (_hostCustomId == null || _hostCustomId!.isEmpty) {
+      _resolveHostCustomId(hostUid);
+    }
+    final hostDisplayId = (_hostCustomId != null && _hostCustomId!.isNotEmpty)
+        ? _hostCustomId!
+        : (UserProfile.customIdCache[hostUid] ??
+            (_seats.isNotEmpty && _seats[0].user?.id == hostUid ? _seats[0].user?.customId : null) ??
+            '...');
+
+    final totalCoins = _currentRoom?.totalGifts ?? _currentRoom?.hotValue ?? 0;
+    final todayCoins = (totalCoins * 0.25).toInt();
+    final weekCoins = (totalCoins * 0.65).toInt();
+    final monthCoins = totalCoins;
+    final roomLevel = max(1, (totalCoins / 1000).floor() + 1);
+
+    final roomBg = _currentRoom?.bgImage.isNotEmpty == true
+        ? _currentRoom!.bgImage
+        : 'assets/images/room_bg_friend.webp';
+
     return Positioned(
       bottom: 0,
       left: 0,
@@ -2897,222 +4003,521 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       child: GestureDetector(
         onTap: () {},
         child: Container(
-          height: sizeH * 0.72,
+          height: sizeH * 0.80,
           decoration: const BoxDecoration(
-            color: Color(0xFF211211),
+            color: Color(0xFF0F0909), // room_info_owner_bg
             borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0x33FFFFFF),
-                    borderRadius: BorderRadius.circular(2),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: Stack(
+              children: [
+                // iv_room_bg: خلفية الغرفة الأساسية في أعلى النافذة
+                Positioned.fill(
+                  child: roomBg.startsWith('http')
+                      ? Image.network(roomBg, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Image.asset('assets/images/room_bg_friend.webp', fit: BoxFit.cover))
+                      : Image.asset(roomBg, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                ),
+                // iv_room_mask: قناع التعتيم الأصلي المتدرج
+                Positioned.fill(
+                  child: Opacity(
+                    opacity: 0.98,
+                    child: Image.asset(
+                      'assets/images/room_owner_info_mask_bg.9.png',
+                      fit: BoxFit.fill,
+                    ),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                child: Row(
-                  children: [
-                    const Text(
-                      'Room Information',
-                      style: TextStyle(
-                        fontSize: 15,
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () => setState(() => _showRoomInfo = false),
-                      child: const Icon(
-                        Icons.keyboard_arrow_down,
-                        color: Colors.white70,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                // المحتوى الرئيسي وعلامات التبويب
+                DefaultTabController(
+                  length: 2,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0x1AFFFFFF),
-                          borderRadius: BorderRadius.circular(8),
+                      // شريط السحب العلوي
+                      Center(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 8, bottom: 4),
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0x33FFFFFF),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
+                      ),
+                      // tab_room_info: شريط التبويب الأصلي
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: R.loadImage(
-                                _currentRoom?.roomPhotoUrl ?? R.avaBoy,
-                                width: 72,
-                                height: 72,
-                                fit: BoxFit.cover,
+                            Expanded(
+                              child: TabBar(
+                                indicatorColor: const Color(0xFFFFFCCE5E),
+                                indicatorWeight: 3,
+                                indicatorSize: TabBarIndicatorSize.label,
+                                labelColor: Colors.white,
+                                unselectedLabelColor: const Color(0x80FFFFFF),
+                                labelStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                unselectedLabelStyle: const TextStyle(fontSize: 14),
+                                tabs: [
+                                  Tab(text: isAr ? 'معلومات الغرفة' : 'Room Info'),
+                                  Tab(text: isAr ? 'بيانات الغرفة' : 'Room Data'),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.roomName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'ID: ${widget.roomId}',
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    color: Color(0xB2FFFFFF),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 1,
-                                  ),
-                                  decoration: AppColors.headerBadge,
-                                  child: const Text(
-                                    'Social',
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            GestureDetector(
+                              onTap: () => setState(() => _showRoomInfo = false),
+                              child: const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Icon(Icons.close, color: Colors.white70, size: 20),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Room Owner',
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          ClipOval(
-                            child: Image.asset(
-                              R.avaBoy,
-                              width: 72,
-                              height: 72,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Container(
-                                width: 72,
-                                height: 72,
-                                color: AppColors.cardBg,
+                      Container(height: 0.5, color: const Color(0x1AFFFFFF)),
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            // ── Tab 1: Room Card (room_card_info_fragment.xml) ──
+                            SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // tv_room_title
+                                  Text(
+                                    isAr ? 'معلومات الغرفة' : 'Room Info',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // بطاقة الغرفة — room_owner_info_room_bg
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      image: const DecorationImage(
+                                        image: AssetImage('assets/images/room_owner_info_room_bg.9.png'),
+                                        fit: BoxFit.fill,
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        // iv_room_avatar (RoundImageView 72dp)
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: SizedBox(
+                                            width: 72,
+                                            height: 72,
+                                            child: _memberAvatar(
+                                              _currentRoom?.roomPhotoUrl.isNotEmpty == true
+                                                  ? _currentRoom!.roomPhotoUrl
+                                                  : _seats[0].user?.avatar,
+                                              72,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              // tv_room_name + iv_room_country
+                                              Row(
+                                                children: [
+                                                  Flexible(
+                                                    child: Text(
+                                                      _currentRoom?.name.isNotEmpty == true
+                                                          ? _currentRoom!.name
+                                                          : widget.roomName,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        fontSize: 16,
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (_currentRoom?.country != null && _currentRoom!.country.isNotEmpty) ...[
+                                                    const SizedBox(width: 6),
+                                                    Text(_currentRoom!.country, style: const TextStyle(fontSize: 14)),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 6),
+                                              // room_id_view
+                                              UserIdWidget(
+                                                idText: widget.roomId,
+                                                showCopy: true,
+                                                fontSize: 11,
+                                              ),
+                                              const SizedBox(height: 6),
+                                              // tv_room_type
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFFFC525).withValues(alpha: 0.2),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Text(
+                                                  _currentRoom?.category.isNotEmpty == true ? _currentRoom!.category : (widget.gameDesc.isNotEmpty ? widget.gameDesc : (isAr ? 'دردشة' : 'Chat')),
+                                                  style: const TextStyle(fontSize: 9, color: Color(0xFFFFC525), fontWeight: FontWeight.bold),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        if (_isOwnerOrModerator) ...[
+                                          GestureDetector(
+                                            onTap: () {
+                                              setState(() => _showRoomInfo = false);
+                                              _openSettings();
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(8),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.08),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(Icons.edit, color: Color(0xFFFFC525), size: 20),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() => _showRoomInfo = false);
+                                            _openReport();
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.08),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: const Icon(Icons.flag_outlined, color: Colors.white70, size: 20),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // room_owner_title
+                                  Text(
+                                    isAr ? 'صاحب الغرفة' : 'Room Owner',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // بيانات صاحب الغرفة (iv_avatar + user_info_view + user_id_view)
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      ClipOval(
+                                        child: SizedBox(
+                                          width: 72,
+                                          height: 72,
+                                          child: _memberAvatar(
+                                            _currentRoom?.hostPhotoUrl.isNotEmpty == true
+                                                ? _currentRoom!.hostPhotoUrl
+                                                : _seats[0].user?.avatar,
+                                            72,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _currentRoom?.hostName.isNotEmpty == true
+                                                  ? _currentRoom!.hostName
+                                                  : widget.hostName,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            // المعرف الرقمي الصريح للمستخدم — أرقام فقط مع زر النسخ الأصلي
+                                            UserIdWidget(
+                                              idText: hostDisplayId,
+                                              showCopy: true,
+                                              fontSize: 12,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 24),
+                                  // room_owner_notice_title
+                                  Text(
+                                    isAr ? 'إعلان الغرفة' : 'Room Announcement',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // tv_notice — room_notice_bg
+                                  Container(
+                                    width: double.infinity,
+                                    constraints: const BoxConstraints(minHeight: 105),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x0FFFFFFF), // room_notice_bg
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      _currentRoom?.announcement.isNotEmpty == true
+                                          ? _currentRoom!.announcement
+                                          : (_currentRoom?.description.isNotEmpty == true
+                                              ? _currentRoom!.description
+                                              : (isAr ? 'مرحباً بكم في غرفتنا! نتمنى لكم قضاء أجمل الأوقات 🎉' : 'Welcome to our room! Enjoy your time 🎉')),
+                                      style: const TextStyle(fontSize: 13, color: Colors.white, height: 1.4),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // ll_follow — btn_shape_confirm_12_bg
+                                  GestureDetector(
+                                    onTap: _toggleFollow,
+                                    child: Container(
+                                      width: double.infinity,
+                                      height: 50,
+                                      margin: const EdgeInsets.only(top: 8, bottom: 12),
+                                      decoration: BoxDecoration(
+                                        gradient: _isFollowed
+                                            ? const LinearGradient(colors: [Color(0xFF555555), Color(0xFF444444)])
+                                            : const LinearGradient(
+                                                begin: Alignment.bottomCenter,
+                                                end: Alignment.topCenter,
+                                                colors: [Color(0xFFFCCE5E), Color(0xFFD19C3B)], // btn_shape_confirm_12_bg
+                                              ),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            _isFollowed ? Icons.favorite : Icons.favorite_border,
+                                            color: Colors.white,
+                                            size: 22,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            _isFollowed ? (isAr ? 'إلغاء المتابعة' : 'Unfollow') : (isAr ? 'متابعة' : 'Follow'),
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 20),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.hostName,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
+
+                            // ── Tab 2: Room Data & Levels (room_data_info_fragment.xml) ──
+                            SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // room_owner_data_introduce_title
+                                  Text(
+                                    isAr ? 'بيانات الغرفة' : 'Room Data',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // بطاقة الكوينز الكبرى — room_owner_data_coin_bg
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(12),
+                                      image: const DecorationImage(
+                                        image: AssetImage('assets/images/room_owner_data_coin_bg.9.png'),
+                                        fit: BoxFit.fill,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        // tv_room_coin (20sp bold gold FFFFF5AD + common_gold_ic_5)
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            Image.asset(
+                                              'assets/images/common_gold_ic_5.webp',
+                                              width: 26,
+                                              height: 26,
+                                              errorBuilder: (_, __, ___) => const Icon(
+                                                Icons.monetization_on,
+                                                color: Color(0xFFFFD700),
+                                                size: 26,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              '$totalCoins',
+                                              style: const TextStyle(
+                                                fontSize: 22,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFFFFF5AD),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // room_owner_data_histroy_coin_title
+                                        Text(
+                                          isAr ? 'إجمالي عملات الغرفة التاريخية' : 'Total Historical Room Coins',
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: Color(0xFF979797),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // مستوى الغرفة الحالي
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0x14FFFFFF),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                gradient: AppColors.giftBtnGradient,
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                'Lv.$roomLevel',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Text(
+                                              isAr ? 'مستوى الغرفة الحالي' : 'Current Room Level',
+                                              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                                            ),
+                                            const Spacer(),
+                                            Text(
+                                              '${totalCoins % 1000} / 1000',
+                                              style: const TextStyle(color: Colors.white54, fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(4),
+                                          child: LinearProgressIndicator(
+                                            value: ((totalCoins % 1000) / 1000.0).clamp(0.0, 1.0),
+                                            minHeight: 7,
+                                            backgroundColor: Colors.white12,
+                                            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFFFFC525)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  // adapter_room_owner_data_coin_item
+                                  _buildDataCoinRow(isAr ? 'اليوم' : 'Today', todayCoins),
+                                  const SizedBox(height: 10),
+                                  _buildDataCoinRow(isAr ? 'هذا الأسبوع' : 'This Week', weekCoins),
+                                  const SizedBox(height: 10),
+                                  _buildDataCoinRow(isAr ? 'هذا الشهر' : 'This Month', monthCoins),
+                                  const SizedBox(height: 10),
+                                  _buildDataCoinRow(isAr ? 'الكل' : 'All Time', totalCoins),
+                                ],
                               ),
-                              const SizedBox(height: 9),
-                              Text(
-                                'ID: ${widget.roomId}',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Color(0xB2FFFFFF),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Room Notice',
-                        style: TextStyle(
-                          fontSize: 15,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(minHeight: 105),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0x1AFFFFFF),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'Welcome to our room!\nPlease respect each other and have fun 🎉',
-                          style: TextStyle(fontSize: 13, color: Colors.white),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () {},
-                        child: Container(
-                          width: double.infinity,
-                          height: 50,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            gradient: AppColors.giftBtnGradient,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              R.image(
-                                R.roomFollowPre,
-                                width: 24,
-                                height: 24,
-                              ),
-                              const SizedBox(width: 5),
-                              const Text(
-                                'Follow',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // adapter_room_owner_data_coin_item.xml
+  Widget _buildDataCoinRow(String label, int coins) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0x14FFFFFF), // room_room_owner_data_item_bg
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // tv_time (12sp #979797)
+          Text(
+            label,
+            style: const TextStyle(color: Color(0xFF979797), fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          // tv_coin (17sp bold gold #FFFFF5AD + common_gold_ic_5)
+          Row(
+            children: [
+              Image.asset(
+                'assets/images/common_gold_ic_5.webp',
+                width: 20,
+                height: 20,
+                errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, color: Color(0xFFFFD700), size: 20),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$coins',
+                style: const TextStyle(
+                  color: Color(0xFFFFF5AD),
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -3124,105 +4529,221 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
+        final occupiedSeats = _seats.where((s) => s.isOccupied && s.user != null).toList();
+        final currentUserId = _currentUserId ?? '';
+        final seatedUserIds = occupiedSeats.map((s) => s.user!.id).toSet();
+
+        // Combine seated users and current user if not seated
+        final displayUsers = <Map<String, dynamic>>[];
+        for (final seat in occupiedSeats) {
+          final u = seat.user!;
+          displayUsers.add({
+            'user': u,
+            'isOnMic': true,
+            'isMuted': seat.isMuted,
+            'seatIndex': seat.index,
+          });
+        }
+        final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+        if (currentUser != null && !seatedUserIds.contains(currentUser.uid)) {
+          displayUsers.add({
+            'user': UserModel(
+              id: currentUser.uid,
+              name: currentUser.name,
+              avatar: currentUser.photoUrl,
+              level: currentUser.level,
+              customId: currentUser.customId,
+            ),
+            'isOnMic': false,
+            'isMuted': false,
+            'seatIndex': -1,
+          });
+        }
+
         return Container(
-          height: MediaQuery.of(context).size.height * 0.6,
+          height: MediaQuery.of(context).size.height * 0.65,
           decoration: const BoxDecoration(
-            color: Color(0xFF1B1414), // Dark background matching image
+            color: Colors.white,
             borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
           ),
           child: Column(
             children: [
-              const SizedBox(height: 16),
-              const Text(
-                'متصل',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
               const SizedBox(height: 12),
+              // Drag handle
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // idTitleTip
+              const Text(
+                'المتواجدين',
+                style: TextStyle(
+                  color: Color(0xFF333333),
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: Text(
-                    'الاستخدام:$_onlineCount',
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    'المتواجدين: $_onlineCount',
+                    style: const TextStyle(color: Color(0xFF999999), fontSize: 12),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                  itemCount: _seats.where((s) => s.isOccupied && s.user != null).length,
-                  itemBuilder: (context, index) {
-                    final occupiedSeats = _seats.where((s) => s.isOccupied && s.user != null).toList();
-                    final u = occupiedSeats[index].user!;
-                    final isMuted = occupiedSeats[index].isMuted;
-                    
-                    final bool isMale = true; // Defaulting to true as UserModel has no gender
-                    
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          ClipOval(child: _memberAvatar(u.avatar, 46)),
-                          const SizedBox(width: 12),
-                          Text(
-                            u.name,
-                            style: const TextStyle(color: Colors.white, fontSize: 14),
-                          ),
-                          const SizedBox(width: 8),
-                          // Wealth / Level badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF3B2A15),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
+                child: displayUsers.isEmpty
+                    ? const Center(
+                        child: Text('لا يوجد مستخدمون متصلون', style: TextStyle(color: Color(0xFF999999), fontSize: 14)),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        itemCount: displayUsers.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0x1A000000)),
+                        itemBuilder: (context, index) {
+                          final item = displayUsers[index];
+                          final u = item['user'] as UserModel;
+                          final bool isOnMic = item['isOnMic'] as bool;
+                          final bool isMuted = item['isMuted'] as bool;
+                          final bool isMale = true; // default
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
                             child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                const Icon(Icons.person, size: 10, color: Color(0xFFFFD700)),
-                                const SizedBox(width: 2),
-                                Text(
-                                  u.level.toString(),
-                                  style: const TextStyle(color: Color(0xFFFFD700), fontSize: 10),
+                                // iv_avatar (48×48)
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _openChatUserProfile(u.id ?? '', u.name, u.avatar ?? '');
+                                  },
+                                  child: SizedBox(
+                                    width: 48,
+                                    height: 48,
+                                    child: ClipOval(
+                                      child: _memberAvatar(u.avatar, 48),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // User info column
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              u.name,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Color(0xFF16151A),
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          if (isOnMic) ...[
+                                            const SizedBox(width: 4),
+                                            Image.asset(
+                                              R.mipmap('room_mic_label_ic'),
+                                              width: 19,
+                                              height: 16,
+                                              errorBuilder: (_, __, ___) => Icon(
+                                                isMuted ? Icons.mic_off : Icons.mic,
+                                                size: 14,
+                                                color: const Color(0xFFDE880F),
+                                              ),
+                                            ),
+                                          ],
+                                          const SizedBox(width: 4),
+                                          Image.asset(
+                                            isMale ? R.mipmap('sex_male_ic') : R.mipmap('sex_female_ic'),
+                                            width: 18,
+                                            height: 16,
+                                            errorBuilder: (_, __, ___) => Icon(
+                                              isMale ? Icons.male : Icons.female,
+                                              size: 14,
+                                              color: const Color(0xFF4A90E2),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 5),
+                                      // Level View / Medal
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [Color(0xFFFFC525), Color(0xFFDE880F)],
+                                          ),
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.star, size: 10, color: Colors.white),
+                                            const SizedBox(width: 2),
+                                            Text(
+                                              'Lv.${u.level}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // tv_kick_out / action button (room_user_kick_out_btn_bg)
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    if (!isOnMic) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('تمت دعوة ${u.name} للمايك')),
+                                      );
+                                    } else {
+                                      _openChatUserProfile(u.id ?? '', u.name, u.avatar ?? '');
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(color: const Color(0xFFDE880F), width: 1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      isOnMic ? 'الملف الشخصي' : 'دعوة للمايك',
+                                      style: const TextStyle(
+                                        color: Color(0xFFDE880F),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Mic icon
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFD3A350), // orange-ish bg
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isMuted ? Icons.mic_off : Icons.mic,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Gender icon
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: isMale ? const Color(0xFF4A90E2) : const Color(0xFFE91E63),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isMale ? Icons.male : Icons.female,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
@@ -3232,94 +4753,163 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
 
-  // ── Notifications sheet ───────────────────────────────────────
+
+  // ── Notifications sheet — layout_adapter_notice_item.xml ──────
   Widget _buildNotificationsSheet() {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final double screenH = MediaQuery.of(context).size.height;
+    final giftNotices = _sentGifts.reversed.take(30).toList();
+
     return Positioned.fill(
       child: GestureDetector(
         onTap: () => setState(() => _showNotifications = false),
         child: Container(
           color: Colors.black54,
-          alignment: Alignment.centerRight,
+          alignment: Alignment.bottomCenter,
           child: GestureDetector(
             onTap: () {},
             child: Container(
-              width: MediaQuery.of(context).size.width * 0.8,
-              height: double.infinity,
-              color: const Color(0xFF211211),
+              height: screenH * 0.65,
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Color(0xFF1B1A24),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black54, blurRadius: 16, offset: Offset(0, -4)),
+                ],
+              ),
               child: SafeArea(
+                top: false,
                 child: Column(
                   children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 10, bottom: 6),
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
                     Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: Row(
                         children: [
-                          const Text(
-                            'Notifications',
-                            style: TextStyle(fontSize: 16, color: Colors.white),
+                          Text(
+                            isAr ? 'إشعارات الغرفة والهدايا' : 'Room Notifications',
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                           ),
                           const Spacer(),
                           GestureDetector(
                             onTap: () => setState(() => _showNotifications = false),
-                            child: const Icon(Icons.close, color: Colors.white),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(color: Colors.white12, shape: BoxShape.circle),
+                              child: const Icon(Icons.close, color: Colors.white70, size: 18),
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    Container(height: 0.5, color: const Color(0x1AFFFFFF)),
+                    const Divider(color: Colors.white10, height: 1),
                     Expanded(
-                      child: ListView(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        children: [
-                          ListTile(
-                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                            leading: const Icon(Icons.favorite, color: Colors.red),
-                            title: const Text(
-                              'New like',
-                              style: TextStyle(color: Colors.white, fontSize: 14),
+                      child: giftNotices.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.notifications_none_rounded, size: 48, color: Colors.white24),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    isAr ? 'لا توجد إشعارات هدايا حالياً' : 'No gift notifications yet',
+                                    style: const TextStyle(color: Colors.white38, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              itemCount: giftNotices.length,
+                              itemBuilder: (ctx, index) {
+                                final gift = giftNotices[index];
+                                final senderName = gift.senderName.isNotEmpty ? gift.senderName : (isAr ? 'مستخدم' : 'User');
+                                final receiverName = gift.receiverName.isNotEmpty ? gift.receiverName : (isAr ? 'الجميع' : 'All');
+                                final giftName = gift.giftName;
+                                final giftCount = gift.giftCount > 0 ? gift.giftCount : 1;
+                                final iconAsset = gift.iconAsset;
+                                final defaultImg = gift.defaultImage;
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x22FFFFFF),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0x1AFFFFFF)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 18,
+                                        backgroundColor: Colors.white12,
+                                        backgroundImage: gift.senderAvatar.isNotEmpty
+                                            ? (gift.senderAvatar.startsWith('http')
+                                                ? NetworkImage(gift.senderAvatar) as ImageProvider
+                                                : AssetImage(gift.senderAvatar))
+                                            : null,
+                                        child: gift.senderAvatar.isEmpty
+                                            ? const Icon(Icons.person, color: Colors.white54, size: 18)
+                                            : null,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              senderName,
+                                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              '${isAr ? "أرسل إلى" : "Sent to"} $receiverName: $giftName',
+                                              style: const TextStyle(color: Color(0xFFFFA726), fontSize: 12),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (iconAsset.isNotEmpty || defaultImg.isNotEmpty) ...[
+                                        const SizedBox(width: 8),
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: iconAsset.isNotEmpty
+                                              ? R.image(iconAsset, width: 36, height: 36, fit: BoxFit.contain)
+                                              : (defaultImg.startsWith('http')
+                                                  ? Image.network(defaultImg, width: 36, height: 36, fit: BoxFit.contain)
+                                                  : R.image(defaultImg, width: 36, height: 36, fit: BoxFit.contain)),
+                                        ),
+                                      ],
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'x$giftCount',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w900,
+                                          color: Color(0xFFFFF456),
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
                             ),
-                            subtitle: const Text(
-                              'Someone liked your post',
-                              style: TextStyle(color: Colors.white38, fontSize: 12),
-                            ),
-                            trailing: const Text(
-                              '2m ago',
-                              style: TextStyle(color: Colors.white38, fontSize: 11),
-                            ),
-                          ),
-                          ListTile(
-                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                            leading: const Icon(Icons.person_add, color: Colors.blue),
-                            title: const Text(
-                              'New follower',
-                              style: TextStyle(color: Colors.white, fontSize: 14),
-                            ),
-                            subtitle: const Text(
-                              'User123 started following you',
-                              style: TextStyle(color: Colors.white38, fontSize: 12),
-                            ),
-                            trailing: const Text(
-                              '5m ago',
-                              style: TextStyle(color: Colors.white38, fontSize: 11),
-                            ),
-                          ),
-                          ListTile(
-                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                            leading: const Icon(Icons.card_giftcard, color: Colors.orange),
-                            title: const Text(
-                              'Gift received',
-                              style: TextStyle(color: Colors.white, fontSize: 14),
-                            ),
-                            subtitle: const Text(
-                              'You received a Crown gift',
-                              style: TextStyle(color: Colors.white38, fontSize: 12),
-                            ),
-                            trailing: const Text(
-                              '10m ago',
-                              style: TextStyle(color: Colors.white38, fontSize: 11),
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),
@@ -3347,36 +4937,104 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     Navigator.of(context).pop();
   }
 
-  void _cleanupUserSession() {
+  Future<void> _leaveRoomSession() async {
     if (_currentUserId == null) return;
+    final uid = _currentUserId!;
     final name = _currentUserName;
-    // Fire-and-forget: async cleanup that survives even if widget disposes
-    Future(() async {
+    final roomId = widget.roomId;
+
+    for (int i = 0; i < _seats.length; i++) {
+      if (_seats[i].user?.id == uid) {
+        _seats[i].state = SeatState.empty;
+        _seats[i].user = null;
+        try {
+          await _firebaseService.leaveSeat(roomId, i);
+        } catch (_) {}
+      }
+    }
+
+    try {
+      await _firebaseService.leaveSeatForUser(roomId, uid);
+    } catch (_) {}
+
+    if (name != null && name.isNotEmpty) {
       try {
-        // Remove any seat for this user in this room
-        await Supabase.instance.client
-            .from('room_seats')
-            .delete()
-            .eq('room_id', widget.roomId)
-            .eq('uid', _currentUserId!);
-        // Log exit message on Firestore so ALL users in the room see it
-        if (name != null && name.isNotEmpty) {
-          await _firebaseService.logExit(widget.roomId, name);
-        }
-        // Remove from room members (Firestore — same DB the stream listens to)
-        await _firebaseService.leaveRoom(widget.roomId, _currentUserId!);
-        await Supabase.instance.client
-            .from('room_members')
-            .delete()
-            .eq('room_id', widget.roomId)
-            .eq('uid', _currentUserId!);
+        await _firebaseService.logExit(roomId, name);
       } catch (_) {}
+    }
+
+    try {
+      await _firebaseService.leaveRoom(roomId, uid);
+    } catch (_) {}
+  }
+
+  void _cleanupUserSession() {
+    _leaveRoomSession();
+  }
+
+  // ────────────────────────────────────────────────────────────
+  // PRESENCE PING — نظام كشف وإزالة المستخدمين الصامتين (Zombie users)
+  // ────────────────────────────────────────────────────────────
+
+  /// يبدأ ping دوري كل 90 ثانية يحدّث حقل last_ping في Firestore.
+  /// إذا توقف الـ ping (انقطع الاتصال / أغلق التطبيق) يُزال المستخدم
+  /// تلقائياً بواسطة TTL checker عند دخول أي مستخدم للغرفة.
+  void _startPresencePing() {
+    _presencePingTimer?.cancel();
+    _presencePingTimer = Timer.periodic(const Duration(seconds: 90), (_) {
+      _updatePresencePing();
     });
+    // أول ping فوري عند الدخول
+    _updatePresencePing();
+  }
+
+  /// يرسل ping (يحدّث last_ping timestamp) لإثبات أن المستخدم ما زال في الغرفة.
+  void _updatePresencePing() {
+    if (_currentUserId == null) return;
+    final uid = _currentUserId!;
+    final roomId = widget.roomId;
+    // Fire-and-forget: لا نريد انتظار النتيجة
+    FirebaseFirestore.instance
+        .collection('room_members')
+        .doc('${roomId}_$uid')
+        .update({'last_ping': FieldValue.serverTimestamp()})
+        .catchError((_) {}); // تجاهل الأخطاء (المستخدم ربما لم يُسجَّل بعد)
+  }
+
+  /// يبحث عن أعضاء الغرفة الذين لم يرسلوا ping منذ أكثر من 5 دقائق
+  /// ويحذفهم من Firestore — يُستدعى عند كل انضمام جديد.
+  Future<void> _cleanupZombieUsers() async {
+    try {
+      final cutoff = Timestamp.fromDate(
+        DateTime.now().subtract(const Duration(minutes: 5)),
+      );
+      final snap = await FirebaseFirestore.instance
+          .collection('room_members')
+          .where('room_id', isEqualTo: widget.roomId)
+          .get();
+      int cleanedCount = 0;
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final lastPing = data['last_ping'];
+        if (lastPing is Timestamp && lastPing.compareTo(cutoff) < 0) {
+          final uid = data['uid'] as String?;
+          if (uid == null) continue;
+          await doc.reference.delete();
+          await _firebaseService.leaveSeatForUser(widget.roomId, uid);
+          cleanedCount++;
+        }
+      }
+      if (cleanedCount > 0) {
+        debugPrint('Cleaned $cleanedCount zombie user(s) from room ${widget.roomId}');
+      }
+    } catch (e) {
+      debugPrint('_cleanupZombieUsers error (non-fatal): $e');
+    }
   }
 
   void _exitRoom() {
     setState(() => _showExit = false);
-    _cleanupUserSession();
+    _leaveRoomSession();
     _roomAudio.dispose();
     Navigator.of(context).pop();
   }
@@ -3663,115 +5321,56 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  // ── Gift count popup ──────────────────────────────────────────
+  // ── Gift count popup (adapter_gift_count_item.xml / room_gift_count_bg.xml) ──
   void _showGiftCountMenu() {
-    const presetCounts = [
-      {'count': 1, 'label': '1 (مفرد)'},
-      {'count': 10, 'label': '10 (عشرة)'},
-      {'count': 66, 'label': '66 (سلسلة)'},
-      {'count': 88, 'label': '88 (حظ كبير)'},
-      {'count': 100, 'label': '100 (مائة)'},
-      {'count': 520, 'label': '520 (أحبك)'},
-      {'count': 1314, 'label': '1314 (إلى الأبد)'},
-    ];
+    const counts = [1314, 520, 188, 88, 66, 10, 1];
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF231B2A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Center(
+        child: Container(
+          width: 140,
+          margin: const EdgeInsets.only(bottom: 50),
+          decoration: BoxDecoration(
+            color: const Color(0xFF372928), // room_gift_count_bg
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: const [
+              BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 2),
+            ],
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const Text(
-                'اختر كمية الإرسال',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ...presetCounts.map(
-                    (p) => GestureDetector(
-                      onTap: () {
-                        setState(() => _giftCount = p['count'] as int);
-                        Navigator.pop(ctx);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _giftCount == (p['count'] as int)
-                              ? const Color(0xFFD3A350)
-                              : Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: _giftCount == (p['count'] as int)
-                                ? const Color(0xFFFFD700)
-                                : Colors.white12,
-                          ),
-                        ),
-                        child: Text(
-                          '${p['label']}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: _giftCount == (p['count'] as int)
-                                ? Colors.black
-                                : Colors.white,
-                          ),
-                        ),
+              for (int i = 0; i < counts.length; i++) ...[
+                InkWell(
+                  onTap: () {
+                    setState(() => _giftCount = counts[i]);
+                    Navigator.pop(ctx);
+                  },
+                  borderRadius: BorderRadius.vertical(
+                    top: i == 0 ? const Radius.circular(8) : Radius.zero,
+                    bottom: i == counts.length - 1 ? const Radius.circular(8) : Radius.zero,
+                  ),
+                  child: Container(
+                    height: 33, // adapter_gift_count_item tv_item_count height
+                    alignment: Alignment.center,
+                    child: Text(
+                      '${counts[i]}',
+                      style: TextStyle(
+                        fontSize: 12, // 12sp
+                        color: _giftCount == counts[i] ? const Color(0xFFFFD856) : Colors.white,
+                        fontWeight: _giftCount == counts[i] ? FontWeight.bold : FontWeight.normal,
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _showCustomCountDialog();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFD3A350), width: 1.2),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.edit, size: 12, color: Color(0xFFD3A350)),
-                          SizedBox(width: 4),
-                          Text(
-                            'كتابة رقم مخصص...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFFD3A350),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                ),
+                if (i < counts.length - 1)
+                  Container(
+                    height: 2, // view_line 2dp
+                    color: const Color(0xFF211211), // color_211211
                   ),
-                ],
-              ),
+              ],
             ],
           ),
         ),
@@ -3942,3 +5541,10 @@ class _MusicListSheet extends StatelessWidget {
   }
 }
 
+/// حالة زر الكومبو — Immutable لتجنب إعادة رسم شاشة الغرفة كلها
+class _ComboState {
+  final int seconds;
+  final int multiplier;
+  final bool firing;
+  const _ComboState(this.seconds, this.multiplier, this.firing);
+}

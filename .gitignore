@@ -78,3 +78,9 @@ flutter_logs.txt
 !.env.example
 serviceAccount.json
 admincore-dashboard/scripts/serviceAccount.json
+.vercel
+.env*
+
+# Stakpak session files
+.stakpak/session*
+.kilo/

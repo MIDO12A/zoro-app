@@ -72,6 +72,9 @@ export interface GiftModel {
   sortOrder: number;
   nameKey?: string;
   photoKey?: string;
+  receiverNameKey?: string;
+  receiverPhotoKey?: string;
+  countKey?: string;
   defaultImage?: string;
   wealthXp?: number;
   gemsXp?: number;
@@ -479,6 +482,7 @@ export interface HostAgencyModel {
   description?: string;
   phone?: string;
   owner_name?: string;
+  owner_avatar?: string;
   created_at: string;
 }
 
@@ -493,7 +497,32 @@ export interface HostAgencyMemberModel {
   diamonds_balance?: number;
   trial_ends_at?: string;
   user_name?: string;
+  custom_id?: string;
+  avatar_url?: string;
   joined_at: string;
+}
+
+export interface AgencyApplicationModel {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  custom_id?: string;
+  user_avatar?: string;
+  agency_type: 'host' | 'recharge';
+  agency_name: string;
+  agency_logo?: string;
+  country?: string;
+  whatsapp?: string;
+  description?: string;
+  doc_type?: string;
+  doc_number?: string;
+  doc_front_url?: string;
+  doc_back_url?: string;
+  video_url?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason?: string;
+  created_at: string;
+  reviewed_at?: string;
 }
 
 export interface CommissionSettingModel {
@@ -509,9 +538,12 @@ export interface HostMilestoneModel {
   id: string;
   title: string;
   target_diamonds: number;
-  reward_type: 'gold' | 'diamonds' | 'vip_days' | 'badge' | 'gift_item';
+  reward_type: 'gold' | 'diamonds' | 'vip_days' | 'badge' | 'gift_item' | 'salary_usd' | 'frame' | 'entry_effect';
   reward_value: number;
   reward_item_id: string | null;
+  reward_image_url?: string | null;
+  background_url?: string | null;
+  agent_commission_rate?: number;
   period_type: 'monthly' | 'weekly' | 'all_time';
   is_active: boolean;
   sort_order: number;
@@ -646,7 +678,7 @@ export interface CpCarModel {
 }
 
 export interface CpRankRewardModel {
-  id: number;
+  id: string | number;
   period: string;
   rank_position: number;
   slot_index: number;
@@ -655,6 +687,7 @@ export interface CpRankRewardModel {
   label_en: string;
   svga_url: string;
   image_url: string;
+  isActive?: boolean;
 }
 
 export interface SigninRewardModel {

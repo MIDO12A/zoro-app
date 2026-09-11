@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../config/r.dart' show R;
+import '../../config/r.dart';
 import '../../services/dynamic_config_service.dart';
 import '../../services/supabase_service.dart';
 import '../../models/store_item_model.dart';
@@ -232,9 +232,18 @@ class _BackpackScreenState extends State<BackpackScreen>
               child: Column(
                 children: [
                   Expanded(
-                    child: item.iconAsset.endsWith('.svga')
-                        ? SvgaPlayer(assetPath: item.iconAsset, width: 80, height: 80)
-                        : R.loadImage(item.iconAsset, fit: BoxFit.contain),
+                    child: Builder(builder: (_) {
+                      final hasSvga = (item.svgaAsset != null && item.svgaAsset!.isNotEmpty) ||
+                          item.iconAsset.endsWith('.svga') ||
+                          detectAssetType(item.iconAsset) == AssetType.svga;
+                      final svgaUrl = (item.svgaAsset != null && item.svgaAsset!.isNotEmpty)
+                          ? item.svgaAsset!
+                          : item.iconAsset;
+                      if (hasSvga) {
+                        return SvgaPlayer(assetPath: svgaUrl, width: 80, height: 80);
+                      }
+                      return R.loadImage(item.iconAsset, fit: BoxFit.contain);
+                    }),
                   ),
                   const SizedBox(height: 8),
                   dc.backpackTextImage.isNotEmpty

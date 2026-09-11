@@ -5,7 +5,6 @@ import '../../../core/supabase_compat.dart';
 
 import '../data/agency_models.dart';
 import '../data/agency_repository.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../../core/cache/encrypted_image_provider.dart';
 import '../../../screens/message/message_reply_detail_screen.dart';
@@ -22,7 +21,13 @@ import '../../../screens/message/message_reply_detail_screen.dart';
 //  Tab 4: سجل المعاملات
 // ═══════════════════════════════════════════════════════════════════
 class AgencyWithdrawalScreen extends StatefulWidget {
-  const AgencyWithdrawalScreen({super.key});
+  final int initialTab;
+  final int? initialDiamonds;
+  const AgencyWithdrawalScreen({
+    super.key,
+    this.initialTab = 0,
+    this.initialDiamonds,
+  });
 
   @override
   State<AgencyWithdrawalScreen> createState() => _AgencyWithdrawalScreenState();
@@ -40,7 +45,11 @@ class _AgencyWithdrawalScreenState extends State<AgencyWithdrawalScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 4, vsync: this);
+    _tabs = TabController(
+      length: 4,
+      vsync: this,
+      initialIndex: widget.initialTab.clamp(0, 3),
+    );
     _loadAll();
   }
 
@@ -120,7 +129,11 @@ debugPrint('[agency_withdrawal_screen] error: $e');
                       children: [
                         _ExchangeTab(member: _member!, engine: _engine!, onDone: _loadAll),
                         _WithdrawUsdTab(member: _member!, engine: _engine!, isKycVerified: _isKycVerified, onDone: _loadAll),
-                        _TransferRechargeTab(member: _member!, onDone: _loadAll),
+                        _TransferRechargeTab(
+                          member: _member!,
+                          initialDiamonds: widget.initialDiamonds,
+                          onDone: _loadAll,
+                        ),
                         const _TransactionHistoryTab(),
                       ],
                     ),
@@ -599,8 +612,13 @@ class _ILine extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════
 class _TransferRechargeTab extends StatefulWidget {
   final AgencyMemberInfo member;
+  final int? initialDiamonds;
   final VoidCallback onDone;
-  const _TransferRechargeTab({required this.member, required this.onDone});
+  const _TransferRechargeTab({
+    required this.member,
+    this.initialDiamonds,
+    required this.onDone,
+  });
 
   @override
   State<_TransferRechargeTab> createState() => _TransferRechargeTabState();
@@ -615,6 +633,15 @@ class _TransferRechargeTabState extends State<_TransferRechargeTab> {
   bool _processing  = false;
   int  _diamonds    = 0;
   Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialDiamonds != null && widget.initialDiamonds! > 0) {
+      _diamonds = widget.initialDiamonds!;
+      _diamondsCtrl.text = _diamonds.toString();
+    }
+  }
 
   @override
   void dispose() {

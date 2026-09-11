@@ -2,7 +2,7 @@ import { useContext, useEffect, useState } from 'react';
 import {
   HostAgencyModel, HostAgencyMemberModel, CommissionSettingModel,
   HostMilestoneModel, AgencyJoinRequestModel, AgencyLedgerEntryModel,
-  AgencyWithdrawalRequestModel,
+  AgencyWithdrawalRequestModel, AgencyApplicationModel,
 } from '../types';
 import {
   getHostAgencies, createHostAgency, updateHostAgency, deleteHostAgency,
@@ -10,20 +10,114 @@ import {
   getHostAgencyMembers, getHostMilestones, updateHostMilestone,
   createHostMilestone, deleteHostMilestone,
   getHostAgencyJoinRequests, approveJoinRequest, rejectJoinRequest,
-  updateAgencyMemberRole, removeAgencyMember,
+  updateAgencyMemberRole, removeAgencyMember, addAgencyMember,
+  getAgencyApplications, approveAgencyApplication, rejectAgencyApplication, createAgencyApplication,
+  updateRechargeAgency, revokeRechargeAgency,
   getAgencyLedger, getWithdrawalRequests, approveWithdrawal, rejectWithdrawal,
   getAppConfig, updateAppConfig,
+  searchUserProfile, sendSystemNotification, sendAgencyInvitation,
 } from '../lib/db';
 import { uploadStoreItem } from '../lib/storage';
 import { supabase } from '../lib/supabase';
+import { firebaseAuth } from '../lib/firebase';
 import { I18nContext } from '../lib/i18n';
 import DataTable from '../components/DataTable';
 import ImageUpload from '../components/ImageUpload';
-import { Handshake, Users, UserPlus, Wallet, Target, Settings, Sparkles, Save, CheckCircle2, RefreshCw } from 'lucide-react';
+import {
+  Handshake, Users, UserPlus, Wallet, Target, Settings, Sparkles,
+  Save, CheckCircle2, RefreshCw, ClipboardCheck, Plus, Trash2, Edit3,
+  XCircle, Check, ShieldCheck, UserMinus, Eye, ExternalLink,
+} from 'lucide-react';
+
+/* =============================================================
+   LIVE USER SEARCH & PREVIEW COMPONENT
+   ============================================================= */
+function UserSearchPreview({ query, onSelect }: { query?: string | null; onSelect?: (user: any) => void }) {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  useEffect(() => {
+    const q = (typeof query === 'string' ? query : '').trim();
+    if (!q || q.length < 2) {
+      setUser(null);
+      setSearched(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const u = await searchUserProfile(q);
+        setUser(u);
+        setSearched(true);
+        if (u && onSelect) onSelect(u);
+      } catch {
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const cleanQuery = (typeof query === 'string' ? query : '').trim();
+  if (!cleanQuery || cleanQuery.length < 2) return null;
+
+  if (loading) {
+    return (
+      <div className="mt-1.5 flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+        <span>جاري البحث عن بيانات المستخدم بالـ ID...</span>
+      </div>
+    );
+  }
+
+  if (searched && !user) {
+    return (
+      <div className="mt-1.5 flex items-center gap-2 text-xs text-rose-400 bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+        <XCircle className="w-3.5 h-3.5" />
+        <span>لم يتم العثور على مستخدم مسجل بهذا المعرف (UID / ID)</span>
+      </div>
+    );
+  }
+
+  if (user) {
+    return (
+      <div className="mt-1.5 flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+        <div className="flex items-center gap-2.5">
+          <img
+            src={user.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random`}
+            alt={user.name}
+            className="w-9 h-9 rounded-full object-cover border border-emerald-400/50"
+            onError={e => { (e.currentTarget as any).src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.name || 'User'); }}
+          />
+          <div>
+            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>{user.name}</span>
+              {user.is_recharge_agent && (
+                <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">وكيل شحن</span>
+              )}
+            </div>
+            <div className="text-[11px] text-slate-400 flex items-center gap-2">
+              <span className="text-emerald-400 font-mono font-bold">ID: #{user.custom_id}</span>
+              <span>•</span>
+              <span className="text-amber-400 font-bold">🪙 {user.coins.toLocaleString()} عملة</span>
+            </div>
+          </div>
+        </div>
+        <div className="text-[11px] text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md flex items-center gap-1">
+          <Check className="w-3 h-3" /> تم التعرف
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
 
 const tabs = [
   { key: 'agencies', label: 'الوكالات', labelKey: 'agency.agencies', icon: Handshake },
   { key: 'recharge_agencies', label: 'وكالات الشحن والرواتب', labelKey: 'agency.rechargeAgencies', icon: Wallet },
+  { key: 'agency_requests', label: 'طلبات فتح الوكالات', labelKey: 'agency.agencyRequests', icon: ClipboardCheck },
   { key: 'milestones', label: 'المراحل والتارجت والرواتب', labelKey: 'agency.milestones', icon: Target },
   { key: 'members', label: 'أعضاء الوكالات', labelKey: 'agency.members', icon: Users },
   { key: 'necklaces', label: 'قلادات الوكالة SVGA', labelKey: 'agency.necklaces', icon: Sparkles },
@@ -35,7 +129,13 @@ type Tab = typeof tabs[number]['key'];
 
 export default function AgencyPage() {
   const [tab, setTab] = useState<Tab>('agencies');
+  const [filterAgencyId, setFilterAgencyId] = useState<string>('');
   const { t } = useContext(I18nContext);
+
+  const handleViewAgencyMembers = (agencyId: string) => {
+    setFilterAgencyId(agencyId);
+    setTab('members');
+  };
 
   return (
     <div className="space-y-6">
@@ -52,10 +152,11 @@ export default function AgencyPage() {
           </button>
         ))}
       </div>
-      {tab === 'agencies' && <AgenciesTab />}
+      {tab === 'agencies' && <AgenciesTab onViewMembers={handleViewAgencyMembers} />}
       {tab === 'recharge_agencies' && <RechargeAgenciesTab />}
+      {tab === 'agency_requests' && <AgencyRequestsTab />}
       {tab === 'milestones' && <MilestonesTab />}
-      {tab === 'members' && <MembersTab />}
+      {tab === 'members' && <MembersTab initialAgencyId={filterAgencyId} />}
       {tab === 'necklaces' && <AgencyNecklacesTab />}
       {tab === 'join_requests' && <JoinRequestsTab />}
       {tab === 'financial' && <FinancialTab />}
@@ -67,7 +168,7 @@ export default function AgencyPage() {
 /* =============================================================
    1. AGENCIES TAB
    ============================================================= */
-function AgenciesTab() {
+function AgenciesTab({ onViewMembers }: { onViewMembers: (agencyId: string) => void }) {
   const { t } = useContext(I18nContext);
   const [agencies, setAgencies] = useState<HostAgencyModel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,37 +176,69 @@ function AgenciesTab() {
   const [editId, setEditId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [ownerId, setOwnerId] = useState('');
-  const [commissionRate, setCommissionRate] = useState('5');
+  const [commissionRate, setCommissionRate] = useState('10');
   const [specialty, setSpecialty] = useState('mixed');
   const [description, setDescription] = useState('');
   const [country, setCountry] = useState('');
   const [tier, setTier] = useState('bronze');
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [sendInviteMode, setSendInviteMode] = useState(false);
+  const [resolvedOwnerUser, setResolvedOwnerUser] = useState<any>(null);
 
   const load = () => { setLoading(true); getHostAgencies().then(d => { setAgencies(d); setLoading(false); }); };
   useEffect(() => { load(); }, []);
 
   const resetForm = () => {
-    setName(''); setOwnerId(''); setCommissionRate('5'); setSpecialty('mixed');
-    setDescription(''); setCountry(''); setTier('bronze'); setEditId(null);
+    setEditId(null); setName(''); setOwnerId(''); setCommissionRate('10');
+    setSpecialty('mixed'); setTier('bronze'); setDescription(''); setCountry(''); setPhotoUrl('');
+    setIsActive(true); setSendInviteMode(false); setResolvedOwnerUser(null);
   };
 
   const openEdit = (a: HostAgencyModel) => {
-    setName(a.name ?? ''); setOwnerId(a.owner_id ?? ''); setCommissionRate(String(a.commission_rate * 100));
-    setSpecialty(a.specialty); setDescription(a.description ?? ''); setCountry(a.country ?? '');
-    setTier(a.tier ?? 'bronze'); setEditId(a.id); setShowForm(true);
+    setEditId(a.id); setName(a.name); setOwnerId(a.owner_id);
+    setCommissionRate(String((a.commission_rate ?? 0.1) * 100));
+    setSpecialty(a.specialty ?? 'mixed'); setTier(a.tier ?? 'bronze');
+    setDescription(a.description ?? ''); setCountry(a.country ?? '');
+    setPhotoUrl(a.photo_url ?? ''); setIsActive(a.is_active ?? true);
+    setShowForm(true);
   };
 
   const handleSubmit = async () => {
-    if (!name?.trim() || !ownerId?.trim()) return;
-    if (editId) {
-      await updateHostAgency(editId, {
-        name: name.trim(), owner_id: ownerId.trim(),
-        commission_rate: parseInt(commissionRate) / 100,
-        specialty, description: description.trim() || null, country: country.trim() || null,
-        tier: tier as HostAgencyModel['tier'],
+    if (!name.trim() || !ownerId.trim()) return;
+    const finalOwnerId = resolvedOwnerUser?.id || ownerId.trim();
+    const adminName = firebaseAuth.currentUser?.displayName || firebaseAuth.currentUser?.email || 'إدارة التطبيق';
+
+    if (!editId && sendInviteMode) {
+      await sendAgencyInvitation({
+        userId: finalOwnerId,
+        agencyName: name.trim(),
+        adminName,
+        agencyLogo: photoUrl.trim() || undefined,
+        type: 'host',
       });
+      alert(`تم إرسال دعوة فتح الوكالة للمستخدم (${resolvedOwnerUser?.name || finalOwnerId}) بنجاح! سيصل إشعار للنظام بالتطبيق للتأكيد والقبول أو الرفض.`);
+      resetForm(); setShowForm(false); load();
+      return;
+    }
+
+    const payload = {
+      name: name.trim(),
+      owner_id: finalOwnerId,
+      commission_rate: (parseFloat(commissionRate) || 10) / 100,
+      specialty: specialty as any,
+      description: description.trim() || null,
+      country: country.trim() || null,
+      tier: tier as HostAgencyModel['tier'],
+      photo_url: photoUrl.trim() || null,
+      is_active: isActive,
+      adminName,
+    };
+    if (editId) {
+      await updateHostAgency(editId, payload);
     } else {
-      await createHostAgency(name.trim(), ownerId.trim(), parseInt(commissionRate) / 100, specialty);
+      await createHostAgency(payload.name, payload.owner_id, payload.commission_rate, payload.specialty, payload);
+      alert(`تم فتح وكالة (${payload.name}) وتفعيلها بنجاح، وتم إرسال إشعار تهنئة للمستخدم!`);
     }
     resetForm(); setShowForm(false); load();
   };
@@ -122,39 +255,88 @@ function AgenciesTab() {
       <div className="flex items-center justify-between mb-3">
         <p className="text-slate-500 text-xs">{agencies.length} {t('agency.agenciesCount')}</p>
         <button onClick={() => { resetForm(); setShowForm(!showForm); }}
-          className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors">
+          className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold transition-colors flex items-center gap-1.5">
+          <Plus className="w-3.5 h-3.5" />
           {showForm ? t('cancel') : t('agency.newAgency')}
         </button>
       </div>
+
       {showForm && (
         <div className="bg-[#141417] rounded-2xl border border-white/5 p-4 mb-4 space-y-3">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="text-white font-bold text-xs">{editId ? '✏️ تعديل بيانات الوكالة' : '✨ إضافة وكالة مضيفين جديدة'}</div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input value={name} onChange={e => setName(e.target.value)} placeholder={t('agency.name')}
               className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
-            <input value={ownerId} onChange={e => setOwnerId(e.target.value)} placeholder={t('agency.ownerId')}
-              className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
+            <div>
+              <input value={ownerId} onChange={e => setOwnerId(e.target.value)} placeholder="معرف المالك (UID أو ID المخصص)"
+                className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
+              <UserSearchPreview query={ownerId} onSelect={setResolvedOwnerUser} />
+            </div>
             <input value={country} onChange={e => setCountry(e.target.value)} placeholder={t('agency.country')}
               className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
           </div>
-          <div className="grid grid-cols-4 gap-3">
-            <input type="number" value={commissionRate} onChange={e => setCommissionRate(e.target.value)} placeholder={t('agency.commission')}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
-            <select value={specialty} onChange={e => setSpecialty(e.target.value)}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
-              <option value="mixed">{t('agency.specialty.mixed')}</option>
-              <option value="singing">{t('agency.specialty.singing')}</option>
-              <option value="gaming">{t('agency.specialty.gaming')}</option>
-              <option value="talk">{t('agency.specialty.talk')}</option>
-            </select>
-            <select value={tier} onChange={e => setTier(e.target.value)}
-              className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
-              {['bronze', 'silver', 'gold', 'platinum', 'diamond'].map(v => (
-                <option key={v} value={v}>{t(tierKey(v))}</option>
-              ))}
-            </select>
+
+          {!editId && (
+            <label className="flex items-center gap-2 cursor-pointer bg-indigo-500/10 border border-indigo-500/20 p-2.5 rounded-xl">
+              <input
+                type="checkbox"
+                checked={sendInviteMode}
+                onChange={e => setSendInviteMode(e.target.checked)}
+                className="w-4 h-4 rounded bg-[#161618] border-white/20 text-indigo-500 focus:ring-0"
+              />
+              <span className="text-xs text-indigo-300 font-bold">إرسال دعوة فتح الوكالة للمستخدم (يحتاج موافقة المالك من التطبيق)</span>
+            </label>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">نسبة العمولة (%)</label>
+              <input type="number" value={commissionRate} onChange={e => setCommissionRate(e.target.value)} placeholder="10"
+                className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600" />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">التخصص</label>
+              <select value={specialty} onChange={e => setSpecialty(e.target.value)}
+                className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="mixed">{t('agency.specialty.mixed')}</option>
+                <option value="singing">{t('agency.specialty.singing')}</option>
+                <option value="gaming">{t('agency.specialty.gaming')}</option>
+                <option value="talk">{t('agency.specialty.talk')}</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">الفئة (Tier)</label>
+              <select value={tier} onChange={e => setTier(e.target.value)}
+                className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+                {['bronze', 'silver', 'gold', 'platinum', 'diamond'].map(v => (
+                  <option key={v} value={v}>{t(tierKey(v))}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-400 block mb-1">حالة الوكالة</label>
+              <select value={isActive ? 'true' : 'false'} onChange={e => setIsActive(e.target.value === 'true')}
+                className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="true">نشطة (Active)</option>
+                <option value="false">معطلة (Inactive)</option>
+              </select>
+            </div>
           </div>
+
+          <div>
+            <label className="text-[10px] text-slate-400 block mb-1">شعار / صورة الوكالة</label>
+            <ImageUpload
+              currentUrl={photoUrl}
+              onUpload={file => uploadStoreItem(file, 'agency_logos')}
+              onUrlChange={url => setPhotoUrl(url)}
+              label="رفع شعار الوكالة"
+              accept="image/*"
+            />
+          </div>
+
           <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder={t('agency.description')}
             className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600 resize-none h-16" />
+
           <div className="flex gap-2">
             <button onClick={handleSubmit}
               className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded-lg font-semibold transition-colors">
@@ -169,11 +351,31 @@ function AgenciesTab() {
           </div>
         </div>
       )}
+
       <DataTable
         loading={loading}
         columns={[
-          { key: 'name', label: t('agency.col.name'), sortable: true },
-          { key: 'owner_name', label: t('agency.col.owner'), sortable: true },
+          { key: 'name', label: t('agency.col.name'), sortable: true, render: a => {
+            const ag = a as HostAgencyModel;
+            return (
+              <div className="flex items-center gap-2.5">
+                <img src={ag.photo_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(ag.name || 'Agency')}&background=random`} alt="" className="w-8 h-8 rounded-xl object-cover border border-amber-500/30" />
+                <div>
+                  <div className="text-white font-bold text-xs">{ag.name}</div>
+                  <div className="text-[10px] text-slate-500 font-mono">ID: {ag.id?.slice(0, 8)}</div>
+                </div>
+              </div>
+            );
+          }},
+          { key: 'owner_name', label: t('agency.col.owner'), sortable: true, render: a => {
+            const ag = a as HostAgencyModel;
+            return (
+              <div className="flex items-center gap-2">
+                {ag.owner_avatar && <img src={ag.owner_avatar} alt="" className="w-6 h-6 rounded-full object-cover border border-white/10" />}
+                <span className="text-slate-200 text-xs font-semibold">{ag.owner_name || ag.owner_id?.slice(0, 8)}</span>
+              </div>
+            );
+          }},
           { key: 'tier', label: t('agency.col.tier'), sortable: true, render: a => {
             const h = a as HostAgencyModel;
             const tierT = t(tierKey(h.tier ?? 'bronze'));
@@ -183,8 +385,18 @@ function AgenciesTab() {
             const s = (a as HostAgencyModel).specialty;
             return <span className="text-slate-400">{t(`agency.specialty.${s}` as any)}</span>;
           }},
-          { key: 'commission_rate', label: t('agency.col.commission'), sortable: true, render: a => <span>{(a as HostAgencyModel).commission_rate * 100}%</span> },
-          { key: 'member_count', label: t('agency.col.members'), sortable: true },
+          { key: 'commission_rate', label: t('agency.col.commission'), sortable: true, render: a => <span className="text-amber-400 font-semibold">{((a as HostAgencyModel).commission_rate ?? 0.1) * 100}%</span> },
+          { key: 'member_count', label: t('agency.col.members'), sortable: true, render: a => {
+            const h = a as HostAgencyModel;
+            return (
+              <button onClick={() => onViewMembers(h.id)}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 rounded-lg text-xs font-bold transition-all"
+                title="عرض أعضاء هذه الوكالة">
+                <Users className="w-3.5 h-3.5" />
+                <span>{h.member_count ?? 0} عضو</span>
+              </button>
+            );
+          }},
           { key: 'total_diamonds_earned', label: t('agency.col.totalDiamonds'), sortable: true, render: a => <span className="text-cyan-400">{(a as HostAgencyModel).total_diamonds_earned?.toLocaleString() ?? '0'}</span> },
           { key: 'monthly_diamonds', label: t('agency.col.monthlyDiamonds'), sortable: true, render: a => <span className="text-amber-400">{(a as HostAgencyModel).monthly_diamonds?.toLocaleString() ?? '0'}</span> },
           { key: 'country', label: t('agency.col.country'), sortable: true, render: a => <span className="text-slate-500 uppercase">{(a as HostAgencyModel).country || '—'}</span> },
@@ -207,12 +419,29 @@ function AgenciesTab() {
 /* =============================================================
    2. MEMBERS TAB
    ============================================================= */
-function MembersTab() {
+/* =============================================================
+   2. MEMBERS TAB
+   ============================================================= */
+function MembersTab({ initialAgencyId }: { initialAgencyId?: string }) {
   const { t } = useContext(I18nContext);
   const [members, setMembers] = useState<HostAgencyMemberModel[]>([]);
   const [agencies, setAgencies] = useState<HostAgencyModel[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterAgency, setFilterAgency] = useState('');
+  const [filterAgency, setFilterAgency] = useState(initialAgencyId || '');
+
+  // Add Member Modal State
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [addAgencyId, setAddAgencyId] = useState(initialAgencyId || '');
+  const [addUserQuery, setAddUserQuery] = useState('');
+  const [addRole, setAddRole] = useState('host');
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    if (initialAgencyId) {
+      setFilterAgency(initialAgencyId);
+      setAddAgencyId(initialAgencyId);
+    }
+  }, [initialAgencyId]);
 
   const load = async () => {
     setLoading(true);
@@ -226,9 +455,25 @@ function MembersTab() {
     load();
   };
 
-  const handleRemove = async (agencyId: string, userId: string) => {
-    if (confirm(t('agency.removeMemberConfirm'))) {
+  const handleRemove = async (agencyId: string, userId: string, userName?: string) => {
+    if (confirm(`هل أنت متأكد من إزالة ${userName || 'هذا العضو'} من الوكالة؟ سيتم فصله وتحديث عدد أعضاء الوكالة فوراً.`)) {
       await removeAgencyMember(agencyId, userId);
+      load();
+    }
+  };
+
+  const handleAddMember = async () => {
+    if (!addAgencyId || !addUserQuery.trim()) {
+      alert('يرجى اختيار الوكالة وإدخال رقم المعرف (ID) للمستخدم');
+      return;
+    }
+    setAdding(true);
+    const res = await addAgencyMember(addAgencyId, addUserQuery.trim(), addRole);
+    alert(res.message);
+    setAdding(false);
+    if (res.success) {
+      setShowAddMemberModal(false);
+      setAddUserQuery('');
       load();
     }
   };
@@ -240,61 +485,390 @@ function MembersTab() {
   };
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-3">
-        <p className="text-slate-500 text-xs">{members.length} {t('agency.membersCount')}</p>
-        <select value={filterAgency} onChange={e => setFilterAgency(e.target.value)}
-          className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
-          <option value="">{t('agency.filterAgency')}</option>
-          {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <p className="text-slate-500 text-xs">{members.length} {t('agency.membersCount')}</p>
+          <select value={filterAgency} onChange={e => setFilterAgency(e.target.value)}
+            className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="">جميع الوكالات ({agencies.length})</option>
+            {agencies.map(a => <option key={a.id} value={a.id}>{a.name} ({a.member_count ?? 0} عضو)</option>)}
+          </select>
+        </div>
+
+        <button onClick={() => { setAddAgencyId(filterAgency || (agencies[0]?.id ?? '')); setShowAddMemberModal(true); }}
+          className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
+          <Plus className="w-3.5 h-3.5" />
+          ➕ إضافة عضو للوكالة بالـ ID
+        </button>
       </div>
+
+      {showAddMemberModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h4 className="text-white font-bold text-sm">➕ إضافة عضو جديد لوكالة مضيفين</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">اختر الوكالة *</label>
+                <select value={addAgencyId} onChange={e => setAddAgencyId(e.target.value)}
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white">
+                  {agencies.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم أو رقم المعرف (Custom ID) *</label>
+                <input value={addUserQuery} onChange={e => setAddUserQuery(e.target.value)} placeholder="مثال: 123456 أو UID"
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white placeholder:text-slate-600" />
+                <UserSearchPreview query={addUserQuery} />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">الرتبة في الوكالة</label>
+                <select value={addRole} onChange={e => setAddRole(e.target.value)}
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white">
+                  <option value="host">مضيف (Host)</option>
+                  <option value="supervisor">مشرف (Supervisor)</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 text-xs text-slate-400 hover:text-white">إلغاء</button>
+              <button onClick={handleAddMember} disabled={adding}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all">
+                {adding ? 'جاري الإضافة...' : 'تأكيد الإضافة'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <DataTable
         loading={loading}
         columns={[
-          { key: 'user_name', label: t('agency.col.name'), sortable: true },
-          { key: 'agency_id', label: t('agency.col.name'), sortable: true, render: m => {
+          { key: 'user_name', label: 'العضو', sortable: true, render: m => {
+            const mem = m as HostAgencyMemberModel;
+            return (
+              <div className="flex items-center gap-2.5">
+                <img src={mem.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(mem.user_name || 'User')}&background=random`} alt="" className="w-8 h-8 rounded-full object-cover border border-white/10 shrink-0" />
+                <div>
+                  <div className="text-white font-bold text-xs">{mem.user_name || 'مستخدم'}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">ID: {mem.custom_id || mem.user_id?.slice(0, 8)}</div>
+                </div>
+              </div>
+            );
+          }},
+          { key: 'agency_id', label: 'الوكالة', sortable: true, render: m => {
             const member = m as HostAgencyMemberModel;
             const agency = agencies.find(a => a.id === member.agency_id);
-            return <span className="text-slate-300">{agency?.name ?? (member.agency_id?.slice(0, 8) ?? '')}</span>;
+            return <span className="text-indigo-300 font-semibold">{agency?.name ?? member.agency_id?.slice(0, 8)}</span>;
           }},
-          { key: 'role', label: t('agency.col.role'), sortable: true, render: m => {
+          { key: 'role', label: 'الرتبة', sortable: true, render: m => {
             const member = m as HostAgencyMemberModel;
-            const roleT = t(`agency.${member.role}` as any);
+            const roleT = member.role === 'owner' ? '👑 مالك' : member.role === 'supervisor' ? '⭐ مشرف' : '🎙️ مضيف';
             return <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${roleColors[member.role] ?? 'text-slate-400'}`}>{roleT}</span>;
           }},
-          { key: 'status', label: t('agency.col.status'), sortable: true, render: m => {
+          { key: 'status', label: 'الحالة', sortable: true, render: m => {
             const st = (m as HostAgencyMemberModel).status;
-            return <span className={st === 'active' ? 'text-emerald-400' : 'text-slate-500'}>{st}</span>;
+            return <span className={st === 'active' ? 'text-emerald-400 font-semibold' : 'text-slate-500'}>{st === 'active' ? 'نشط' : st}</span>;
           }},
-          { key: 'diamonds_earned_monthly', label: t('agency.col.monthlyDiamonds'), sortable: true, render: m => {
+          { key: 'diamonds_earned_monthly', label: 'ألماس الشهر', sortable: true, render: m => {
             const v = (m as HostAgencyMemberModel).diamonds_earned_monthly;
-            return <span className="text-amber-400">{v?.toLocaleString() ?? '0'}</span>;
+            return <span className="text-amber-400 font-semibold">{v?.toLocaleString() ?? '0'} 💎</span>;
           }},
-          { key: 'diamonds_balance', label: t('agency.col.balance'), sortable: true, render: m => {
+          { key: 'diamonds_balance', label: 'الرصيد القابل للسحب', sortable: true, render: m => {
             const v = (m as HostAgencyMemberModel).diamonds_balance;
-            return <span className="text-cyan-400">{v?.toLocaleString() ?? '0'}</span>;
+            return <span className="text-cyan-400 font-semibold">{v?.toLocaleString() ?? '0'} 💎</span>;
           }},
-          { key: 'joined_at', label: t('agency.col.joined'), sortable: true, render: m => new Date((m as HostAgencyMemberModel).joined_at).toLocaleDateString() },
-          { key: 'actions', label: t('agency.col.actions'), render: m => {
+          { key: 'joined_at', label: 'تاريخ الانضمام', sortable: true, render: m => new Date((m as HostAgencyMemberModel).joined_at).toLocaleDateString('ar-EG') },
+          { key: 'actions', label: 'الإجراءات', render: m => {
             const member = m as HostAgencyMemberModel;
-            if (member.role === 'owner') return <span className="text-[10px] text-slate-500">—</span>;
+            if (member.role === 'owner') return <span className="text-[10px] text-amber-400 font-semibold">مالك الوكالة</span>;
             return (
               <div className="flex items-center gap-2">
                 <select defaultValue="" onChange={e => { if (e.target.value) handleRoleChange(member.agency_id, member.user_id, e.target.value); }}
                   className="bg-[#161618] border border-white/10 rounded py-0.5 px-1 text-[10px] text-white">
-                  <option value="" disabled>{t('agency.roleChange')}</option>
-                  <option value="supervisor">{t('agency.supervisor')}</option>
-                  <option value="host">{t('agency.host')}</option>
+                  <option value="" disabled>تغيير الرتبة</option>
+                  <option value="supervisor">مشرف</option>
+                  <option value="host">مضيف</option>
                 </select>
-                <button onClick={() => handleRemove(member.agency_id, member.user_id)}
-                  className="text-[10px] text-rose-400 hover:text-rose-300 font-semibold">{t('agency.remove')}</button>
+                <button onClick={() => handleRemove(member.agency_id, member.user_id, member.user_name)}
+                  className="text-[10px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 px-2 py-0.5 rounded font-semibold transition-all">
+                  إزالة من الوكالة
+                </button>
               </div>
             );
           }},
         ]}
         data={members}
-        searchKeys={['user_name', 'role', 'status']}
+        searchKeys={['user_name', 'role', 'status', 'custom_id']}
+      />
+    </div>
+  );
+}
+
+/* =============================================================
+   AGENCY REQUESTS TAB (طلبات فتح الوكالات: قبول ورفض)
+   ============================================================= */
+function AgencyRequestsTab() {
+  const [requests, setRequests] = useState<AgencyApplicationModel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [rejectModalApp, setRejectModalApp] = useState<AgencyApplicationModel | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Manual Creation Modal
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newUserId, setNewUserId] = useState('');
+  const [newAgencyName, setNewAgencyName] = useState('');
+  const [newAgencyType, setNewAgencyType] = useState<'host' | 'recharge'>('host');
+  const [newWhatsapp, setNewWhatsapp] = useState('');
+  const [newCountry, setNewCountry] = useState('');
+
+  const load = () => {
+    setLoading(true);
+    getAgencyApplications(statusFilter || undefined, typeFilter || undefined).then(d => {
+      setRequests(d);
+      setLoading(false);
+    });
+  };
+
+  useEffect(() => { load(); }, [statusFilter, typeFilter]);
+
+  const handleApprove = async (app: AgencyApplicationModel) => {
+    if (!confirm(`هل أنت متأكد من قبول طلب فتح ${app.agency_type === 'host' ? 'وكالة المضيفين' : 'وكالة الشحن'} (${app.agency_name})؟ سيتم تفعيل الوكالة فوراً.`)) return;
+    setActionLoading(true);
+    const adminName = firebaseAuth?.currentUser?.displayName || firebaseAuth?.currentUser?.email || 'المشرف العام';
+    const res = await approveAgencyApplication(app, adminName);
+    alert(res.message);
+    setActionLoading(false);
+    load();
+  };
+
+  const handleReject = async () => {
+    if (!rejectModalApp) return;
+    setActionLoading(true);
+    const adminName = firebaseAuth?.currentUser?.displayName || firebaseAuth?.currentUser?.email || 'المشرف العام';
+    const res = await rejectAgencyApplication(rejectModalApp.id, rejectModalApp.user_id, rejectionReason, adminName);
+    alert(res.message);
+    setRejectModalApp(null);
+    setRejectionReason('');
+    setActionLoading(false);
+    load();
+  };
+
+  const handleCreateManual = async () => {
+    if (!newUserId.trim() || !newAgencyName.trim()) {
+      alert('يرجى ملء UID واسم الوكالة');
+      return;
+    }
+    await createAgencyApplication({
+      user_id: newUserId.trim(),
+      agency_name: newAgencyName.trim(),
+      agency_type: newAgencyType,
+      whatsapp: newWhatsapp.trim(),
+      country: newCountry.trim(),
+    });
+    setShowAddModal(false);
+    setNewUserId(''); setNewAgencyName(''); setNewWhatsapp(''); setNewCountry('');
+    load();
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+    approved: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
+    rejected: 'text-rose-400 bg-rose-400/10 border-rose-400/20',
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <p className="text-slate-500 text-xs">{requests.length} طلب</p>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="pending">⏳ قيد الانتظار (معلقة)</option>
+            <option value="approved">✅ المقبولة</option>
+            <option value="rejected">❌ المرفوضة</option>
+            <option value="">جميع الحالات</option>
+          </select>
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+            className="bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <option value="">جميع أنواع الوكالات</option>
+            <option value="host">🎙️ وكالات المضيفين</option>
+            <option value="recharge">🪙 وكالات الشحن</option>
+          </select>
+        </div>
+
+        <button onClick={() => setShowAddModal(true)}
+          className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-3.5 py-1.5 rounded-lg transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
+          <Plus className="w-3.5 h-3.5" />
+          ➕ إضافة طلب فتح وكالة يدوي
+        </button>
+      </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h4 className="text-white font-bold text-sm">✨ تسجيل طلب فتح وكالة جديد</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">نوع الوكالة</label>
+                <select value={newAgencyType} onChange={e => setNewAgencyType(e.target.value as any)}
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white">
+                  <option value="host">وكالة مضيفين (Host Agency)</option>
+                  <option value="recharge">وكالة شحن ورواتب (Recharge Agency)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم أو رقم المعرف *</label>
+                <input value={newUserId} onChange={e => setNewUserId(e.target.value)} placeholder="اكتب UID أو ID المستخدم"
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+                <UserSearchPreview query={newUserId} />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">اسم الوكالة المقترحة *</label>
+                <input value={newAgencyName} onChange={e => setNewAgencyName(e.target.value)} placeholder="مثال: وكالة النجوم"
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">رقم الواتساب</label>
+                <input value={newWhatsapp} onChange={e => setNewWhatsapp(e.target.value)} placeholder="+2010..."
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">الدولة</label>
+                <input value={newCountry} onChange={e => setNewCountry(e.target.value)} placeholder="مصر، السعودية..."
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 text-xs text-slate-400 hover:text-white">إلغاء</button>
+              <button onClick={handleCreateManual} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold">تسجيل الطلب</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectModalApp && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-rose-500/30 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h4 className="text-white font-bold text-sm flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-rose-400" />
+              رفض طلب فتح الوكالة: {rejectModalApp.agency_name}
+            </h4>
+            <p className="text-slate-400 text-xs">
+              يرجى كتابة سبب الرفض لتوضيحه لمقدم الطلب:
+            </p>
+            <textarea
+              value={rejectionReason}
+              onChange={e => setRejectionReason(e.target.value)}
+              placeholder="مثال: المستندات غير واضحة، لا يستوفي الشروط..."
+              className="w-full bg-[#121214] border border-white/10 rounded-xl p-3 text-xs text-white resize-none h-24 focus:outline-none focus:border-rose-500"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setRejectModalApp(null)} className="px-4 py-2 text-xs text-slate-400">إلغاء</button>
+              <button onClick={handleReject} disabled={actionLoading}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold">
+                {actionLoading ? 'جاري التنفيذ...' : 'تأكيد الرفض'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <DataTable
+        loading={loading}
+        columns={[
+          { key: 'user_name', label: 'مقدم الطلب', sortable: true, render: r => {
+            const req = r as AgencyApplicationModel;
+            return (
+              <div className="flex items-center gap-2.5">
+                <img src={req.user_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(req.user_name || 'User')}&background=random`} alt="" className="w-8 h-8 rounded-full object-cover border border-white/10 shrink-0" />
+                <div>
+                  <div className="text-white font-bold text-xs">{req.user_name || 'مستخدم'}</div>
+                  <div className="text-[10px] text-slate-400 font-mono">ID: {req.custom_id || req.user_id?.slice(0, 8)}</div>
+                </div>
+              </div>
+            );
+          }},
+          { key: 'agency_type', label: 'نوع الوكالة', sortable: true, render: r => {
+            const isHost = (r as AgencyApplicationModel).agency_type === 'host';
+            return (
+              <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border ${isHost ? 'bg-indigo-500/10 text-indigo-300 border-indigo-500/20' : 'bg-amber-500/10 text-amber-300 border-amber-500/20'}`}>
+                {isHost ? '🎙️ وكالة مضيفين' : '🪙 وكالة شحن'}
+              </span>
+            );
+          }},
+          { key: 'agency_name', label: 'اسم الوكالة', sortable: true, render: r => (
+            <span className="text-white font-bold text-xs">{(r as AgencyApplicationModel).agency_name}</span>
+          )},
+          { key: 'whatsapp', label: 'التواصل والدولة', render: r => {
+            const req = r as AgencyApplicationModel;
+            return (
+              <div className="text-[11px] space-y-0.5">
+                {req.whatsapp && <div className="text-emerald-400">📱 {req.whatsapp}</div>}
+                {req.country && <div className="text-slate-400">🌍 {req.country}</div>}
+              </div>
+            );
+          }},
+          { key: 'doc_number', label: 'الوثائق والإثباتات', render: r => {
+            const req = r as AgencyApplicationModel;
+            return (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {req.doc_front_url && (
+                  <a href={req.doc_front_url} target="_blank" rel="noreferrer"
+                    className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded border border-white/10 text-cyan-300 flex items-center gap-1">
+                    <Eye className="w-3 h-3" /> الوثيقة
+                  </a>
+                )}
+                {req.video_url && (
+                  <a href={req.video_url} target="_blank" rel="noreferrer"
+                    className="text-[10px] bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded border border-white/10 text-amber-300 flex items-center gap-1">
+                    <Eye className="w-3 h-3" /> الفيديو
+                  </a>
+                )}
+                {!req.doc_front_url && !req.video_url && <span className="text-[10px] text-slate-500">—</span>}
+              </div>
+            );
+          }},
+          { key: 'status', label: 'الحالة', sortable: true, render: r => {
+            const st = (r as AgencyApplicationModel).status;
+            return (
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusColors[st] ?? 'text-slate-400'}`}>
+                {st === 'approved' ? '✅ مقبول' : st === 'rejected' ? '❌ مرفوض' : '⏳ قيد المراجعة'}
+              </span>
+            );
+          }},
+          { key: 'created_at', label: 'التاريخ', sortable: true, render: r => new Date((r as AgencyApplicationModel).created_at).toLocaleDateString('ar-EG') },
+          { key: 'actions', label: 'الإجراءات', render: r => {
+            const req = r as AgencyApplicationModel;
+            if (req.status === 'pending') {
+              return (
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => handleApprove(req)} disabled={actionLoading}
+                    className="text-[10px] bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1">
+                    <Check className="w-3 h-3" /> قبول
+                  </button>
+                  <button onClick={() => { setRejectModalApp(req); setRejectionReason(''); }} disabled={actionLoading}
+                    className="text-[10px] bg-rose-500/20 text-rose-400 hover:bg-rose-500/30 border border-rose-500/30 px-2.5 py-1 rounded-lg font-bold transition-all flex items-center gap-1">
+                    <XCircle className="w-3 h-3" /> رفض
+                  </button>
+                </div>
+              );
+            }
+            if (req.status === 'approved') {
+              return <span className="text-[10px] text-emerald-400 font-bold">تم القبول والتفعيل</span>;
+            }
+            return (
+              <div className="text-[10px] text-rose-400">
+                مرفوض {req.rejection_reason ? `(${req.rejection_reason})` : ''}
+              </div>
+            );
+          }},
+        ]}
+        data={requests}
+        searchKeys={['user_name', 'agency_name', 'custom_id', 'country', 'whatsapp']}
       />
     </div>
   );
@@ -479,6 +1053,8 @@ function MilestonesTab() {
   const [rewardType, setRewardType] = useState('salary_usd');
   const [rewardValue, setRewardValue] = useState('100');
   const [rewardItemId, setRewardItemId] = useState('');
+  const [rewardImageUrl, setRewardImageUrl] = useState('');
+  const [backgroundUrl, setBackgroundUrl] = useState('');
   const [agentCommissionRate, setAgentCommissionRate] = useState('10');
   const [periodType, setPeriodType] = useState('monthly');
   const [sortOrder, setSortOrder] = useState('0');
@@ -497,22 +1073,25 @@ function MilestonesTab() {
 
   const resetForm = () => {
     setTitle(''); setTargetDiamonds('1000000'); setRewardType('salary_usd');
-    setRewardValue('100'); setRewardItemId(''); setAgentCommissionRate('10');
-    setPeriodType('monthly'); setSortOrder('0'); setIsActive(true);
+    setRewardValue('100'); setRewardItemId(''); setRewardImageUrl(''); setBackgroundUrl('');
+    setAgentCommissionRate('10'); setPeriodType('monthly'); setSortOrder('0'); setIsActive(true);
     setEditId(null); setShowItemPicker(false);
   };
 
   const openEdit = (m: any) => {
     setEditId(m.id);
     setTitle(m.title ?? '');
-    setTargetDiamonds(String(m.target_diamonds ?? 1000000));
-    setRewardType(m.reward_type ?? 'salary_usd');
-    setRewardValue(String(m.reward_value ?? 100));
-    setRewardItemId(m.reward_item_id ?? '');
-    setAgentCommissionRate(String((m.agent_commission_rate ?? 0.1) * 100));
-    setPeriodType(m.period_type ?? 'monthly');
-    setSortOrder(String(m.sort_order ?? 0));
-    setIsActive(m.is_active !== false);
+    setTargetDiamonds(String(m.target_diamonds ?? m.targetDiamonds ?? 1000000));
+    setRewardType(m.reward_type ?? m.rewardType ?? 'salary_usd');
+    setRewardValue(String(m.reward_value ?? m.rewardValue ?? 100));
+    setRewardItemId(m.reward_item_id ?? m.rewardItemId ?? '');
+    setRewardImageUrl(m.reward_image_url ?? m.rewardImageUrl ?? m.image_url ?? '');
+    setBackgroundUrl(m.background_url ?? m.backgroundUrl ?? '');
+    const rate = Number(m.agent_commission_rate ?? m.agentCommissionRate ?? 0.1);
+    setAgentCommissionRate(String((rate * 100).toFixed(0)));
+    setPeriodType(m.period_type ?? m.periodType ?? 'monthly');
+    setSortOrder(String(m.sort_order ?? m.sortOrder ?? 0));
+    setIsActive(m.is_active !== false && m.isActive !== false);
     setShowForm(true);
   };
 
@@ -524,6 +1103,8 @@ function MilestonesTab() {
       reward_type: rewardType as any,
       reward_value: parseFloat(rewardValue) || 0,
       reward_item_id: rewardItemId.trim() || null,
+      reward_image_url: rewardImageUrl.trim() || null,
+      background_url: backgroundUrl.trim() || null,
       agent_commission_rate: (parseFloat(agentCommissionRate) || 0) / 100,
       period_type: periodType as any,
       is_active: isActive,
@@ -697,6 +1278,34 @@ function MilestonesTab() {
             )}
           </div>
 
+          {/* Image and Background Upload for the Milestone */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-[#121214] p-3 rounded-xl border border-white/5">
+            <div>
+              <label className="text-[11px] text-indigo-400 font-bold block mb-1">🖼️ صورة / أيقونة / SVGA المرحلة</label>
+              <ImageUpload
+                currentUrl={rewardImageUrl}
+                onUpload={async (file) => {
+                  const url = await uploadStoreItem(file, 'milestones');
+                  setRewardImageUrl(url);
+                  return url;
+                }}
+                onClear={() => setRewardImageUrl('')}
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-purple-400 font-bold block mb-1">🎨 صورة خلفية كرت المرحلة (اختياري)</label>
+              <ImageUpload
+                currentUrl={backgroundUrl}
+                onUpload={async (file) => {
+                  const url = await uploadStoreItem(file, 'milestones_bg');
+                  setBackgroundUrl(url);
+                  return url;
+                }}
+                onClear={() => setBackgroundUrl('')}
+              />
+            </div>
+          </div>
+
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
             <button type="button" onClick={() => { resetForm(); setShowForm(false); }}
               className="text-xs text-slate-400 hover:text-white px-4 py-2 rounded-xl transition-all">
@@ -713,17 +1322,36 @@ function MilestonesTab() {
       <DataTable
         loading={loading}
         columns={[
-          { key: 'title', label: 'المرحلة / التارجت', sortable: true, render: m => <span className="font-bold text-white">{(m as any).title}</span> },
-          { key: 'target_diamonds', label: 'الهدف 💎', sortable: true, render: m => <span className="text-cyan-400 font-bold">{(m as any).target_diamonds?.toLocaleString() ?? '0'} 💎</span> },
-          { key: 'reward_type', label: 'نوع المكافأة', sortable: true, render: m => {
-            const rt = (m as any).reward_type;
-            return <span className="text-amber-400 font-semibold">{rt === 'salary_usd' ? '💵 راتب USD' : rt === 'gold' ? '🪙 عملات' : rt}</span>;
+          { key: 'reward_image_url', label: 'الأيقونة', render: m => {
+            const img = (m as any).reward_image_url || (m as any).rewardImageUrl || (m as any).image_url;
+            return img ? (
+              <img src={img} alt="" className="w-8 h-8 rounded-lg object-contain bg-white/5 p-1 border border-white/10" />
+            ) : <span className="text-slate-600 text-xs">—</span>;
           }},
-          { key: 'reward_value', label: 'قيمة الراتب / المكافأة', sortable: true, render: m => <span className="text-emerald-400 font-bold">{(m as any).reward_value} {(m as any).reward_type === 'salary_usd' ? '$' : ''}</span> },
-          { key: 'agent_commission_rate', label: 'عمولة الوكيل (%)', sortable: true, render: m => <span className="text-amber-400 font-bold">{(((m as any).agent_commission_rate ?? 0.1) * 100).toFixed(0)}%</span> },
-          { key: 'period_type', label: 'الفترة', sortable: true, render: m => <span className="text-slate-400">{(m as any).period_type}</span> },
+          { key: 'title', label: 'المرحلة / التارجت', sortable: true, render: m => <span className="font-bold text-white">{(m as any).title}</span> },
+          { key: 'target_diamonds', label: 'الهدف 💎', sortable: true, render: m => {
+            const val = Number((m as any).target_diamonds ?? (m as any).targetDiamonds ?? 0);
+            return <span className="text-cyan-400 font-bold">{val.toLocaleString()} 💎</span>;
+          }},
+          { key: 'reward_type', label: 'نوع المكافأة', sortable: true, render: m => {
+            const rt = (m as any).reward_type ?? (m as any).rewardType;
+            return <span className="text-amber-400 font-semibold">{rt === 'salary_usd' ? '💵 راتب USD' : rt === 'gold' ? '🪙 عملات' : rt === 'diamonds' ? '💎 ألماس' : rt === 'frame' ? '🖼️ إطار' : rt === 'badge' ? '🏅 وسام' : rt === 'entry_effect' ? '🚗 مؤثر دخول' : rt === 'vip_days' ? '👑 أيام VIP' : rt || '—'}</span>;
+          }},
+          { key: 'reward_value', label: 'قيمة الراتب / المكافأة', sortable: true, render: m => {
+            const val = (m as any).reward_value ?? (m as any).rewardValue ?? '';
+            const rt = (m as any).reward_type ?? (m as any).rewardType;
+            return <span className="text-emerald-400 font-bold">{val} {rt === 'salary_usd' ? '$' : rt === 'gold' ? '🪙' : rt === 'diamonds' ? '💎' : rt === 'vip_days' ? 'يوم' : ''}</span>;
+          }},
+          { key: 'agent_commission_rate', label: 'عمولة الوكيل (%)', sortable: true, render: m => {
+            const rate = Number((m as any).agent_commission_rate ?? (m as any).agentCommissionRate ?? 0.1);
+            return <span className="text-amber-400 font-bold">{(rate * 100).toFixed(0)}%</span>;
+          }},
+          { key: 'period_type', label: 'الفترة', sortable: true, render: m => {
+            const pt = (m as any).period_type ?? (m as any).periodType;
+            return <span className="text-slate-400">{pt === 'monthly' ? 'شهري' : pt === 'weekly' ? 'أسبوعي' : pt === 'all_time' ? 'تراكمي' : pt === 'daily' ? 'يومي' : pt || '—'}</span>;
+          }},
           { key: 'is_active', label: 'نشط', sortable: true, render: m => {
-            const active = (m as any).is_active !== false;
+            const active = (m as any).is_active !== false && (m as any).isActive !== false;
             return <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>{active ? 'نعم' : 'لا'}</span>;
           }},
         ]}
@@ -754,6 +1382,15 @@ function RechargeAgenciesTab() {
   const [agencyLogo, setAgencyLogo] = useState('');
   const [whatsappPhone, setWhatsappPhone] = useState('');
   const [initialCoins, setInitialCoins] = useState('0');
+  const [rechargeCommissionRate, setRechargeCommissionRate] = useState('5');
+
+  // Edit Agent Modal
+  const [editAgent, setEditAgent] = useState<any | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editLogo, setEditLogo] = useState('');
+  const [editWhatsapp, setEditWhatsapp] = useState('');
+  const [editCoins, setEditCoins] = useState('0');
+  const [editCommissionRate, setEditCommissionRate] = useState('5');
 
   // Recharge User Form
   const [rechargeUserUid, setRechargeUserUid] = useState('');
@@ -767,11 +1404,8 @@ function RechargeAgenciesTab() {
   const load = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Recharge Agents
       const { data: usersData } = await supabase.from('users').select('*').eq('is_recharge_agent', true);
       setAgents(usersData || []);
-
-      // 2. Fetch Withdrawals
       const { data: wData } = await supabase.from('agency_withdrawal_requests').select('*').order('created_at', { ascending: false });
       setWithdrawals(wData || []);
     } catch (_) {}
@@ -781,33 +1415,94 @@ function RechargeAgenciesTab() {
   useEffect(() => { load(); }, []);
 
   const handleCreateRechargeAgent = async () => {
-    if (!targetUid.trim()) { alert('يرجى كتابة UID المستخدم'); return; }
-    await supabase.from('users').update({
-      is_recharge_agent: true,
+    const q = targetUid.trim();
+    if (!q) { alert('يرجى كتابة UID أو رقم المعرف (ID) للمستخدم'); return; }
+
+    // Resolve user
+    const u = await searchUserProfile(q);
+    const userId = u ? u.id : q;
+    const adminName = firebaseAuth?.currentUser?.displayName || firebaseAuth?.currentUser?.email || 'المشرف العام';
+
+    await updateRechargeAgency(userId, {
       recharge_agency_name: agencyName.trim() || 'وكالة الشحن المعتمدة',
-      recharge_agency_logo: agencyLogo.trim(),
-      whatsapp_number: whatsappPhone.trim(),
-      coins: (parseInt(initialCoins) || 0),
-    }).eq('id', targetUid.trim());
+      recharge_agency_logo: agencyLogo.trim() || undefined,
+      whatsapp_number: whatsappPhone.trim() || undefined,
+      coins: parseInt(initialCoins) || 0,
+      recharge_commission_rate: parseFloat(rechargeCommissionRate) || 5,
+      adminName,
+    });
 
     setShowAddModal(false);
     setTargetUid(''); setAgencyName(''); setAgencyLogo(''); setWhatsappPhone(''); setInitialCoins('0');
+    setRechargeCommissionRate('5');
+    alert(`تم تعيين وتفعيل وكيل الشحن (${u?.name || userId}) بنجاح وإرسال إشعار تهنئة له باسم المشرف [${adminName}]!`);
     load();
   };
 
+  const openEditModal = (ag: any) => {
+    setEditAgent(ag);
+    setEditName(ag.recharge_agency_name || ag.name || '');
+    setEditLogo(ag.recharge_agency_logo || '');
+    setEditWhatsapp(ag.whatsapp_number || '');
+    setEditCoins(String(ag.coins || 0));
+    setEditCommissionRate(String(ag.recharge_commission_rate ?? 5));
+  };
+
+  const handleSaveEditAgent = async () => {
+    if (!editAgent) return;
+    const adminName = firebaseAuth?.currentUser?.displayName || firebaseAuth?.currentUser?.email || 'المشرف العام';
+    await updateRechargeAgency(editAgent.id, {
+      recharge_agency_name: editName.trim() || 'وكالة الشحن المعتمدة',
+      recharge_agency_logo: editLogo.trim() || undefined,
+      whatsapp_number: editWhatsapp.trim() || undefined,
+      coins: parseInt(editCoins) || 0,
+      recharge_commission_rate: parseFloat(editCommissionRate) || 5,
+      adminName,
+    });
+    setEditAgent(null);
+    alert('تم تحديث بيانات وكالة الشحن بنجاح!');
+    load();
+  };
+
+  const handleRevokeAgent = async (ag: any) => {
+    if (confirm(`هل أنت متأكد من سحب صفة وكيل الشحن من "${ag.recharge_agency_name || ag.name}"؟`)) {
+      await revokeRechargeAgency(ag.id);
+      alert('تم سحب صفة وكيل الشحن بنجاح');
+      load();
+    }
+  };
+
   const handleRechargeUser = async () => {
-    if (!rechargeUserUid.trim() || !rechargeCoinsAmount) return;
+    const q = rechargeUserUid.trim();
+    if (!q || !rechargeCoinsAmount) return;
     const amount = parseInt(rechargeCoinsAmount) || 0;
     if (amount <= 0) return;
 
-    // Increment user coins
-    const { data: u } = await supabase.from('users').select('coins').eq('id', rechargeUserUid.trim()).maybeSingle();
-    const currentCoins = Number(u?.coins || 0);
-    await supabase.from('users').update({ coins: currentCoins + amount }).eq('id', rechargeUserUid.trim());
+    // Resolve user by id or custom_id
+    const u = await searchUserProfile(q);
+    if (!u) {
+      alert('لم يتم العثور على مستخدم بهذا الـ ID أو المعرف');
+      return;
+    }
 
-    alert(`تم شحن ${amount} عملة للمستخدم بنجاح!`);
+    const currentCoins = Number(u.coins || 0);
+    const newCoins = currentCoins + amount;
+    await supabase.from('users').update({ coins: newCoins }).eq('id', u.id);
+
+    const adminName = firebaseAuth?.currentUser?.displayName || firebaseAuth?.currentUser?.email || 'المشرف العام';
+    await sendSystemNotification({
+      userId: u.id,
+      title: '🪙 شحن رصيد عملات لحسابك',
+      body: `مبروك! قام المشرف [${adminName}] بشحن ${amount.toLocaleString()} عملة ذهبية لحسابك بنجاح. رصيدك الحالي الآن: ${newCoins.toLocaleString()} عملة.`,
+      type: 'system',
+      action: 'coins_recharged',
+      extraData: { amount, new_balance: newCoins, admin_name: adminName },
+    });
+
+    alert(`تم شحن ${amount.toLocaleString()} عملة للمستخدم (${u.name || u.id}) بنجاح! الرصيد الجديد: ${newCoins.toLocaleString()}`);
     setShowRechargeModal(false);
     setRechargeUserUid('');
+    setRechargeCoinsAmount('');
     load();
   };
 
@@ -821,7 +1516,7 @@ function RechargeAgenciesTab() {
 
   const handleCompleteTransferWithProof = async () => {
     if (!selectedWithdrawal || !proofUrl.trim()) {
-      alert('يرجى رفع إثبات / سكرين التحويل أولاً لحماية المستخدم');
+      alert('يرجى رفع إثبات / سكرين التحويل أولاً لحماية حقوق المضيف');
       return;
     }
     await supabase.from('agency_withdrawal_requests').update({
@@ -841,7 +1536,7 @@ function RechargeAgenciesTab() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-white text-sm font-bold">⚡ إدارة وكالات الشحن وتحويلات الرواتب</h3>
-          <p className="text-slate-400 text-xs mt-0.5">فتح وكالات الشحن للمستخدمين، شحن الرصيد بالـ ID، واستقبال وإتمام طلبات سحب الرواتب مع إثبات التحويل</p>
+          <p className="text-slate-400 text-xs mt-0.5">فتح وكالات الشحن، التحكم بنسب العمولة والرصيد، واستقبال طلبات سحب الرواتب مع إثبات التحويل</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowRechargeModal(true)}
@@ -858,18 +1553,35 @@ function RechargeAgenciesTab() {
       {/* Recharge Agents Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {agents.map(ag => (
-          <div key={ag.id} className="bg-[#18181b] border border-white/5 rounded-2xl p-4 space-y-3 relative overflow-hidden">
+          <div key={ag.id} className="bg-[#18181b] border border-white/5 rounded-2xl p-4 space-y-3 relative overflow-hidden shadow-lg">
             <div className="flex items-center gap-3">
-              <img src={ag.recharge_agency_logo || ag.photo_url || ag.avatar || 'https://via.placeholder.com/80'} alt="" className="w-12 h-12 rounded-xl object-cover border border-amber-500/30" />
-              <div>
-                <div className="text-white text-xs font-bold">{ag.recharge_agency_name || ag.name}</div>
-                <div className="text-[11px] text-slate-400 font-mono">UID: {ag.custom_id || ag.id}</div>
+              <img src={ag.recharge_agency_logo || ag.photo_url || ag.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(ag.recharge_agency_name || ag.name || 'Agent')}&background=random`} alt="" className="w-12 h-12 rounded-xl object-cover border border-amber-500/30 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <div className="text-white text-xs font-bold truncate">{ag.recharge_agency_name || ag.name}</div>
+                <div className="text-[11px] text-slate-400 font-mono">ID: {ag.custom_id || ag.id?.slice(0, 8)}</div>
                 {ag.whatsapp_number && <div className="text-[10px] text-emerald-400">📱 واتساب: {ag.whatsapp_number}</div>}
               </div>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t border-white/5">
-              <span className="text-xs text-slate-400">رصيد الوكالة:</span>
+
+            <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
+              <span className="text-slate-400">نسبة العمولة:</span>
+              <span className="text-amber-300 font-bold">{ag.recharge_commission_rate ?? 5}%</span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">رصيد الوكالة:</span>
               <span className="text-sm text-amber-400 font-bold">{Number(ag.coins || 0).toLocaleString()} 🪙</span>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+              <button onClick={() => openEditModal(ag)}
+                className="flex-1 py-1 text-center bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 border border-indigo-500/20 rounded-lg text-[10px] font-bold transition-all">
+                ✏️ تعديل البيانات
+              </button>
+              <button onClick={() => handleRevokeAgent(ag)}
+                className="py-1 px-2.5 text-center bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-[10px] font-bold transition-all">
+                ⛔ سحب الوكالة
+              </button>
             </div>
           </div>
         ))}
@@ -909,8 +1621,8 @@ function RechargeAgenciesTab() {
                   )}
                   {req.transfer_screenshot_url && (
                     <a href={req.transfer_screenshot_url} target="_blank" rel="noreferrer"
-                      className="text-[10px] text-indigo-400 underline font-semibold">
-                      👁️ إثبات التحويل
+                      className="text-[10px] text-indigo-400 underline font-semibold flex items-center gap-1">
+                      <Eye className="w-3 h-3" /> إثبات التحويل
                     </a>
                   )}
                 </div>
@@ -925,13 +1637,14 @@ function RechargeAgenciesTab() {
       {/* Add Recharge Agency Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4">
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
             <h4 className="text-white font-bold text-sm">✨ تعيين وكيل شحن معتمد جديد</h4>
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم *</label>
-                <input value={targetUid} onChange={e => setTargetUid(e.target.value)} placeholder="اكتب UID المستخدم"
+                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم أو رقم المعرف (Custom ID) *</label>
+                <input value={targetUid} onChange={e => setTargetUid(e.target.value)} placeholder="اكتب UID أو ID المستخدم"
                   className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+                <UserSearchPreview query={targetUid} />
               </div>
               <div>
                 <label className="text-[11px] text-slate-400 block mb-1">اسم وكالة الشحن</label>
@@ -944,9 +1657,19 @@ function RechargeAgenciesTab() {
                   className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
               </div>
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">شعار / صورة الوكالة (URL)</label>
-                <input value={agencyLogo} onChange={e => setAgencyLogo(e.target.value)} placeholder="https://..."
-                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+                <label className="text-[11px] text-amber-400 block mb-1">نسبة عمولة وكيل الشحن (%)</label>
+                <input type="number" value={rechargeCommissionRate} onChange={e => setRechargeCommissionRate(e.target.value)} placeholder="5"
+                  className="w-full bg-[#121214] border border-amber-500/30 rounded-xl p-2 text-xs text-amber-300 font-bold" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">شعار / صورة الوكالة</label>
+                <ImageUpload
+                  currentUrl={agencyLogo}
+                  onUpload={file => uploadStoreItem(file, 'agency_logos')}
+                  onUrlChange={url => setAgencyLogo(url)}
+                  label="رفع شعار الوكالة"
+                  accept="image/*"
+                />
               </div>
               <div>
                 <label className="text-[11px] text-amber-400 block mb-1">الرصيد الافتتاحي للوكالة (عملات)</label>
@@ -962,16 +1685,62 @@ function RechargeAgenciesTab() {
         </div>
       )}
 
+      {/* Edit Recharge Agency Modal */}
+      {editAgent && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-indigo-500/30 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h4 className="text-white font-bold text-sm">✏️ تعديل بيانات وكالة الشحن</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">اسم وكالة الشحن</label>
+                <input value={editName} onChange={e => setEditName(e.target.value)}
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">رقم الواتساب للتواصل</label>
+                <input value={editWhatsapp} onChange={e => setEditWhatsapp(e.target.value)}
+                  className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+              </div>
+              <div>
+                <label className="text-[11px] text-amber-400 block mb-1">نسبة العمولة (%)</label>
+                <input type="number" value={editCommissionRate} onChange={e => setEditCommissionRate(e.target.value)}
+                  className="w-full bg-[#121214] border border-amber-500/30 rounded-xl p-2 text-xs text-amber-300 font-bold" />
+              </div>
+              <div>
+                <label className="text-[11px] text-amber-400 block mb-1">رصيد العملات 🪙</label>
+                <input type="number" value={editCoins} onChange={e => setEditCoins(e.target.value)}
+                  className="w-full bg-[#121214] border border-amber-500/30 rounded-xl p-2 text-xs text-amber-300 font-bold" />
+              </div>
+              <div>
+                <label className="text-[11px] text-slate-400 block mb-1">شعار / صورة الوكالة</label>
+                <ImageUpload
+                  currentUrl={editLogo}
+                  onUpload={file => uploadStoreItem(file, 'agency_logos')}
+                  onUrlChange={url => setEditLogo(url)}
+                  label="تغيير شعار الوكالة"
+                  accept="image/*"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button onClick={() => setEditAgent(null)} className="px-4 py-2 text-xs text-slate-400">إلغاء</button>
+              <button onClick={handleSaveEditAgent} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold">حفظ التغييرات</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Recharge User Modal */}
       {showRechargeModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4">
-            <h4 className="text-white font-bold text-sm">🪙 شحن رصيد عملات لمستخدم</h4>
+          <div className="bg-[#18181b] border border-white/10 rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h4 className="text-white font-bold text-sm">🪙 شحن رصيد عملات لمستخدم بالـ ID</h4>
             <div className="space-y-3">
               <div>
-                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم *</label>
-                <input value={rechargeUserUid} onChange={e => setRechargeUserUid(e.target.value)} placeholder="اكتب UID المستخدم"
+                <label className="text-[11px] text-slate-400 block mb-1">UID المستخدم أو رقم المعرف (ID) *</label>
+                <input value={rechargeUserUid} onChange={e => setRechargeUserUid(e.target.value)} placeholder="مثال: 123456 أو UID"
                   className="w-full bg-[#121214] border border-white/10 rounded-xl p-2 text-xs text-white" />
+                <UserSearchPreview query={rechargeUserUid} />
               </div>
               <div>
                 <label className="text-[11px] text-amber-400 block mb-1">عدد العملات للشحن 🪙 *</label>
@@ -996,9 +1765,16 @@ function RechargeAgenciesTab() {
               لحماية حقوق المستخدم والمضيف، يرجى إرفاق رابط أو صورة سكرين شوت تثبت تحويل الراتب بنجاح:
             </p>
             <div>
-              <label className="text-[11px] text-emerald-400 block mb-1">رابط صورة إثبات التحويل (Screenshot URL) *</label>
-              <input value={proofUrl} onChange={e => setProofUrl(e.target.value)} placeholder="https://... أو رفع صورة"
-                className="w-full bg-[#121214] border border-emerald-500/30 rounded-xl p-2 text-xs text-white" />
+              <label className="text-[11px] text-emerald-400 block mb-1">رفع صورة إثبات التحويل (Screenshot) *</label>
+              <ImageUpload
+                currentUrl={proofUrl}
+                onUpload={async (file) => {
+                  const url = await uploadStoreItem(file, 'proofs');
+                  setProofUrl(url);
+                  return url;
+                }}
+                onClear={() => setProofUrl('')}
+              />
             </div>
             {proofUrl && (
               <div className="flex justify-center p-2 bg-black/40 rounded-lg">
@@ -1239,7 +2015,7 @@ function AgencyNecklacesTab() {
             <label className="block text-[10px] uppercase text-slate-400 font-bold">اسم القلادة</label>
             <input
               type="text"
-              value={config.leaderNecklaceName}
+              value={config.leaderNecklaceName || ''}
               onChange={e => setConfig(p => ({ ...p, leaderNecklaceName: e.target.value }))}
               className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
             />
@@ -1278,7 +2054,7 @@ function AgencyNecklacesTab() {
             <label className="block text-[10px] uppercase text-slate-400 font-bold">اسم القلادة</label>
             <input
               type="text"
-              value={config.hostNecklaceName}
+              value={config.hostNecklaceName || ''}
               onChange={e => setConfig(p => ({ ...p, hostNecklaceName: e.target.value }))}
               className="w-full bg-[#161618] border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white"
             />

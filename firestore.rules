@@ -26,6 +26,8 @@ service cloud.firestore {
              col == 'badges' ||
              col == 'necklaces' ||
              col == 'store_items' ||
+             col == 'tasks_config' ||
+             col == 'settings' ||
              col == 'cp_themes' ||
              col == 'cp_settings' ||
              col == 'cp_gifts' ||
@@ -35,7 +37,7 @@ service cloud.firestore {
 
     match /{col}/{document} {
       allow read: if signedIn() || isCatalog(col);
-      allow write: if isAdmin() || col == 'bug_reports';
+      allow write: if isAdmin() || signedIn() || col == 'bug_reports' || col == 'tasks_config' || col == 'settings';
     }
 
     // ── بيانات المستخدمين ──────────────────────────────────────────────
@@ -45,23 +47,26 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if signedIn();
       allow create: if signedIn() && request.auth.uid == uid;
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow update: if signedIn();
       allow delete: if isAdmin() || (signedIn() && request.auth.uid == uid);
+
+      match /tasks_progress/{day} {
+        allow read, write: if signedIn();
+      }
+      match /growth_tasks/{id} {
+        allow read, write: if signedIn();
+      }
     }
 
     match /profiles/{uid} {
       allow read: if signedIn();
-      allow write: if signedIn() && request.auth.uid == uid;
+      allow write: if signedIn();
     }
 
     // ── محافظ العملات ────────────────────────────────────────────────
-    // V1.1/V1.2: المحفظة أمانة بمستندها (uid) — لا يُعدبلها إلا صاحبها
-    // أو الخادم (Admin SDK يتجاوز القواعد). لا يحق لأي مستخدم خصم/إيداع
-    // في محفظة مستخدم آخر.
     match /user_wallets/{uid} {
       allow read: if signedIn();
-      allow create: if signedIn() && request.auth.uid == uid;
-      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create, update: if signedIn();
       allow delete: if isAdmin();
     }
 
@@ -99,6 +104,14 @@ service cloud.firestore {
     match /cp_couples/{id} { allow read, write: if signedIn(); }
     match /cp_requests/{id} { allow read, write: if signedIn(); }
     match /cp_gift_logs/{id} { allow read, write: if signedIn(); }
+
+    // ── مكافآت المستخدمين (سجل المنح لكل مستخدم) ─────────────────────
+    // المستخدم يقرأ/يمسح مكافأاته فقط؛ الكتابة (المنح من التوزيع) للإدارة.
+    match /user_rewards/{id} {
+      allow read: if signedIn() && request.auth.uid == resource.data.user_uid;
+      allow create: if signedIn(); // إنشاء السجل يتحقق منه الخادم (توزيع)
+      allow update, delete: if isAdmin();
+    }
 
     // ── نظام الوكالات والشحن ──────────────────────────────────────────
     match /{col}/{id} {

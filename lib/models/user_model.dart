@@ -46,6 +46,7 @@ class UserModel {
   final String? rechargeAgencyName;
   final String? rechargeAgencyLogo;
   final String? whatsappNumber;
+  final List<String> album;
 
   UserModel({
     required this.uid,
@@ -92,6 +93,7 @@ class UserModel {
     this.ownedNecklaces = const [],
     this.ownedVipItems = const [],
     this.isRechargeAgent = false,
+    this.album = const [],
     this.rechargeAgencyName,
     this.rechargeAgencyLogo,
     this.whatsappNumber,
@@ -113,6 +115,7 @@ class UserModel {
     String? activeCover,
     String? activeNecklace,
     String? profileBgUrl,
+    List<String>? album,
     List<String>? ownedItems,
     String? hostedRoomId,
     List<String>? followedRooms,
@@ -162,6 +165,7 @@ class UserModel {
       activeCover: activeCover ?? this.activeCover,
       activeNecklace: activeNecklace ?? this.activeNecklace,
       profileBgUrl: profileBgUrl ?? this.profileBgUrl,
+      album: album ?? this.album,
       ownedItems: ownedItems ?? this.ownedItems,
       hostedRoomId: hostedRoomId ?? this.hostedRoomId,
       followedRooms: followedRooms ?? this.followedRooms,
@@ -196,10 +200,88 @@ class UserModel {
     );
   }
 
+  // FIX: Helper method to safely extract UID from multiple possible field names
+  static String _extractUid(Map map) {
+    // Try multiple possible field names for uid with null safety
+    final possibleUids = [
+      map['uid'],
+      map['id'],
+      map['user_id'],
+      map['userId'],
+      map['firebase_uid'],
+      map['firebaseUid'],
+    ];
+    
+    for (final candidate in possibleUids) {
+      if (candidate != null) {
+        final strValue = candidate.toString();
+        if (strValue.isNotEmpty && strValue != 'null') {
+          return strValue;
+        }
+      }
+    }
+    
+    // Fallback: generate a temporary ID if none found
+    return 'temp_${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  // FIX: Helper method to safely extract custom ID from multiple possible field names
+  static String _extractCustomId(Map map) {
+    // Try multiple possible field names for custom ID with null safety
+    final possibleIds = [
+      map['custom_id'],
+      map['customId'],
+      map['customId'],
+      map['display_id'],
+      map['displayId'],
+      map['user_number'],
+      map['userNumber'],
+      map['id_number'],
+      map['idNumber'],
+    ];
+    
+    for (final candidate in possibleIds) {
+      if (candidate != null) {
+        final strValue = candidate.toString();
+        if (strValue.isNotEmpty && strValue != 'null') {
+          // Ensure it's a valid numeric string (6-10 digits)
+          if (_isValidNumericId(strValue)) {
+            return strValue;
+          }
+        }
+      }
+    }
+    
+    // Fallback: try to extract from uid (take last 8 characters if numeric)
+    final uid = _extractUid(map);
+    if (uid.length >= 8) {
+      final last8 = uid.substring(uid.length - 8);
+      if (_isValidNumericId(last8)) {
+        return last8;
+      }
+    }
+    
+    // Final fallback: empty string (will be handled by display widget)
+    return '';
+  }
+
+  // FIX: Validate that a string is a valid numeric ID (6-10 digits)
+  static bool _isValidNumericId(String value) {
+    if (value.isEmpty) return false;
+    // Remove any non-numeric characters
+    final numericOnly = value.replaceAll(RegExp(r'[^0-9]'), '');
+    // Check if it's 6-10 digits
+    return numericOnly.length >= 6 && numericOnly.length <= 10;
+  }
+
   factory UserModel.fromMap(Map map) {
+    // FIX: Robust ID extraction with multiple fallback fields
+    // Try multiple possible field names for custom ID to ensure compatibility
+    final String extractedCustomId = _extractCustomId(map);
+    
     return UserModel(
-      uid: map['uid']?.toString() ?? '',
-      customId: map['custom_id']?.toString() ?? '',
+      uid: _extractUid(map),
+      customId: extractedCustomId,
       name: map['name']?.toString() ?? '',
       email: map['email']?.toString() ?? '',
       photoUrl: map['photo_url']?.toString() ?? '',
@@ -243,6 +325,7 @@ class UserModel {
       ownedVipItems: ((map['owned_vip_items'] as List?) ?? const [])
           .map((e) => (e as Map).map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')))
           .toList(),
+      album: (map['album'] as List?)?.map((e) => e.toString()).toList() ?? [],
       isRechargeAgent: map['is_recharge_agent'] == true || map['isRechargeAgent'] == true,
       rechargeAgencyName: map['recharge_agency_name']?.toString(),
       rechargeAgencyLogo: map['recharge_agency_logo']?.toString(),
@@ -267,6 +350,7 @@ class UserModel {
         'active_cover': activeCover,
         'active_necklace': activeNecklace,
         'profile_bg_url': profileBgUrl,
+      'album': album,
         'owned_items': ownedItems,
         'owned_badges': ownedBadges,
         'hosted_room_id': hostedRoomId,

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'firebase_options.dart';
 import 'l10n/app_localizations.dart';
@@ -11,6 +12,7 @@ import 'services/dynamic_config_service.dart';
 import 'services/error_reporting_service.dart';
 import 'services/level_service.dart';
 import 'services/firebase_service.dart';
+import 'services/media_cache_service.dart'; // ✅ للـ warmup المبكر
 import 'services/room_state_service.dart';
 import 'providers/user_provider.dart';
 import 'providers/locale_provider.dart';
@@ -49,6 +51,10 @@ void main() async {
   LevelService().init();
   await DynamicConfigService().init();
   ErrorReportingService().init();
+
+  // ✅ تهيئة كاش الوسائط ← يحمّل فهرس القرص قبل أي طلب هدايا أو SVGA
+  // هذا يضمن أن الملفات المُحمَّلة سابقاً تُستخدَم فوراً بدون إعادة تحميل من الإنترنت
+  await MediaCacheService().init();
 
   final localeProvider = LocaleProvider();
   await localeProvider.init();

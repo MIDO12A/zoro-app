@@ -6,6 +6,8 @@ import '../../services/supabase_service.dart';
 import '../../services/firebase_service.dart';
 import '../../services/dynamic_config_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../user_profile/user_profile_screen.dart';
+import '../room/room_screen.dart';
 
 enum _RankPeriod { daily, weekly, monthly }
 
@@ -110,7 +112,23 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
 
   List<Map<String, dynamic>> _getRankingData(_RankPeriod period, String type) {
     if (type == 'rooms') {
-      return _cachedRankings['rooms'] ?? [];
+      final list = _cachedRankings['rooms'] ?? [];
+      return list.map((e) {
+        final photo = (e['photoUrl'] ?? e['photo_url'] ?? e['room_photo_url'] ?? e['cover_image'] ?? e['image'] ?? e['bg_image'] ?? '').toString();
+        final roomId = (e['room_id'] ?? e['user_id'] ?? e['id'] ?? '').toString();
+        return {
+          'uid': e['id'] ?? e['uid'] ?? roomId,
+          'name': (e['name'] ?? e['title'] ?? 'Room').toString(),
+          'photoUrl': photo,
+          'photo_url': photo,
+          'points': (e['points'] as num?)?.toInt() ?? 0,
+          'level': 1,
+          'user_id': roomId,
+          'room_id': roomId,
+          'host_name': (e['host_name'] ?? '').toString(),
+          'password': (e['password'] ?? '').toString(),
+        };
+      }).toList();
     }
     
     final periodKey = period == _RankPeriod.daily ? 'daily' : period == _RankPeriod.weekly ? 'weekly' : 'monthly';
@@ -121,13 +139,17 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
       final points = type == 'wealth'
           ? (e['total_gifts_sent'] ?? 0)
           : (e['total_gifts_received'] ?? 0);
+      final customId = (e['custom_id'] ?? e['id'] ?? e['user_id'] ?? '').toString();
+      final displayId = (customId.isNotEmpty && customId != e['uid'])
+          ? customId
+          : (e['user_id'] ?? e['id'] ?? e['uid'] ?? '').toString();
       return {
         'uid': e['uid'] ?? '',
-        'name': e['name'] ?? 'Unknown',
-        'photoUrl': e['photo_url'] ?? '',
+        'name': (e['name'] ?? 'Unknown').toString(),
+        'photoUrl': (e['photo_url'] ?? e['photoUrl'] ?? '').toString(),
         'points': points,
         'level': e['level'] ?? 1,
-        'user_id': e['user_id'] ?? e['id'] ?? e['uid'] ?? '',
+        'user_id': displayId,
       };
     }).toList();
   }
@@ -331,18 +353,18 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                   Positioned(
                     right: 30,
                     bottom: 0,
-                    child: _buildTopRankItem(data[1], 2),
+                    child: _buildTopRankItem(data[1], 2, type),
                   ),
                 if (data.length >= 3)
                   Positioned(
                     left: 30,
                     bottom: 0,
-                    child: _buildTopRankItem(data[2], 3),
+                    child: _buildTopRankItem(data[2], 3, type),
                   ),
                 if (data.length >= 1)
                   Positioned(
                     top: 0,
-                    child: _buildTopRankItem(data[0], 1),
+                    child: _buildTopRankItem(data[0], 1, type),
                   ),
               ],
             ),
@@ -364,7 +386,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildTopRankItem(Map<String, dynamic> item, int rank) {
+  Widget _buildTopRankItem(Map<String, dynamic> item, int rank, String type) {
     final config = context.watch<DynamicConfigService>();
     final isGold = rank == 1;
     
@@ -392,86 +414,145 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
 
     final double width = isGold ? 130 : 100;
     final double avatarSize = isGold ? 60 : 50;
+    final String photo = (item['photoUrl'] ?? item['photo_url'] ?? '').toString();
+    final String displayId = (item['user_id'] ?? item['id'] ?? '').toString();
 
-    return SizedBox(
-      width: width,
-      height: isGold ? 260 : 210,
-      child: Stack(
-        alignment: Alignment.topCenter,
-        children: [
-          // Banner
-          Positioned(
-            top: avatarSize / 2 + 15,
-            child: SizedBox(
-              width: width - 10,
-              height: isGold ? 190 : 150,
-              child: _buildDynamicImage(remoteBanner, localBanner, fit: BoxFit.fill),
+    return GestureDetector(
+      onTap: () {
+        if (type == 'rooms') {
+          final roomId = (item['room_id'] ?? item['id'] ?? item['uid'] ?? '').toString();
+          if (roomId.isNotEmpty) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => RoomScreen(
+                  roomId: roomId,
+                  roomName: (item['name'] ?? 'Room').toString(),
+                  hostName: (item['host_name'] ?? 'Host').toString(),
+                  roomPassword: (item['password'] ?? '').toString(),
+                ),
+              ),
+            );
+          }
+        } else {
+          final uid = (item['uid'] ?? '').toString();
+          if (uid.isNotEmpty) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserProfileScreen(targetUid: uid),
+              ),
+            );
+          }
+        }
+      },
+      child: SizedBox(
+        width: width,
+        height: isGold ? 260 : 210,
+        child: Stack(
+          alignment: Alignment.topCenter,
+          children: [
+            // Banner
+            Positioned(
+              top: avatarSize / 2 + 15,
+              child: SizedBox(
+                width: width - 10,
+                height: isGold ? 190 : 150,
+                child: _buildDynamicImage(remoteBanner, localBanner, fit: BoxFit.fill),
+              ),
             ),
-          ),
-          
-          // Name and Details on Banner
-          Positioned(
-            bottom: isGold ? 90 : 70,
-            child: SizedBox(
-              width: width - 10,
-              child: Column(
-                children: [
-                  Text(
-                    item['name']?.toString() ?? '',
-                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 1),
-                  if ((item['user_id'] ?? item['id']) != null)
+            
+            // Name and Details on Banner
+            Positioned(
+              bottom: isGold ? 90 : 70,
+              child: SizedBox(
+                width: width - 10,
+                child: Column(
+                  children: [
                     Text(
-                      'ID: ${item['user_id'] ?? item['id']}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 10),
+                      item['name']?.toString() ?? '',
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
                     ),
-                  const SizedBox(height: 3),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Image.asset(
-                        'assets/cp/ic_coin.webp',
-                        width: 12,
-                        height: 12,
-                        errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 12, color: Color(0xFFFFD54F)),
-                      ),
-                      const SizedBox(width: 4),
+                    const SizedBox(height: 1),
+                    if (displayId.isNotEmpty)
                       Text(
-                        _formatPoints(item['points'] ?? 0),
-                        style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 12, fontWeight: FontWeight.bold),
+                        'ID: $displayId',
+                        style: const TextStyle(color: Colors.white70, fontSize: 10),
                       ),
-                    ],
-                  ),
-                ],
+                    const SizedBox(height: 3),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/cp/ic_coin.webp',
+                          width: 12,
+                          height: 12,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 12, color: Color(0xFFFFD54F)),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatPoints(item['points'] ?? 0),
+                          style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
 
-          // Avatar and Frame
-          Positioned(
-            top: 0,
-            child: SizedBox(
-              width: width,
-              height: width,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: avatarSize / 2,
-                    backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
-                        ? NetworkImage(item['photoUrl'])
-                        : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
-                  ),
-                  _buildDynamicImage(remoteFrame, localFrame, fit: BoxFit.contain),
-                ],
+            // Avatar and Frame
+            Positioned(
+              top: 0,
+              child: SizedBox(
+                width: width,
+                height: width,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    ClipOval(
+                      child: SizedBox(
+                        width: avatarSize,
+                        height: avatarSize,
+                        child: photo.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: photo,
+                                fit: BoxFit.cover,
+                                placeholder: (context, url) => Container(
+                                  color: Colors.grey.shade900,
+                                  child: const Center(
+                                    child: SizedBox(
+                                      width: 15,
+                                      height: 15,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFFD54F)),
+                                    ),
+                                  ),
+                                ),
+                                errorWidget: (context, url, error) => Image.asset(
+                                  type == 'rooms'
+                                      ? 'assets/images/bg_room_default_bg.png'
+                                      : 'assets/mipmap-xxhdpi/avatar_default.png',
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : Image.asset(
+                                type == 'rooms'
+                                    ? 'assets/images/bg_room_default_bg.png'
+                                    : 'assets/mipmap-xxhdpi/avatar_default.png',
+                                fit: BoxFit.cover,
+                              ),
+                      ),
+                    ),
+                    _buildDynamicImage(remoteFrame, localFrame, fit: BoxFit.contain),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -480,73 +561,132 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     final config = context.watch<DynamicConfigService>();
     final remoteBg = config.globalRankListBg;
     final localBg = 'assets/mipmap-xxhdpi/global_rank_list_bg.png';
+    final String photo = (item['photoUrl'] ?? item['photo_url'] ?? '').toString();
+    final String displayId = (item['user_id'] ?? item['id'] ?? '').toString();
 
-    return Container(
-      height: 75,
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: _buildDynamicImage(remoteBg, localBg, fit: BoxFit.fill),
-          ),
-          Row(
-            children: [
-              const SizedBox(width: 20),
-              SizedBox(
-                width: 30,
-                child: Text(
-                  rank < 10 ? '0$rank' : '$rank',
-                  style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 16, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
+    return GestureDetector(
+      onTap: () {
+        if (type == 'rooms') {
+          final roomId = (item['room_id'] ?? item['id'] ?? item['uid'] ?? '').toString();
+          if (roomId.isNotEmpty) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => RoomScreen(
+                  roomId: roomId,
+                  roomName: (item['name'] ?? 'Room').toString(),
+                  hostName: (item['host_name'] ?? 'Host').toString(),
+                  roomPassword: (item['password'] ?? '').toString(),
                 ),
               ),
-              const SizedBox(width: 15),
-              CircleAvatar(
-                radius: 22,
-                backgroundImage: item['photoUrl'] != null && item['photoUrl'].toString().isNotEmpty
-                    ? NetworkImage(item['photoUrl'])
-                    : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
+            );
+          }
+        } else {
+          final uid = (item['uid'] ?? '').toString();
+          if (uid.isNotEmpty) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => UserProfileScreen(targetUid: uid),
               ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item['name'],
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (item['user_id'] != null)
+            );
+          }
+        }
+      },
+      child: Container(
+        height: 75,
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: _buildDynamicImage(remoteBg, localBg, fit: BoxFit.fill),
+            ),
+            Row(
+              children: [
+                const SizedBox(width: 20),
+                SizedBox(
+                  width: 30,
+                  child: Text(
+                    rank < 10 ? '0$rank' : '$rank',
+                    style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 16, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(width: 15),
+                ClipOval(
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: photo.isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: photo,
+                            fit: BoxFit.cover,
+                            placeholder: (context, url) => Container(
+                              color: Colors.grey.shade900,
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFFD54F)),
+                                ),
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Image.asset(
+                              type == 'rooms'
+                                  ? 'assets/images/bg_room_default_bg.png'
+                                  : 'assets/mipmap-xxhdpi/avatar_default.png',
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Image.asset(
+                            type == 'rooms'
+                                ? 'assets/images/bg_room_default_bg.png'
+                                : 'assets/mipmap-xxhdpi/avatar_default.png',
+                            fit: BoxFit.cover,
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'ID: ${item['user_id']}',
-                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        item['name']?.toString() ?? '',
+                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
+                      if (displayId.isNotEmpty)
+                        Text(
+                          'ID: $displayId',
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                    ],
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/cp/ic_coin.webp',
+                      width: 14,
+                      height: 14,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 14, color: Color(0xFFFFD54F)),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_formatPoints(item['points'] ?? 0)} ↑',
+                      style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/cp/ic_coin.webp',
-                    width: 14,
-                    height: 14,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 14, color: Color(0xFFFFD54F)),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${_formatPoints(item['points'])} ↑',
-                    style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 25),
-            ],
-          ),
-        ],
+                const SizedBox(width: 25),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

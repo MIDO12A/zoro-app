@@ -106,6 +106,9 @@ class AnchorAgentUserInfoDataModel {
     return '$days أيام / $totalHours ساعة';
   }
 
+  String get avatarUrl => headImage;
+  String get totalDiamond => diamonds;
+
   double get targetProgress {
     final current = double.tryParse(diamonds) ?? 0.0;
     if (targetDiamonds <= 0) return 0.0;

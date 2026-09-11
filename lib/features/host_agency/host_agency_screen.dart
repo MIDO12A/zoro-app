@@ -1,10 +1,7 @@
 // lib/features/host_agency/host_agency_screen.dart
 // ─────────────────────────────────────────────────────────────────────────────
-// Smart Agency Gateway Screen
-// • Detects user role via host_agency_members
-// • owner / supervisor  → AgencyDashboardScreen
-// • host (member)       → HostDashboardScreen
-// • no membership       → Browse + Create screen
+// Smart Agency Gateway Screen & Unions Hub
+// Matches unions_activity_main.xml & unions_layout_rank_header.xml
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
@@ -14,16 +11,15 @@ import '../../core/supabase_compat.dart';
 
 import '../../core/auth/auth_service.dart';
 import '../../core/ui/in_app_toast.dart';
-import 'agency_dashboard_screen.dart';
 import 'host_dashboard_screen.dart';
-import 'data/agency_models.dart';
-import 'screens/agency_leaderboard_screen.dart';
 import 'screens/agency_profile_screen.dart';
-import 'screens/agency_supervisor_dashboard_screen.dart';
 import 'screens/anchor_agent_screen.dart';
 
 import '../../core/cache/encrypted_image_provider.dart';
+import '../../config/r.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../providers/user_provider.dart';
 import '../../services/dynamic_config_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,18 +43,47 @@ class _HostAgencyScreenState extends State<HostAgencyScreen> {
 
   // ── detect role ─────────────────────────────────────────────────────────────
   Future<void> _detect() async {
-    final uid = AuthService.currentSession?.user.id;
+    final uid = AuthService.currentSession?.user.id ??
+        Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
     if (uid == null) {
       if (mounted) setState(() => _loading = false);
       return;
     }
     try {
-      final row = await Supabase.instance.client
+      // 1. Check host_agency_members for active membership
+      var row = await Supabase.instance.client
           .from('host_agency_members')
           .select('role, agency_id')
           .eq('user_id', uid)
           .eq('status', 'active')
           .maybeSingle();
+
+      // 2. If not found, check if user is direct owner in host_agencies
+      if (row == null) {
+        final ag = await Supabase.instance.client
+            .from('host_agencies')
+            .select('id, name')
+            .eq('owner_id', uid)
+            .maybeSingle();
+        if (ag != null) {
+          row = {
+            'role': 'owner',
+            'agency_id': ag['id'],
+          };
+        }
+      }
+
+      // 3. If not found, check users/{uid}.agency_id
+      if (row == null) {
+        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+        final agencyId = userDoc.data()?['agency_id'] as String?;
+        if (agencyId != null && agencyId.isNotEmpty) {
+          row = {
+            'role': 'host',
+            'agency_id': agencyId,
+          };
+        }
+      }
 
       if (!mounted) return;
       if (row == null) {
@@ -77,7 +102,7 @@ class _HostAgencyScreenState extends State<HostAgencyScreen> {
         setState(() { _role = role; _agencyId = aid; _loading = false; });
       }
     } catch (e) {
-debugPrint('[host_agency_screen] error: $e');
+      debugPrint('[host_agency_screen] error: $e');
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -88,14 +113,14 @@ debugPrint('[host_agency_screen] error: $e');
     final cfg = context.watch<DynamicConfigService>();
     if (_loading) {
       return Scaffold(
-        backgroundColor: cfg.agencyHeaderBg,
+        backgroundColor: const Color(0xFF1A1A1A),
         body: Center(
           child: CircularProgressIndicator(color: cfg.agencyAccent),
         ),
       );
     }
 
-    // Route to the right dashboard immediately (no wrapping shell needed)
+    // Route to the right dashboard immediately
     switch (_role) {
       case _UserAgencyRole.owner:
       case _UserAgencyRole.supervisor:
@@ -103,7 +128,10 @@ debugPrint('[host_agency_screen] error: $e');
       case _UserAgencyRole.host:
         return const HostDashboardScreen();
       case _UserAgencyRole.none:
-        return const _BrowseCreateScreen();
+        return _BrowseCreateScreen(
+          role: _role,
+          agencyId: _agencyId,
+        );
     }
   }
 }
@@ -112,10 +140,16 @@ debugPrint('[host_agency_screen] error: $e');
 enum _UserAgencyRole { owner, supervisor, host, none }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  Browse + Create Screen  —  shown when user has no agency
+//  Browse + Create Screen  —  matches unions_activity_main.xml
 // ═══════════════════════════════════════════════════════════════════════════════
 class _BrowseCreateScreen extends StatefulWidget {
-  const _BrowseCreateScreen();
+  final _UserAgencyRole role;
+  final String? agencyId;
+
+  const _BrowseCreateScreen({
+    this.role = _UserAgencyRole.none,
+    this.agencyId,
+  });
 
   @override
   State<_BrowseCreateScreen> createState() => _BrowseCreateScreenState();
@@ -163,20 +197,25 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
 
   Future<void> _loadTop() async {
     try {
-      final rows = await _sb
-          .from('host_agencies')
-          .select('id, name, tier, photo_url, total_diamonds_monthly, member_count, is_hall_of_fame')
-          .eq('is_active', true)
-          .order('total_diamonds_monthly', ascending: false)
-          .limit(10);
+      List rows;
+      try {
+        rows = await _sb
+            .from('host_agencies')
+            .select('id, name, tier, photo_url, total_diamonds_monthly, member_count, is_hall_of_fame')
+            .eq('is_active', true)
+            .order('total_diamonds_monthly', ascending: false)
+            .limit(20);
+      } catch (_) {
+        rows = await _sb.from('host_agencies').select('*').limit(30);
+      }
       if (mounted) {
         setState(() {
-          _topAgencies = List<Map<String, dynamic>>.from(rows as List);
+          _topAgencies = List<Map<String, dynamic>>.from(rows);
           _loadingList  = false;
         });
       }
     } catch (e) {
-debugPrint('[host_agency_screen] error: $e');
+      debugPrint('[host_agency_screen] error: $e');
       if (mounted) setState(() => _loadingList = false);
     }
   }
@@ -187,7 +226,8 @@ debugPrint('[host_agency_screen] error: $e');
       KayanInAppToast.warning('أدخل اسم الوكالة');
       return;
     }
-    final uid = AuthService.currentSession?.user.id;
+    final uid = AuthService.currentSession?.user.id ??
+        Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
     if (uid == null) return;
 
     setState(() => _creating = true);
@@ -201,7 +241,6 @@ debugPrint('[host_agency_screen] error: $e');
       });
       if (!mounted) return;
       KayanInAppToast.agency('تم إنشاء الوكالة بنجاح! 🎉');
-      // Pop and push fresh so the gateway re-detects the new owner role
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const HostAgencyScreen()),
@@ -214,6 +253,89 @@ debugPrint('[host_agency_screen] error: $e');
     }
   }
 
+  void _openSearchDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A1A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _AgencySearchSheet(onSelect: (agencyId) {
+        Navigator.pop(ctx);
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => AgencyProfileScreen(agencyId: agencyId)),
+        );
+      }),
+    );
+  }
+
+  void _openBdCenterSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1F1F1F),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Row(
+                  children: [
+                    Icon(Icons.verified_user_rounded, color: Color(0xFFFFFEEC93), size: 24),
+                    SizedBox(width: 8),
+                    Text(
+                      'مركز تطوير الأعمال (BD Center)',
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  '• مرحباً بك في مركز دعم وتطوير وكالات التطبيق الرسمية.\n'
+                  '• يتم تقييم الوكالات أسبوعياً بناءً على إجمالي ألماس مضيفي الوكالة.\n'
+                  '• الترقية إلى فئات متقدمة (Gold, Platinum, Diamond) تمنح الوكالة نسب أرباح إضافية ومكافآت حصرية.\n'
+                  '• للتواصل مع فريق إدارة الوكالات ومسؤولي الـ BD يرجى مراجعة خدمة العملاء.',
+                  style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.6),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF9500),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('فهمت ذلك', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // ── build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
@@ -221,23 +343,22 @@ debugPrint('[host_agency_screen] error: $e');
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
-        backgroundColor: cfg.agencyHeaderBg,
+        backgroundColor: const Color(0xFF1A1A1A),
         body: FadeTransition(
           opacity: _anim,
           child: CustomScrollView(
             slivers: [
               _buildHeader(cfg),
-              SliverToBoxAdapter(child: _buildHeroSection(cfg)),
-              SliverToBoxAdapter(child: const SizedBox(height: 24)),
-              SliverToBoxAdapter(child: _buildActionButtons(cfg)),
+              SliverToBoxAdapter(child: _buildUnionRankHeader(cfg)),
               if (_showForm) ...[
-                SliverToBoxAdapter(child: const SizedBox(height: 20)),
+                SliverToBoxAdapter(child: const SizedBox(height: 16)),
                 SliverToBoxAdapter(child: _buildCreateForm(cfg)),
               ],
-              SliverToBoxAdapter(child: const SizedBox(height: 24)),
-              SliverToBoxAdapter(child: _buildTopAgenciesHeader(cfg)),
-              _buildTopAgenciesList(cfg),
-              SliverToBoxAdapter(child: const SizedBox(height: 120)),
+              SliverToBoxAdapter(child: const SizedBox(height: 12)),
+              SliverToBoxAdapter(child: _buildRankTitleBanner()),
+              const SliverToBoxAdapter(child: SizedBox(height: 10)),
+              _buildRankAgenciesList(cfg),
+              const SliverToBoxAdapter(child: SizedBox(height: 100)),
             ],
           ),
         ),
@@ -249,174 +370,158 @@ debugPrint('[host_agency_screen] error: $e');
     return SliverAppBar(
       expandedHeight: 0,
       pinned: true,
-      backgroundColor: cfg.agencyHeaderBg,
+      backgroundColor: const Color(0xFF1A1A1A),
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        icon: Icon(Icons.arrow_back_ios_new_rounded, color: cfg.agencyTextColor, size: 20),
+        icon: Image.asset(
+          'assets/mipmap-xxhdpi/common_back_2.webp',
+          width: 32,
+          height: 32,
+          errorBuilder: (_, __, ___) => const Icon(Icons.arrow_back, color: Colors.white),
+        ),
         onPressed: () => Navigator.maybePop(context),
       ),
-      title: Text('وكالات المضيفين',
-        style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w600, fontSize: 17)),
+      title: Image.asset(
+        R.unionsTitleIc,
+        height: 24,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Text(
+          'الوكالات',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+      ),
       centerTitle: true,
       actions: [
         IconButton(
-          icon: Icon(Icons.leaderboard_rounded, color: cfg.agencyTabActive, size: 22),
-          tooltip: 'التصنيف الكامل',
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgencyLeaderboardScreen())),
+          icon: Image.asset(
+            R.unionsSearchIc,
+            width: 32,
+            height: 32,
+            errorBuilder: (_, __, ___) => const Icon(Icons.search, color: Colors.white),
+          ),
+          tooltip: 'بحث عن وكالة',
+          onPressed: _openSearchDialog,
         ),
       ],
     );
   }
 
-  Widget _buildHeroSection(DynamicConfigService cfg) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [cfg.agencyCardBg.withOpacity(0.8), cfg.agencyCardBg.withOpacity(0.5)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: cfg.agencyCardBorder),
-      ),
-      child: Column(
+  // unions_layout_rank_header.xml
+  Widget _buildUnionRankHeader(DynamicConfigService cfg) {
+    return SizedBox(
+      height: 230,
+      width: double.infinity,
+      child: Stack(
         children: [
-          // Animated icon
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.7, end: 1.0),
-            duration: const Duration(milliseconds: 700),
-            curve: Curves.elasticOut,
-            builder: (_, v, child) => Transform.scale(scale: v, child: child),
-            child: Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [cfg.agencyAccent, cfg.agencyTabActive],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+          // Header background image
+          Positioned.fill(
+            child: Image.asset(
+              'assets/mipmap-xxhdpi/unions_rank_header_bg.webp',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFF2E1A47), Color(0xFF1A1A1A)],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
                 ),
-                boxShadow: [BoxShadow(color: cfg.agencyAccent.withOpacity(0.4), blurRadius: 20)],
               ),
-              child: const Icon(Icons.business_rounded, color: Colors.white, size: 36),
             ),
           ),
-          const SizedBox(height: 16),
-          Text('لست في وكالة بعد',
-            style: TextStyle(color: cfg.agencyTextColor, fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(
-            'انضم لوكالة لتعزيز أرباحك وتحقيق أهداف مشتركة،\nأو أنشئ وكالتك الخاصة وقُد فريقك.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: cfg.agencySubText, fontSize: 13, height: 1.6),
+          // 4 function buttons
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 24,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // 1. Admin Center
+                _buildFunctionButton(
+                  iconAsset: 'assets/mipmap-xxhdpi/union_admin_center.webp',
+                  title: 'مركز الإدارة',
+                  onTap: () {
+                    if (widget.role == _UserAgencyRole.owner || widget.role == _UserAgencyRole.supervisor) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AnchorAgentScreen(agencyId: widget.agencyId)),
+                      );
+                    } else {
+                      KayanInAppToast.warning('هذا المركز مخصص لمدراء الوكالات فقط');
+                    }
+                  },
+                ),
+                // 2. My Agency
+                _buildFunctionButton(
+                  iconAsset: 'assets/mipmap-xxhdpi/union_my_agency.webp',
+                  title: 'وكالتي',
+                  onTap: () {
+                    if (widget.role != _UserAgencyRole.none && widget.agencyId != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => AgencyProfileScreen(agencyId: widget.agencyId!)),
+                      );
+                    } else {
+                      KayanInAppToast.warning('لست منضماً لأي وكالة حالياً');
+                    }
+                  },
+                ),
+                // 3. Create Guild
+                _buildFunctionButton(
+                  iconAsset: 'assets/mipmap-xxhdpi/union_create_guild.webp',
+                  title: 'إنشاء وكالة',
+                  onTap: () {
+                    setState(() {
+                      _showForm = !_showForm;
+                    });
+                  },
+                ),
+                // 4. BD Center
+                _buildFunctionButton(
+                  iconAsset: 'assets/mipmap-xxhdpi/union_bd_center.webp',
+                  title: 'مركز BD',
+                  onTap: _openBdCenterSheet,
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildActionButtons(DynamicConfigService cfg) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          // Browse leaderboard
-          Expanded(
-            child: _GlassButton(
-              label: 'تصفح الوكالات',
-              icon: Icons.search_rounded,
-              color: cfg.agencyTabActive,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgencyLeaderboardScreen())),
-            ),
-          ),
-          const SizedBox(width: 12),
-          // Create agency
-          Expanded(
-            child: _GlassButton(
-              label: _showForm ? 'إخفاء النموذج' : 'إنشاء وكالة',
-              icon: _showForm ? Icons.keyboard_arrow_up_rounded : Icons.add_business_rounded,
-              color: cfg.agencyAccent,
-              onTap: () => setState(() => _showForm = !_showForm),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCreateForm(DynamicConfigService cfg) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cfg.agencyCardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cfg.agencyCardBorder),
-      ),
+  Widget _buildFunctionButton({
+    required String iconAsset,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text('إنشاء وكالة جديدة',
-            style: TextStyle(color: cfg.agencyTabActive, fontWeight: FontWeight.bold, fontSize: 15)),
-          const SizedBox(height: 16),
-          _field(cfg, _nameCtrl, 'اسم الوكالة *', Icons.badge_rounded),
-          const SizedBox(height: 12),
-          _field(cfg, _descCtrl, 'وصف الوكالة (اختياري)', Icons.description_rounded, maxLines: 3),
-          const SizedBox(height: 12),
-          // الدولة
-          DropdownButtonFormField<String>(
-            value: _selectedCountry,
-            decoration: InputDecoration(
-              hintText: 'الدولة (اختياري)',
-              hintStyle: TextStyle(color: cfg.agencySubText.withOpacity(0.6), fontSize: 13),
-              prefixIcon: Icon(Icons.flag_rounded, color: cfg.agencySubText, size: 18),
-              filled: true,
-              fillColor: cfg.agencyCardBorder.withOpacity(0.1),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: cfg.agencyCardBorder),
+          Image.asset(
+            iconAsset,
+            width: 52,
+            height: 52,
+            errorBuilder: (_, __, ___) => Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.white12,
+                borderRadius: BorderRadius.circular(12),
               ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: cfg.agencyCardBorder),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: cfg.agencyAccent),
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: const Icon(Icons.business, color: Colors.white),
             ),
-            dropdownColor: cfg.agencyCardBg,
-            style: TextStyle(color: cfg.agencyTextColor, fontSize: 13),
-            items: _countries.map((c) => DropdownMenuItem(
-              value: c,
-              child: Text(c),
-            )).toList(),
-            onChanged: (v) => setState(() => _selectedCountry = v),
           ),
-          const SizedBox(height: 12),
-          _field(cfg, _phoneCtrl, 'رقم الهاتف (اختياري)', Icons.phone_rounded,
-              keyboardType: TextInputType.phone),
-          const SizedBox(height: 4),
-          Text('الوكالة تبدأ بدرجة برونز — ترتفع بأداء الفريق',
-            style: TextStyle(color: cfg.agencySubText.withOpacity(0.7), fontSize: 11)),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _creating ? null : _createAgency,
-              style: FilledButton.styleFrom(
-                backgroundColor: cfg.agencyTabActive,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: _creating
-                ? const SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('إنشاء الوكالة', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFFFFFFF5AD),
+              fontWeight: FontWeight.w500,
             ),
           ),
         ],
@@ -424,261 +529,405 @@ debugPrint('[host_agency_screen] error: $e');
     );
   }
 
-  Widget _field(DynamicConfigService cfg, TextEditingController ctrl, String hint, IconData icon,
-      {int maxLines = 1, TextInputType? keyboardType}) {
-    return TextField(
-      controller: ctrl,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      style: TextStyle(color: cfg.agencyTextColor),
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: cfg.agencySubText.withOpacity(0.6), fontSize: 13),
-        prefixIcon: Icon(icon, color: cfg.agencySubText, size: 18),
-        filled: true,
-        fillColor: cfg.agencyCardBorder.withOpacity(0.1),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: cfg.agencyCardBorder),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: cfg.agencyCardBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: cfg.agencyAccent),
-        ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      ),
-    );
-  }
-
-  Widget _buildTopAgenciesHeader(DynamicConfigService cfg) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-      child: Row(
+  // unions_layout_rank_header.xml -> cl_title
+  Widget _buildRankTitleBanner() {
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.symmetric(horizontal: 14),
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          const Text('🏆', style: TextStyle(fontSize: 18)),
-          const SizedBox(width: 8),
-          Text('أفضل الوكالات',
-            style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.bold, fontSize: 16)),
-          const Spacer(),
-          TextButton(
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AgencyLeaderboardScreen())),
-            child: Text('عرض الكل', style: TextStyle(color: cfg.agencyAccent, fontSize: 13)),
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/mipmap-xxhdpi/union_rank_title_bg.webp',
+                fit: BoxFit.fill,
+                errorBuilder: (_, __, ___) => Container(color: Colors.white10),
+              ),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Image.asset(
+                'assets/mipmap-xxhdpi/union_rank_start.webp',
+                height: 14,
+                errorBuilder: (_, __, ___) => const SizedBox(),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'ترتيب الوكالات الأسبوعي',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFFFFF5AD),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Image.asset(
+                'assets/mipmap-xxhdpi/union_rank_end.webp',
+                height: 14,
+                errorBuilder: (_, __, ___) => const SizedBox(),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTopAgenciesList(DynamicConfigService cfg) {
+  Widget _buildRankAgenciesList(DynamicConfigService cfg) {
     if (_loadingList) {
       return SliverToBoxAdapter(
-        child: Center(child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: CircularProgressIndicator(color: cfg.agencyAccent),
-        )),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: CircularProgressIndicator(color: cfg.agencyAccent),
+          ),
+        ),
       );
     }
     if (_topAgencies.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Center(child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text('لا توجد وكالات بعد', style: TextStyle(color: cfg.agencySubText)),
-        )),
+      return const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text('لا توجد وكالات بعد', style: TextStyle(color: Colors.white54)),
+          ),
+        ),
       );
     }
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 0.85,
-        ),
-        delegate: SliverChildBuilderDelegate(
-          (context, i) {
-            final agency = _topAgencies[i];
-            return _AgencyGridCard(agency: agency, rank: i + 1, onTap: () {
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, i) {
+          final agency = _topAgencies[i];
+          return _AgencyRankItem(
+            agency: agency,
+            rank: i + 1,
+            onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => AgencyProfileScreen(agencyId: agency['id'] as String),
                 ),
               );
-            });
-          },
-          childCount: _topAgencies.length,
+            },
+          );
+        },
+        childCount: _topAgencies.length,
+      ),
+    );
+  }
+
+  Widget _buildCreateForm(DynamicConfigService cfg) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF242424),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFFFFEEC93).withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'إنشاء وكالة جديدة',
+            style: TextStyle(color: Color(0xFFFFFEEC93), fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          const SizedBox(height: 16),
+          _field(_nameCtrl, 'اسم الوكالة *', Icons.badge_rounded),
+          const SizedBox(height: 12),
+          _field(_descCtrl, 'وصف الوكالة (اختياري)', Icons.description_rounded, maxLines: 2),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _selectedCountry,
+            dropdownColor: const Color(0xFF242424),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'الدولة (اختياري)',
+              hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+              prefixIcon: const Icon(Icons.flag_rounded, color: Colors.white54, size: 18),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.05),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Colors.white24),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Colors.white24),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: Color(0xFFFF9500)),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            ),
+            items: _countries.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+            onChanged: (v) => setState(() => _selectedCountry = v),
+          ),
+          const SizedBox(height: 12),
+          _field(_phoneCtrl, 'رقم الهاتف (اختياري)', Icons.phone_rounded, keyboardType: TextInputType.phone),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: _creating ? null : _createAgency,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF9500),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: _creating
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('تأكيد إنشاء الوكالة', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _field(TextEditingController ctrl, String hint, IconData icon, {int maxLines = 1, TextInputType? keyboardType}) {
+    return TextField(
+      controller: ctrl,
+      maxLines: maxLines,
+      keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white54, fontSize: 13),
+        prefixIcon: Icon(icon, color: Colors.white54, size: 18),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.05),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.white24),
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Colors.white24),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0xFFFF9500)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       ),
     );
   }
 }
 
-// ── glass action button ────────────────────────────────────────────────────────
-class _GlassButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
+// ── union_layout_rank_item.xml ─────────────────────────────────────────────────
+class _AgencyRankItem extends StatelessWidget {
+  final Map<String, dynamic> agency;
+  final int rank;
   final VoidCallback onTap;
 
-  const _GlassButton({
-    required this.label,
-    required this.icon,
-    required this.color,
+  const _AgencyRankItem({
+    required this.agency,
+    required this.rank,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.35)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 6),
-            Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-          ],
-        ),
-      ),
-    );
-  }
-}
+    final name = agency['name'] as String? ?? 'وكالة';
+    final photoUrl = agency['photo_url'] as String?;
+    final diamonds = (agency['total_diamonds_monthly'] as num?)?.toInt() ?? 0;
+    final members = (agency['member_count'] as num?)?.toInt() ?? 0;
+    final id = agency['id'] as String? ?? '';
+    final shortId = id.length > 8 ? id.substring(0, 8) : id;
 
-// ── agency card in top list ────────────────────────────────────────────────────
-class _AgencyCard extends StatelessWidget {
-  final Map<String, dynamic> agency;
-  final int rank;
-  final VoidCallback onTap;
+    String cardBg;
+    String numBg;
+    String? labelIc;
 
-  const _AgencyCard({required this.agency, required this.rank, required this.onTap});
-
-  static const _tierColors = {
-    'bronze':   Color(0xFFCD7F32),
-    'silver':   Color(0xFFC0C0C0),
-    'gold':     Color(0xFFD4AF37),
-    'platinum': Color(0xFF6ADBF5),
-    'diamond':  Color(0xFFB39DDB),
-  };
-
-  static const _rankEmoji = {1: '🥇', 2: '🥈', 3: '🥉'};
-
-  @override
-  Widget build(BuildContext context) {
-    final cfg = context.watch<DynamicConfigService>();
-    final name         = agency['name']                    as String? ?? '—';
-    final tier         = agency['tier']                    as String? ?? 'bronze';
-    final photoUrl     = agency['photo_url']               as String?;
-    final diamonds     = (agency['total_diamonds_monthly'] as num?)?.toInt() ?? 0;
-    final members      = (agency['member_count']           as num?)?.toInt() ?? 0;
-    final isHOF        = agency['is_hall_of_fame']         as bool? ?? false;
-    final color        = _tierColors[tier] ?? const Color(0xFFD4AF37);
-    final rankLabel    = _rankEmoji[rank] ?? '#$rank';
+    if (rank == 1) {
+      cardBg = 'assets/mipmap-xxhdpi/union_rank_1_bg.webp';
+      numBg = 'assets/mipmap-xxhdpi/union_rank_1_num_bg.webp';
+      labelIc = 'assets/mipmap-xxhdpi/union_rank_label_1_ic.webp';
+    } else if (rank == 2) {
+      cardBg = 'assets/mipmap-xxhdpi/union_rank_2_bg.webp';
+      numBg = 'assets/mipmap-xxhdpi/union_rank_2_num_bg.webp';
+      labelIc = 'assets/mipmap-xxhdpi/union_rank_label_2_ic.webp';
+    } else if (rank == 3) {
+      cardBg = 'assets/mipmap-xxhdpi/union_rank_3_bg.webp';
+      numBg = 'assets/mipmap-xxhdpi/union_rank_3_num_bg.webp';
+      labelIc = 'assets/mipmap-xxhdpi/union_rank_label_3_ic.webp';
+    } else {
+      cardBg = 'assets/mipmap-xxhdpi/union_rank_default_bg.webp';
+      numBg = 'assets/mipmap-xxhdpi/union_rank_default_num_bg.webp';
+      labelIc = null;
+    }
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: cfg.agencyCardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.25)),
-        ),
-        child: Row(
+        height: 84,
+        margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        child: Stack(
           children: [
-            // Rank
-            SizedBox(
-              width: 32,
-              child: Text(rankLabel,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, color: cfg.agencyTextColor)),
-            ),
-            const SizedBox(width: 10),
-            // Logo / Agency Photo from Agent device
-            Container(
-              width: 48, height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withOpacity(0.15),
-                border: Border.all(color: color.withOpacity(0.4), width: 1.5),
+            // Background Image
+            Positioned.fill(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.asset(
+                  cardBg,
+                  fit: BoxFit.fill,
+                  errorBuilder: (_, __, ___) => Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF242424),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                  ),
+                ),
               ),
-              clipBehavior: Clip.antiAlias,
-              child: (photoUrl != null && photoUrl.isNotEmpty)
-                ? Image(
-                    image: EncryptedImageProvider(photoUrl),
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Center(
-                      child: Text(
-                        name.isEmpty ? '?' : name.characters.first,
-                        style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  )
-                : Center(
-                    child: Text(
-                      name.isEmpty ? '?' : name.characters.first,
-                      style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                  ),
             ),
-            const SizedBox(width: 12),
-            // Info: Name & Host Count circular badge
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            // Rank Number & Label
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: 58,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(name,
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w700, fontSize: 15)),
-                      ),
-                      if (isHOF) ...[
-                        const SizedBox(width: 4),
-                        const Text('🏆', style: TextStyle(fontSize: 12)),
-                      ],
-                    ],
+                  Image.asset(
+                    numBg,
+                    fit: BoxFit.fill,
+                    errorBuilder: (_, __, ___) => const SizedBox(),
                   ),
-                  const SizedBox(height: 5),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: color.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(AgencyTierX.fromString(tier).label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+                  if (labelIc != null)
+                    Positioned(
+                      top: 4,
+                      child: Image.asset(
+                        labelIc,
+                        width: 24,
+                        height: 24,
+                        errorBuilder: (_, __, ___) => const SizedBox(),
                       ),
-                      const SizedBox(width: 8),
-                      // Small circular host count badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.blueAccent.withOpacity(0.3), width: 0.8),
+                    ),
+                  Positioned(
+                    bottom: labelIc != null ? 8 : null,
+                    child: Text(
+                      '$rank',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: rank <= 3 ? 18 : 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Content Row
+            Positioned.fill(
+              left: 62,
+              right: 12,
+              child: Row(
+                children: [
+                  // Agency Avatar
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFFFEEC93), width: 1.5),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: (photoUrl != null && photoUrl.isNotEmpty)
+                        ? Image(
+                            image: EncryptedImageProvider(photoUrl),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Text(
+                                name.isNotEmpty ? name.characters.first : '?',
+                                style: const TextStyle(color: Color(0xFFFFFEEC93), fontSize: 20, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Text(
+                              name.isNotEmpty ? name.characters.first : '?',
+                              style: const TextStyle(color: Color(0xFFFFFEEC93), fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Agency Name & Member count
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        const SizedBox(height: 6),
+                        Row(
                           children: [
-                            const Icon(Icons.people_alt_rounded, color: Colors.lightBlueAccent, size: 12),
-                            const SizedBox(width: 4),
-                            Text('$members مضيف', style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                            // Member count badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black38,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Image.asset(
+                                    'assets/mipmap-xxhdpi/union_member_count_ic.webp',
+                                    width: 14,
+                                    height: 14,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.group, size: 12, color: Colors.white70),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '$members',
+                                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'ID: $shortId',
+                              style: const TextStyle(color: Colors.white54, fontSize: 11),
+                            ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Diamonds
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text(
+                        '♦',
+                        style: TextStyle(color: Color(0xFFFFFEEC93), fontSize: 14),
+                      ),
+                      Text(
+                        _fmt(diamonds),
+                        style: const TextStyle(
+                          color: Color(0xFFFFFEEC93),
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -686,16 +935,6 @@ class _AgencyCard extends StatelessWidget {
                 ],
               ),
             ),
-            // Diamonds
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('♦', style: TextStyle(color: cfg.agencyTabInactive, fontSize: 16)),
-                const SizedBox(height: 2),
-                Text(_fmt(diamonds),
-                  style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.bold, fontSize: 13)),
-              ],
-            ),
           ],
         ),
       ),
@@ -704,138 +943,143 @@ class _AgencyCard extends StatelessWidget {
 
   String _fmt(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(1)}K';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
     return '$n';
   }
 }
 
-// ── agency grid card (2-column layout) ─────────────────────────────────────────
-class _AgencyGridCard extends StatelessWidget {
-  final Map<String, dynamic> agency;
-  final int rank;
-  final VoidCallback onTap;
+// ── unions_activity_search.xml ────────────────────────────────────────────────
+class _AgencySearchSheet extends StatefulWidget {
+  final void Function(String agencyId) onSelect;
 
-  const _AgencyGridCard({required this.agency, required this.rank, required this.onTap});
+  const _AgencySearchSheet({required this.onSelect});
 
-  static const _tierColors = {
-    'bronze':   Color(0xFFCD7F32),
-    'silver':   Color(0xFFC0C0C0),
-    'gold':     Color(0xFFD4AF37),
-    'platinum': Color(0xFF6ADBF5),
-    'diamond':  Color(0xFFB39DDB),
-  };
+  @override
+  State<_AgencySearchSheet> createState() => _AgencySearchSheetState();
+}
 
-  static const _rankEmoji = {1: '🥇', 2: '🥈', 3: '🥉'};
+class _AgencySearchSheetState extends State<_AgencySearchSheet> {
+  final _searchCtrl = TextEditingController();
+  List<Map<String, dynamic>> _results = [];
+  bool _searching = false;
+
+  void _doSearch(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) {
+      setState(() => _results = []);
+      return;
+    }
+    setState(() => _searching = true);
+    try {
+      final rows = await Supabase.instance.client
+          .from('host_agencies')
+          .select('id, name, photo_url, member_count, total_diamonds_monthly')
+          .or('name.ilike.%$q%,id.ilike.%$q%')
+          .limit(15);
+      if (mounted) {
+        setState(() {
+          _results = List<Map<String, dynamic>>.from(rows as List);
+          _searching = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final cfg = context.watch<DynamicConfigService>();
-    final name         = agency['name']                    as String? ?? '—';
-    final tier         = agency['tier']                    as String? ?? 'bronze';
-    final photoUrl     = agency['photo_url']               as String?;
-    final diamonds     = (agency['total_diamonds_monthly'] as num?)?.toInt() ?? 0;
-    final members      = (agency['member_count']           as num?)?.toInt() ?? 0;
-    final isHOF        = agency['is_hall_of_fame']         as bool? ?? false;
-    final color        = _tierColors[tier] ?? const Color(0xFFD4AF37);
-    final rankLabel    = _rankEmoji[rank] ?? '#$rank';
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cfg.agencyCardBg,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withOpacity(0.25)),
-        ),
-        child: Column(
-          children: [
-            // Rank badge top-right
-            Align(
-              alignment: AlignmentDirectional.topEnd,
-              child: Text(rankLabel, style: TextStyle(fontSize: 14, color: cfg.agencyTextColor)),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
             ),
-            const SizedBox(height: 4),
-            // Logo
-            Container(
-              width: 52, height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: color.withOpacity(0.15),
-                border: Border.all(color: color.withOpacity(0.4), width: 1.5),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: (photoUrl != null && photoUrl.isNotEmpty)
-                  ? Image(
-                      image: EncryptedImageProvider(photoUrl),
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Center(
-                        child: Text(name.isEmpty ? '?' : name.characters.first,
-                            style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 12),
+          // Search Bar
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF292929),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  child: Row(
+                    children: [
+                      Image.asset(
+                        'assets/mipmap-xxhdpi/unions_search_ic.webp',
+                        width: 20,
+                        height: 20,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.search, color: Colors.white54, size: 20),
                       ),
-                    )
-                  : Center(
-                      child: Text(name.isEmpty ? '?' : name.characters.first,
-                          style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
-                    ),
-            ),
-            const SizedBox(height: 8),
-            // Name
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(name,
-                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.w700, fontSize: 13)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _searchCtrl,
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                          decoration: const InputDecoration(
+                            hintText: 'ابحث عن اسم أو معرّف الوكالة...',
+                            hintStyle: TextStyle(color: Colors.white38, fontSize: 13),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                          onChanged: _doSearch,
+                        ),
+                      ),
+                      if (_searchCtrl.text.isNotEmpty)
+                        GestureDetector(
+                          onTap: () {
+                            _searchCtrl.clear();
+                            setState(() => _results = []);
+                          },
+                          child: const Icon(Icons.close, color: Colors.white54, size: 18),
+                        ),
+                    ],
+                  ),
                 ),
-                if (isHOF) ...[const SizedBox(width: 2), const Text('🏆', style: TextStyle(fontSize: 10))],
-              ],
-            ),
-            const SizedBox(height: 6),
-            // Tier badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(6),
               ),
-              child: Text(AgencyTierX.fromString(tier).label,
-                  style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(height: 8),
-            // Members + Diamonds row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.people_alt_rounded, color: Colors.lightBlueAccent, size: 11),
-                    const SizedBox(width: 3),
-                    Text('$members', style: const TextStyle(color: Colors.lightBlueAccent, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('♦', style: TextStyle(color: cfg.agencyTabInactive, fontSize: 11)),
-                    const SizedBox(width: 3),
-                    Text(_fmt(diamonds),
-                        style: TextStyle(color: cfg.agencyTextColor, fontWeight: FontWeight.bold, fontSize: 10)),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
+              const SizedBox(width: 10),
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: const Text('إلغاء', style: TextStyle(color: Color(0xFFD4D6E5), fontSize: 14)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _searching
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF9500)))
+                : _results.isEmpty
+                    ? Center(
+                        child: Text(
+                          _searchCtrl.text.isEmpty ? 'اكتب اسم أو معرّف الوكالة للبحث' : 'لم يتم العثور على أي وكالة',
+                          style: const TextStyle(color: Colors.white38, fontSize: 14),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _results.length,
+                        itemBuilder: (context, i) {
+                          final item = _results[i];
+                          return _AgencyRankItem(
+                            agency: item,
+                            rank: i + 1,
+                            onTap: () => widget.onSelect(item['id'] as String),
+                          );
+                        },
+                      ),
+          ),
+        ],
       ),
     );
-  }
-
-  String _fmt(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(1)}K';
-    return '$n';
   }
 }

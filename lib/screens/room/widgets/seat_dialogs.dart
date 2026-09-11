@@ -125,64 +125,83 @@ class _EmptySeatSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Drag handle
-          _DragHandle(),
-          // idSeatActionTakeMic — always visible
-          _SheetItem(
-            label: 'Take Mic',
-            onTap: () {
-              Navigator.pop(context);
-              onTakeMic?.call();
-            },
-          ),
-          _Divider(),
-          // idSeatActionInviteSeat — owner/moderator only
-          if (isOwnerOrModerator) ...[
-            _SheetItem(
-              label: 'Invite to Mic',
-              onTap: () {
-                Navigator.pop(context);
-                onInviteToMic?.call();
-              },
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // idPartA — Main Actions Card (shape_white_juxing1)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _DragHandle(),
+                  // idSeatActionTakeMic
+                  _SheetItem(
+                    label: isAr ? 'صعود المايك' : 'Take Mic',
+                    onTap: () {
+                      Navigator.pop(context);
+                      onTakeMic?.call();
+                    },
+                  ),
+                  _Divider(),
+                  // idSeatActionInviteSeat — owner/moderator only
+                  if (isOwnerOrModerator) ...[
+                    _SheetItem(
+                      label: isAr ? 'دعوة للمايك' : 'Invite to Mic',
+                      onTap: () {
+                        Navigator.pop(context);
+                        onInviteToMic?.call();
+                      },
+                    ),
+                    _Divider(),
+                    // idSeatActionLockSeat
+                    _SheetItem(
+                      label: isLocked
+                          ? (isAr ? 'إلغاء قفل المقعد' : 'Unlock Seat')
+                          : (isAr ? 'قفل المقعد' : 'Lock Seat'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        onToggleLock?.call(!isLocked);
+                      },
+                    ),
+                    _Divider(),
+                    // idSeatActionMicStatus
+                    _SheetItem(
+                      label: isMuted
+                          ? (isAr ? 'إلغاء كتم المايك' : 'Unmute Mic')
+                          : (isAr ? 'كتم المايك' : 'Mute Mic'),
+                      onTap: () {
+                        Navigator.pop(context);
+                        onToggleMic?.call(!isMuted);
+                      },
+                    ),
+                  ],
+                ],
+              ),
             ),
-            _Divider(),
-            // idSeatActionLockSeat
-            _SheetItem(
-              label: isLocked ? 'Unlock Seat' : 'Lock Seat',
-              onTap: () {
-                Navigator.pop(context);
-                onToggleLock?.call(!isLocked);
-              },
+            const SizedBox(height: 10),
+            // idSeatActionCancel — Separate floating card
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: _SheetItem(
+                label: isAr ? 'إلغاء' : 'Cancel',
+                color: const Color(0xFF666666),
+                onTap: () => Navigator.pop(context),
+              ),
             ),
-            _Divider(),
-            // idSeatActionMicStatus
-            _SheetItem(
-              label: isMuted ? 'Unmute Mic' : 'Mute Mic',
-              onTap: () {
-                Navigator.pop(context);
-                onToggleMic?.call(!isMuted);
-              },
-            ),
-            _Divider(),
           ],
-          // Separator 10dp
-          Container(height: 10, color: const Color(0x0D9BA1B6)),
-          // idSeatActionCancel
-          _SheetItem(
-            label: 'Cancel',
-            color: const Color(0xFF666666),
-            onTap: () => Navigator.pop(context),
-          ),
-          const SizedBox(height: 8),
-        ],
+        ),
       ),
     );
   }
@@ -228,130 +247,152 @@ class _OccupiedSeatSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      child: SingleChildScrollView(
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _DragHandle(),
-          // User name header
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text(
-              user.name,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF16151A),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // idPartA — Main Actions Card (shape_white_juxing1)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _DragHandle(),
+                    // User name header
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Text(
+                        user.name,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF16151A),
+                        ),
+                      ),
+                    ),
+                    _Divider(),
+                    // idSeatActionUserDetail
+                    _SheetItem(
+                      label: isAr ? 'معلومات المستخدم' : 'User Detail',
+                      onTap: () {
+                        Navigator.pop(context);
+                        onUserDetail?.call();
+                      },
+                    ),
+                    _Divider(),
+                    // Owner/moderator actions
+                    if (isOwnerOrModerator) ...[
+                      // idSeatActionKickOffMic
+                      _SheetItem(
+                        label: isAr ? 'إنزال من المايك' : 'Kick Off Mic',
+                        onTap: () {
+                          Navigator.pop(context);
+                          onKickOffMic?.call();
+                        },
+                      ),
+                      _Divider(),
+                      // idSeatActionLockUnLockMic
+                      _SheetItem(
+                        label: isMuted
+                            ? (isAr ? 'إلغاء كتم المايك' : 'Unmute Mic')
+                            : (isAr ? 'كتم المايك' : 'Mute Mic'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          onToggleMicLock?.call(!isMuted);
+                        },
+                      ),
+                      _Divider(),
+                      // idSeatActionKickOutFromRoom — owner/moderator
+                      _SheetItem(
+                        label: isAr ? 'طرد من الغرفة' : 'Kick Out From Room',
+                        color: const Color(0xFFE82323),
+                        onTap: () {
+                          Navigator.pop(context);
+                          onKickOutFromRoom?.call();
+                        },
+                      ),
+                      _Divider(),
+                    ],
+                    // Owner-only actions
+                    if (isOwner) ...[
+                      // idSeatActionSetAdminOrRemove
+                      _SheetItem(
+                        label: isAdmin
+                            ? (isAr ? 'إلغاء تعيين مسؤول' : 'Remove Admin')
+                            : (isAr ? 'تعيين كمسؤول' : 'Set as Admin'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          onSetAdmin?.call(!isAdmin);
+                        },
+                      ),
+                      _Divider(),
+                      // idSeatActionComments
+                      _SheetItem(
+                        label: isAr ? 'السماح بالتعليقات' : 'Allow Comments',
+                        onTap: () {
+                          Navigator.pop(context);
+                          onToggleComments?.call(true);
+                        },
+                      ),
+                      _Divider(),
+                      // idSeatActionBlackOrUnBlackUser
+                      _SheetItem(
+                        label: isBlacked
+                            ? (isAr ? 'إلغاء الحظر' : 'Unblack User')
+                            : (isAr ? 'إضافة للقائمة السوداء' : 'Black User'),
+                        color: isBlacked ? Colors.black87 : const Color(0xFFE82323),
+                        onTap: () {
+                          Navigator.pop(context);
+                          onToggleBlack?.call(!isBlacked);
+                        },
+                      ),
+                      _Divider(),
+                    ],
+                    if (!isOwnerOrModerator) ...[
+                      // Regular user options: private message, gift
+                      _SheetItem(
+                        label: isAr ? 'رسالة خاصة' : 'Private Message',
+                        onTap: () {
+                          Navigator.pop(context);
+                          onPrivateMessage?.call();
+                        },
+                      ),
+                      _Divider(),
+                      _SheetItem(
+                        label: isAr ? 'إرسال هدية' : 'Send Gift',
+                        onTap: () {
+                          Navigator.pop(context);
+                          onGift?.call();
+                        },
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
-          ),
-          _Divider(),
-          // idSeatActionUserDetail
-          _SheetItem(
-            label: 'User Detail',
-            onTap: () {
-              Navigator.pop(context);
-              onUserDetail?.call();
-            },
-          ),
-          _Divider(),
-          // Owner/moderator actions
-          if (isOwnerOrModerator) ...[
-            // idSeatActionKickOffMic
-            _SheetItem(
-              label: 'Kick Off Mic',
-              onTap: () {
-                Navigator.pop(context);
-                onKickOffMic?.call();
-              },
+            const SizedBox(height: 10),
+            // idSeatActionCancel — Separate floating card
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: _SheetItem(
+                label: isAr ? 'إلغاء' : 'Cancel',
+                color: const Color(0xFF666666),
+                onTap: () => Navigator.pop(context),
+              ),
             ),
-            _Divider(),
-            // idSeatActionLockUnLockMic
-            _SheetItem(
-              label: isMuted ? 'Unmute Mic' : 'Mute Mic',
-              onTap: () {
-                Navigator.pop(context);
-                onToggleMicLock?.call(!isMuted);
-              },
-            ),
-            _Divider(),
-            // idSeatActionKickOutFromRoom — owner/moderator
-            _SheetItem(
-              label: 'Kick Out From Room',
-              color: const Color(0xFFE82323),
-              onTap: () {
-                Navigator.pop(context);
-                onKickOutFromRoom?.call();
-              },
-            ),
-            _Divider(),
           ],
-          // Owner-only actions
-          if (isOwner) ...[
-            // idSeatActionSetAdminOrRemove
-            _SheetItem(
-              label: isAdmin ? 'Remove Admin' : 'Set as Admin',
-              onTap: () {
-                Navigator.pop(context);
-                onSetAdmin?.call(!isAdmin);
-              },
-            ),
-            _Divider(),
-            // idSeatActionComments
-            _SheetItem(
-              label: 'Allow Comments',
-              onTap: () {
-                Navigator.pop(context);
-                onToggleComments?.call(true);
-              },
-            ),
-            _Divider(),
-            // idSeatActionBlackOrUnBlackUser
-            _SheetItem(
-              label: isBlacked ? 'Unblack User' : 'Black User',
-              color: isBlacked ? Colors.black87 : const Color(0xFFE82323),
-              onTap: () {
-                Navigator.pop(context);
-                onToggleBlack?.call(!isBlacked);
-              },
-            ),
-            _Divider(),
-          ],
-          if (!isOwnerOrModerator) ...[
-            // Regular user options: private message, gift
-            _SheetItem(
-              label: 'Private Message',
-              onTap: () {
-                Navigator.pop(context);
-                onPrivateMessage?.call();
-              },
-            ),
-            _Divider(),
-            _SheetItem(
-              label: 'Send Gift',
-              onTap: () {
-                Navigator.pop(context);
-                onGift?.call();
-              },
-            ),
-            _Divider(),
-          ],
-          // Separator
-          Container(height: 10, color: const Color(0x0D9BA1B6)),
-          // Cancel
-          _SheetItem(
-            label: 'Cancel',
-            color: const Color(0xFF666666),
-            onTap: () => Navigator.pop(context),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
+        ),
       ),
     );
   }

@@ -238,6 +238,32 @@ class R {
   static const String minePhoneIc = '$_m/mine_phone_ic.webp';
   static const String mineGoogleIc = '$_m/mine_google_ic.webp';
   static const String mineFollowNorIc = '$_m/mine_follow_nor_ic.webp';
+
+  // Union / Agency assets
+  static const String unionsTitleIc = '$_m/unions_title_ic.webp';
+  static const String unionsSearchIc = '$_m/unions_search_ic.webp';
+  static const String unionMyAgencyBg = 'assets/mipmap-xxhdpi/union_my_agency_bg.png';
+  static const String unionMyAgencyAvatarBg = '$_m/union_my_agency_avatar_bg.webp';
+  static const String unionAvatarBorderIc = 'assets/mipmap-xxhdpi/union_avatar_border_ic.png';
+  static const String unionAgencyAvatarHeaderIc = '$_m/union_agency_avatar_heder_ic.webp';
+  static const String unionSubAgentInviteBg = '$_m/union_sub_agent_invite_bg.webp';
+  static const String unionSubAgentInviteIc = '$_m/union_sub_agent_invite_ic.webp';
+  static const String unionIdIc = '$_m/union_id_ic.webp';
+  static const String unionAgencyRank1Ic = '$_m/union_agency_rank_1_ic.webp';
+  static const String unionAgencyMemberIc = '$_m/union_agency_member_ic.webp';
+  static const String unionSubAgentIc = '$_m/union_sub_agent_ic.webp';
+  static const String unionNoticeIc = '$_m/union_notice_ic.webp';
+  static const String unionRuleIc = '$_m/union_rule_ic.webp';
+  static const String unionEditIc = '$_m/union_edit_ic.webp';
+  static const String unionTabBg = '$_m/union_tab_bg.webp';
+  static const String unionCreateGuild = '$_m/union_create_guild.webp';
+  static const String unionMyAgency = '$_m/union_my_agency.webp';
+  static const String unionRank1Bg = '$_m/union_rank_1_bg.webp';
+  static const String unionRank2Bg = '$_m/union_rank_2_bg.webp';
+  static const String unionRank3Bg = '$_m/union_rank_3_bg.webp';
+  static const String unionAgencyTop1 = '$_m/union_agency_top_1.webp';
+  static const String unionAgencyTop2 = '$_m/union_agency_top_2.webp';
+  static const String unionAgencyTop3 = '$_m/union_agency_top_3.webp';
   static const String mineFollowPreIc = '$_m/mine_follow_pre_ic.webp';
   static const String mineLevelIc = '$_m/mine_level_ic.webp';
   static const String mineBackpackIc = '$_m/mine_backpack_ic.webp';
@@ -357,14 +383,14 @@ class R {
     final size = _getSizeOverride(path);
     width ??= size?.width;
     height ??= size?.height;
+    final type = detectAssetType(path);
+    if (type == AssetType.svga) {
+      return SvgaPlayer(assetPath: path, width: width, height: height, fit: fit, loops: loops, onFinished: onFinished);
+    }
+    if (type == AssetType.vap || type == AssetType.mp4) {
+      return VapPlayer(url: path, width: width, height: height, fit: fit, loops: loops, onFinished: onFinished);
+    }
     if (isNetworkUrl(path)) {
-      final type = detectAssetType(path);
-      if (type == AssetType.svga) {
-        return SvgaPlayer(assetPath: path, width: width, height: height, fit: fit, loops: loops, onFinished: onFinished);
-      }
-      if (type == AssetType.vap || type == AssetType.mp4) {
-        return VapPlayer(url: path, width: width, height: height, fit: fit, loops: loops, onFinished: onFinished);
-      }
       return Image(
         image: EncryptedImageProvider(path),
         width: width,
@@ -467,6 +493,17 @@ class R {
         ),
       );
     }
+    final localType = detectAssetType(assetPath);
+    if (localType == AssetType.svga) {
+      return SvgaPlayer(
+        assetPath: assetPath,
+        width: width,
+        height: height,
+        fit: fit,
+        loops: loops,
+        onFinished: onSvgaFinished,
+      );
+    }
     return Image.asset(
       assetPath,
       width: width,
@@ -491,6 +528,16 @@ class R {
     width ??= size?.width;
     height ??= size?.height;
 
+    final type = detectAssetType(assetPath);
+    if (type == AssetType.svga) {
+      return SvgaPlayer(
+        assetPath: assetPath,
+        width: width,
+        height: height,
+        fit: fit,
+      );
+    }
+
     if (assetPath.startsWith('http://') || assetPath.startsWith('https://')) {
       return CachedNetImage(
         assetPath,
@@ -503,6 +550,14 @@ class R {
 
     final overrideUrl = DynamicConfigService().getAssetOverride(assetPath);
     if (overrideUrl != null && overrideUrl.isNotEmpty) {
+      if (detectAssetType(overrideUrl) == AssetType.svga) {
+        return SvgaPlayer(
+          assetPath: overrideUrl,
+          width: width,
+          height: height,
+          fit: fit,
+        );
+      }
       return CachedNetImage(
         overrideUrl,
         width: width,

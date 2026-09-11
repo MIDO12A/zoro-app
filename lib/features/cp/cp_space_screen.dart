@@ -6,6 +6,8 @@ import '../../screens/room/widgets/svga_frame.dart';
 import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
 import 'cp_record_screen.dart';
+import 'cp_dialogs.dart';
+import 'cp_detail_full_screen.dart';
 
 /// Relationship Space screen — matches act_relationship_space.xml
 /// Shows: RS panel (avatars + heartbeat + token), progress bar, daily tasks.
@@ -53,12 +55,21 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
                         backgroundColor: Colors.transparent,
                         elevation: 0,
                         leading: IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Colors.white),
+                          icon: Image.asset('assets/cp/ic_cp_ranking_back.png', width: 26, height: 26,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.arrow_back, color: Colors.white)),
                           onPressed: () => Navigator.pop(context),
                         ),
                         title: const Text('مساحة العلاقة',
                             style: TextStyle(color: Colors.white, fontSize: 16)),
                         centerTitle: true,
+                        actions: [
+                          IconButton(
+                            icon: Image.asset('assets/cp/ic_cp_ranking_entrance.png', width: 26, height: 26,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.emoji_events, color: Colors.amber)),
+                            tooltip: 'ترتيب CP',
+                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CPDetailFullScreen())),
+                          ),
+                        ],
                       ),
                     ];
                   },
@@ -80,24 +91,163 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
   }
 
   Widget _buildNoCpState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          R.image('assets/cp/frame_no_cp.png', width: 120, height: 120,
-              fit: BoxFit.contain),
-          const SizedBox(height: 20),
-          const Text('ليس لديك علاقة CP حالياً',
-              style: TextStyle(color: Colors.white70, fontSize: 16)),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFd32a43),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Image.asset(
+            'assets/cp/ic_cp_main_bg_top.webp',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(color: const Color(0xFF2E0D15)),
+          ),
+        ),
+        SafeArea(
+          child: Column(
+            children: [
+              // Top Bar
+              Row(
+                children: [
+                  IconButton(
+                    icon: Image.asset('assets/cp/ic_cp_ranking_back.png', width: 28, height: 28,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.arrow_back, color: Colors.white)),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const Spacer(),
+                  Text(
+                    isAr ? 'مساحة الـ CP' : 'CP Space',
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: Image.asset('assets/cp/ic_cp_ranking_entrance.png', width: 28, height: 28,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.emoji_events, color: Colors.amber)),
+                    tooltip: 'ترتيب CP',
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CPDetailFullScreen())),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              // Big Romantic Icon
+              Image.asset(
+                'assets/cp/ic_cp_love.png',
+                width: 140,
+                height: 140,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(Icons.favorite, color: Colors.pinkAccent, size: 100),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                isAr ? 'ليس لديك علاقة CP حالياً' : 'No CP Relationship Yet',
+                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Text(
+                  isAr ? 'ارتبط بشخص مميز وشاركه الهدايا والذكريات والألقاب الخاصة' : 'Find your special partner and share gifts, memories and titles',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white60, fontSize: 13, height: 1.5),
+                ),
+              ),
+              const SizedBox(height: 32),
+              // "ربط علاقة" button
+              GestureDetector(
+                onTap: () => _openPartnerSelector(isAr),
+                child: Image.asset(
+                  'assets/cp/ic_bind_relationship_btn.webp',
+                  height: 48,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFFE91E63), Color(0xFFFF4081)]),
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Text(
+                      isAr ? 'ربط علاقة' : 'Bind Relationship',
+                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+              const Spacer(flex: 2),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openPartnerSelector(bool isAr) {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF280B17),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          isAr ? 'اختر شريك الـ CP' : 'Select CP Partner',
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              isAr ? 'أدخل اسم أو معرف (ID) المستخدم الذي ترغب في الارتباط به:' : 'Enter User ID or name to link CP with:',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
-            child: const Text('اكتشف العلاقات'),
+            const SizedBox(height: 14),
+            TextField(
+              controller: textController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: isAr ? 'ID المستخدم' : 'User ID',
+                hintStyle: const TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: Colors.white10,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(isAr ? 'إلغاء' : 'Cancel', style: const TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final target = textController.text.trim();
+              if (target.isEmpty) return;
+              Navigator.pop(ctx);
+              final result = await showSendRelationshipInvitationDialog(
+                context,
+                receiverName: target,
+                receiverAvatar: '',
+              );
+              if (result != null) {
+                try {
+                  await CpService.sendRequest(
+                    target,
+                    giftId: result['gift_id'] ?? 'ring_1',
+                    message: result['message'] ?? '',
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isAr ? 'تم إرسال طلب الارتباط بنجاح! ❤️' : 'Proposal sent successfully! ❤️')),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isAr ? 'تم إرسال الدعوة إلى المستخدم' : 'Invitation sent')),
+                    );
+                  }
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFE91E63)),
+            child: Text(isAr ? 'التالي' : 'Next', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -117,10 +267,9 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
     return Container(
       width: double.infinity,
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF4a1020), Color(0xFF2e0d15)],
+        image: DecorationImage(
+          image: AssetImage('assets/cp/ic_cp_main_bg_top.webp'),
+          fit: BoxFit.cover,
         ),
       ),
       child: Stack(
@@ -142,85 +291,80 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
           ),
           Column(
             children: [
-              const SizedBox(height: 8),
-              // Level badge
+              const SizedBox(height: 10),
+              // Level frame
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFfff19f), Color(0xFFffb565)],
+                width: 72,
+                height: 32,
+                decoration: const BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage('assets/cp/ic_cp_level_frame.png'),
+                    fit: BoxFit.contain,
                   ),
-                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
-                  'Lv.${_calcLevel(int.tryParse(totalScore) ?? 0)}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF4a1020),
+                alignment: Alignment.center,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: Text(
+                    'Lv.${_calcLevel(int.tryParse(totalScore) ?? 0)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
-              // RS Panel: avatars + heartbeat + token
+              const SizedBox(height: 14),
+              // RS Panel: avatars + wings + heartbeat decor
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   _buildAvatarFrame(myAvatar, myName, isMe: true),
-                  // Heartbeat line + SVGA center animation (d33.svga)
-                  Transform.translate(
-                    offset: const Offset(-12, 0),
-                    child: SizedBox(
-                      width: 106,
-                      height: 72,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            height: 2,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.pink.withValues(alpha: 0.3),
-                                  Colors.pink,
-                                  Colors.pink.withValues(alpha: 0.3),
-                                ],
-                              ),
-                            ),
-                          ),
-                          // Center SVGA Heart Animation
-                          const SvgaFrame(
-                            svgaPath: 'assets/svga/d33.svga',
-                            size: 68,
-                            fit: BoxFit.contain,
-                          ),
-                        ],
-                      ),
+                  // Center heart decor
+                  SizedBox(
+                    width: 70,
+                    height: 70,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Image.asset(
+                          'assets/cp/ic_cp_mid_heart_decor.webp',
+                          width: 58,
+                          height: 58,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                        const SvgaFrame(
+                          svgaPath: 'assets/svga/d33.svga',
+                          size: 48,
+                          fit: BoxFit.contain,
+                        ),
+                      ],
                     ),
                   ),
-                  Transform.translate(
-                    offset: const Offset(-12, 0),
-                    child: _buildAvatarFrame(partnerAvatar, partnerName, isMe: false),
-                  ),
+                  _buildAvatarFrame(partnerAvatar, partnerName, isMe: false),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               // Days together badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFFd32a43).withValues(alpha: 0.3),
-                      const Color(0xFF7d102b).withValues(alpha: 0.3),
-                    ],
+                width: 120,
+                height: 30,
+                decoration: const BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage('assets/cp/ic_cp_days_bg.png'),
+                    fit: BoxFit.contain,
                   ),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFa31b44), width: 1),
                 ),
+                alignment: Alignment.center,
                 child: Text(
                   '$daysTogether يوم معاً',
-                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -232,43 +376,52 @@ class _CpSpaceScreenState extends State<CpSpaceScreen> {
   }
 
   Widget _buildAvatarFrame(String? avatarUrl, String name, {bool isMe = true}) {
-    final svgaFrame = isMe ? 'assets/svga/d28.svga' : 'assets/svga/d29.svga';
+    final wingAsset = isMe
+        ? 'assets/cp/ic_cp_wing_frame_left.webp'
+        : 'assets/cp/ic_cp_wing_frame_right.webp';
 
     return SizedBox(
-      width: 120,
+      width: 126,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Frame (102x102)
           SizedBox(
-            width: 102,
-            height: 102,
+            width: 120,
+            height: 104,
             child: Stack(
               alignment: Alignment.center,
               children: [
+                // Wing Frame background
+                Positioned.fill(
+                  child: Image.asset(
+                    wingAsset,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
                 // Avatar
                 ClipOval(
                   child: R.loadImage(
                     avatarUrl ?? (isMe ? R.avaBoy : R.avaGirl),
-                    width: 70,
-                    height: 70,
+                    width: 62,
+                    height: 62,
                     fit: BoxFit.cover,
                   ),
                 ),
-                // SVGA Frame on top of Avatar (d28 / d29)
+                // SVGA frame overlay
                 SvgaFrame(
-                  svgaPath: svgaFrame,
-                  size: 102,
+                  svgaPath: isMe ? 'assets/svga/d28.svga' : 'assets/svga/d29.svga',
+                  size: 86,
                   fit: BoxFit.contain,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 9),
+          const SizedBox(height: 6),
           // Name
           Text(
             name.isNotEmpty ? name : (isMe ? 'أنا' : 'شريكي'),
-            style: const TextStyle(color: Colors.white, fontSize: 13),
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),

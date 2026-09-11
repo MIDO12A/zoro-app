@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../config/r.dart';
 import '../core/cache/encrypted_image_provider.dart';
 import '../models/gift_model.dart';
+import '../models/store_item_model.dart';
 import '../screens/room/widgets/svga_player.dart';
 import '../screens/room/widgets/vap_player.dart';
 
@@ -25,6 +26,18 @@ class MediaPrefetchService {
   void prefetchGifts(List<GiftModel> gifts) {
     for (final g in gifts) {
       prefetchUrls(<String>[g.iconAsset, g.animationAsset ?? '', g.defaultImage ?? '']);
+    }
+  }
+
+  /// Queues prefetch of store items (frames, cars, bubbles, entrances).
+  void prefetchStoreItems(Iterable<StoreItemModel> items) {
+    for (final it in items) {
+      prefetchUrls(<String>[
+        it.iconAsset,
+        it.svgaAsset ?? '',
+        it.videoAsset ?? '',
+        it.defaultImage ?? '',
+      ]);
     }
   }
 

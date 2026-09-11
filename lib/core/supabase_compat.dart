@@ -98,6 +98,20 @@ class SupabaseClient {
         return _rpcGetHostDashboardV2(params);
       case 'get_host_dashboard_v3':
         return _rpcGetHostDashboardV3(params);
+      case 'agent_get_dashboard':
+        return _rpcAgentGetDashboard(params);
+      case 'agent_recharge_history':
+        return _rpcAgentRechargeHistory(params);
+      case 'agent_get_usd_wallet':
+        return _rpcAgentGetUsdWallet(params);
+      case 'agent_get_diamond_wallet':
+        return _rpcAgentGetDiamondWallet(params);
+      case 'agent_set_pin':
+        return _rpcAgentSetPin(params);
+      case 'agent_verify_pin':
+        return _rpcAgentVerifyPin(params);
+      case 'agent_set_quick_amounts':
+        return _rpcAgentSetQuickAmounts(params);
     }
     throw StateError(
       'RPC "$fn" is not migrated to Firebase yet. '
@@ -306,84 +320,6 @@ class SupabaseClient {
     await snap.docs.first.reference
         .update({'role': isSupervisor ? 'supervisor' : 'host'});
     return {'status': 'ok'};
-  }
-
-  Future<Map<String, dynamic>> _rpcAgencyCreate(
-      Map<String, dynamic>? p) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      return {'status': 'error', 'message': 'not_authenticated'};
-    }
-
-    final name = (p?['p_name']?.toString() ?? '').trim();
-    if (name.isEmpty) {
-      return {'status': 'error', 'message': 'name_required'};
-    }
-
-    // Check: already member of any agency?
-    final existing = await _db
-        .collection('host_agency_members')
-        .where('user_id', isEqualTo: uid)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .get();
-    if (existing.docs.isNotEmpty) {
-      return {'status': 'error', 'message': 'already_member'};
-    }
-
-    // Create agency doc
-    final agencyRef = _db.collection('host_agencies').doc();
-    final numericAgencyId = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
-    final agencyData = <String, dynamic>{
-      'id': agencyRef.id,
-      'custom_id': numericAgencyId,
-      'numeric_id': numericAgencyId,
-      'kayan_id': numericAgencyId,
-      'name': name,
-      'owner_id': uid,
-      'owner_user_id': uid,
-      'description': (p?['p_description']?.toString() ?? '').isEmpty
-          ? null
-          : p!['p_description'].toString(),
-      'photo_url': (p?['p_photo_url']?.toString() ?? '').isEmpty
-          ? null
-          : p!['p_photo_url'].toString(),
-      'phone': (p?['p_phone']?.toString() ?? '').isEmpty
-          ? null
-          : p!['p_phone'].toString(),
-      'country': (p?['p_country']?.toString() ?? '').isEmpty
-          ? null
-          : p!['p_country'].toString(),
-      'tier': 'bronze',
-      'is_active': true,
-      'member_count': 1,
-      'commission_rate': 0.05,
-      'specialty': 'mixed',
-      'total_diamonds_earned': 0,
-      'monthly_diamonds': 0,
-      'total_diamonds_monthly': 0,
-      'is_hall_of_fame': false,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    };
-    await agencyRef.set(agencyData);
-
-    // Add owner as member
-    final memberRef = _db.collection('host_agency_members').doc();
-    await memberRef.set({
-      'id': memberRef.id,
-      'agency_id': agencyRef.id,
-      'user_id': uid,
-      'role': 'owner',
-      'status': 'active',
-      'diamonds_earned_monthly': 0,
-      'diamonds_earned_cumulative': 0,
-      'diamonds_balance': 0,
-      'diamonds_pending_withdrawal': 0,
-      'diamonds_available': 0,
-      'joined_at': DateTime.now().toUtc().toIso8601String(),
-    });
-
-    return {'status': 'ok', 'agency_id': agencyRef.id};
   }
 
   Future<Map<String, dynamic>> _rpcAgencyGetDashboard(
@@ -628,7 +564,6 @@ class SupabaseClient {
 
     final agencySnap = await _db.collection('host_agencies').doc(agencyId).get();
     if (!agencySnap.exists) return <String, dynamic>{};
-    final ad = agencySnap.data()!;
 
     // Owner's member row
     int diamondsBalance = 0;
@@ -1008,6 +943,39 @@ class SupabaseClient {
       'created_at': DateTime.now().toUtc().toIso8601String(),
     });
 
+    // Create a withdrawal/transfer record for dashboard tracking & proof upload
+    try {
+      final userSnap = await _db.collection('users').doc(uid).get();
+      final userName = userSnap.data()?['name']?.toString() ??
+          userSnap.data()?['display_name']?.toString() ?? 'مضيف';
+
+      await _db.collection('agency_withdrawal_requests').add({
+        'user_id': uid,
+        'user_name': userName,
+        'agent_id': agentId,
+        'agency_id': agencyId,
+        'amount': diamonds,
+        'diamonds_amount': diamonds,
+        'usd_amount': (diamonds / 100).toDouble(),
+        'payment_method': 'تحويل مباشر لوكيل الشحن',
+        'status': 'pending',
+        'requires_proof': true,
+        'idempotency_key': idempotencyKey.isNotEmpty ? idempotencyKey : null,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+
+      // Send system message notification to the recharge agent
+      await _db.collection('private_messages').doc().set({
+        'sender_id': 'system',
+        'receiver_id': agentId,
+        'text': '🔔 طلب سحب راتب جديد! قام المضيف $userName بتحويل $diamonds ماسة إليك. يرجى تحويل المبلغ المطلوب ورفع إثبات وسكرين التحويل في لوحة التحكم لإتمام العملية.',
+        'type': 'system',
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+        'is_read': false,
+        'conversationId': 'system_$agentId',
+      });
+    } catch (_) {}
+
     return {'status': 'ok', 'ok': true};
   }
 
@@ -1224,6 +1192,48 @@ class SupabaseClient {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  //  agency_create (إرسال طلب إنشاء وكالة للإدارة)
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyCreate(Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return {'status': 'error', 'message': 'يرجى تسجيل الدخول أولاً'};
+
+    final name = (p?['p_name'] as String?)?.trim() ?? '';
+    if (name.isEmpty) return {'status': 'error', 'message': 'يرجى إدخال اسم الوكالة'};
+
+    final now = DateTime.now().toUtc();
+    final appId = 'app_${now.millisecondsSinceEpoch}_$uid';
+
+    // 1. Get applicant info
+    final userSnap = await _db.collection('users').doc(uid).get();
+    final userData = userSnap.data() ?? {};
+    final userName = userData['name']?.toString() ?? userData['displayName']?.toString() ?? 'مستخدم';
+    final customId = userData['custom_id']?.toString() ?? '';
+    final userAvatar = userData['photo_url']?.toString() ?? userData['avatar']?.toString() ?? '';
+
+    // 2. Add to agency_applications
+    await _db.collection('agency_applications').doc(appId).set({
+      'id': appId,
+      'user_id': uid,
+      'user_name': userName,
+      'custom_id': customId,
+      'user_avatar': userAvatar,
+      'agency_type': 'host',
+      'agency_name': name,
+      'description': p?['p_description'],
+      'whatsapp': p?['p_phone'],
+      'country': p?['p_country'],
+      'status': 'pending',
+      'created_at': now.toIso8601String(),
+    });
+
+    return {
+      'status': 'ok',
+      'message': 'تم إرسال طلب فتح الوكالة بنجاح وهو قيد المراجعة والموافقة من الإدارة',
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
   //  get_host_dashboard_v2
   // ═══════════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> _rpcGetHostDashboardV2(
@@ -1257,6 +1267,80 @@ class SupabaseClient {
     // Engine settings
     final engine = await _rpcAgencyGetEngineSettings(null);
 
+    // Fetch active milestones/targets from host_milestones or agency_targets_config
+    final List<Map<String, dynamic>> targetsList = [];
+    try {
+      final milestonesSnap = await _db.collection('host_milestones')
+          .where('is_active', isEqualTo: true)
+          .get();
+      
+      final earnedMonthly = (md['diamonds_earned_monthly'] as num?)?.toInt() ?? 0;
+
+      // Check already achieved targets for this month
+      final now = DateTime.now();
+      final currentMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      final achievedSnap = await _db.collection('agency_achieved_targets')
+          .where('user_id', isEqualTo: userId)
+          .where('month', isEqualTo: currentMonth)
+          .get();
+      final achievedIds = achievedSnap.docs.map((d) => d.data()['target_id']?.toString() ?? d.id).toSet();
+
+      final docs = milestonesSnap.docs.toList();
+      docs.sort((a, b) {
+        final aOrder = (a.data()['sort_order'] as num?)?.toInt() ?? 0;
+        final bOrder = (b.data()['sort_order'] as num?)?.toInt() ?? 0;
+        if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+        final aDiamonds = (a.data()['target_diamonds'] as num?)?.toInt() ?? 0;
+        final bDiamonds = (b.data()['target_diamonds'] as num?)?.toInt() ?? 0;
+        return aDiamonds.compareTo(bDiamonds);
+      });
+
+      for (final doc in docs) {
+        final data = doc.data();
+        final targetDiamonds = (data['target_diamonds'] as num?)?.toInt() ?? 0;
+        final isAchieved = earnedMonthly >= targetDiamonds || achievedIds.contains(doc.id);
+        final remaining = (targetDiamonds - earnedMonthly).clamp(0, targetDiamonds);
+        final progressPct = targetDiamonds > 0 ? (earnedMonthly / targetDiamonds).clamp(0.0, 1.0) : 0.0;
+        final rewardVal = (data['reward_value'] as num?)?.toDouble() ?? 0.0;
+        final rewardType = data['reward_type']?.toString() ?? 'salary_usd';
+
+        int rewardCoins = 0;
+        int rewardDiamonds = 0;
+        int rewardSvip = 0;
+        if (rewardType == 'gold') {
+          rewardCoins = rewardVal.toInt();
+        } else if (rewardType == 'diamonds') {
+          rewardDiamonds = rewardVal.toInt();
+        } else if (rewardType == 'vip_days') {
+          rewardSvip = rewardVal.toInt();
+        } else if (rewardType == 'salary_usd') {
+          rewardCoins = (rewardVal * 100).toInt(); // USD to equivalent
+        }
+
+        targetsList.add({
+          'id': doc.id,
+          'title': data['title'] ?? 'مرحلة ${targetsList.length + 1}',
+          'target_diamonds': targetDiamonds,
+          'reward_coins': rewardCoins,
+          'reward_diamonds': rewardDiamonds,
+          'reward_svip_days': rewardSvip,
+          'reward_type': rewardType,
+          'reward_value': rewardVal,
+          'reward_item_id': data['reward_item_id'],
+          'reward_image_url': data['reward_image_url'] ?? data['image_url'],
+          'background_url': data['background_url'],
+          'agent_commission_rate': (data['agent_commission_rate'] as num?)?.toDouble() ?? 0.1,
+          'earned_this_month': earnedMonthly,
+          'remaining': remaining,
+          'progress_pct': progressPct,
+          'is_achieved': isAchieved,
+          'sort_order': (data['sort_order'] as num?)?.toInt() ?? targetsList.length,
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+
     return <String, dynamic>{
       'status': 'ok',
       'member_id': memberDoc.id,
@@ -1272,7 +1356,7 @@ class SupabaseClient {
       'is_in_trial': md['trial_ends_at'] != null,
       'trial_ends_at': md['trial_ends_at'],
       'join_date': md['joined_at'],
-      'targets': <dynamic>[],
+      'targets': targetsList,
       'recent_ledger': <dynamic>[],
       'engine': engine,
     };
@@ -1359,6 +1443,83 @@ class SupabaseClient {
       'is_dry_run': config['dry_run_mode'] == true,
       'engine_enabled': engineEnabled,
     };
+  }
+
+  Future<Map<String, dynamic>> _rpcAgentGetDashboard(Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return {'ok': false, 'error': 'unauthorized'};
+    final uDoc = await _db.collection('users').doc(uid).get();
+    final data = uDoc.data() ?? {};
+    final isAgent = data['is_recharge_agent'] == true || data['isRechargeAgent'] == true;
+    if (!isAgent) return {'ok': false, 'error': 'not_an_agent'};
+
+    final coins = (data['coins'] as num?)?.toInt() ?? 0;
+    final pin = data['agent_pin']?.toString();
+    final customId = data['custom_id']?.toString() ?? data['customId']?.toString() ?? uid;
+
+    return {
+      'ok': true,
+      'enabled': true,
+      'pin_set': pin != null && pin.isNotEmpty,
+      'daily_limit': 10000000,
+      'agency_gold': coins,
+      'agent_public_id': customId,
+      'today': {'total': 0, 'count': 0, 'remaining': 10000000},
+      'week': {'total': 0, 'count': 0},
+      'month': {'total': 0, 'count': 0},
+      'all': {'total': 0, 'count': 0},
+      'week_chart': <Map<String, dynamic>>[],
+      'recent_txns': <Map<String, dynamic>>[],
+      'quick_amounts': [1000, 5000, 10000, 50000, 100000],
+      'usd_balance': 0.0,
+    };
+  }
+
+  Future<Map<String, dynamic>> _rpcAgentSetPin(Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return {'ok': false};
+    final pin = p?['p_pin']?.toString() ?? '';
+    await _db.collection('users').doc(uid).set({'agent_pin': pin}, SetOptions(merge: true));
+    return {'ok': true};
+  }
+
+  Future<Map<String, dynamic>> _rpcAgentVerifyPin(Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return {'ok': false};
+    final pin = p?['p_pin']?.toString() ?? '';
+    final uDoc = await _db.collection('users').doc(uid).get();
+    final savedPin = uDoc.data()?['agent_pin']?.toString();
+    final valid = (savedPin == null || savedPin.isEmpty) || (savedPin == pin);
+    return {'ok': valid, 'valid': valid};
+  }
+
+  Future<Map<String, dynamic>> _rpcAgentGetUsdWallet(Map<String, dynamic>? p) async {
+    return {
+      'ok': true,
+      'balance_usd': 0.0,
+      'pending_withdrawal_usd': 0.0,
+      'total_withdrawn_usd': 0.0,
+      'history': <Map<String, dynamic>>[],
+    };
+  }
+
+  Future<Map<String, dynamic>> _rpcAgentGetDiamondWallet(Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uDoc = uid != null ? await _db.collection('users').doc(uid).get() : null;
+    final diamonds = (uDoc?.data()?['diamonds'] as num?)?.toInt() ?? 0;
+    return {
+      'ok': true,
+      'diamond_balance': diamonds,
+      'history': <Map<String, dynamic>>[],
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> _rpcAgentRechargeHistory(Map<String, dynamic>? p) async {
+    return <Map<String, dynamic>>[];
+  }
+
+  Future<Map<String, dynamic>> _rpcAgentSetQuickAmounts(Map<String, dynamic>? p) async {
+    return {'ok': true};
   }
 
   RealtimeChannel channel(String topic) => RealtimeChannel(topic);
@@ -1737,8 +1898,22 @@ class SupabaseQueryBuilder implements Future<List<Map<String, dynamic>>> {
   Future<List<Map<String, dynamic>>> _execute() async {
     switch (_op) {
       case _QOp.select:
-        final snap = await _buildQuery().get();
-        var rows = snap.docs.map((d) => d.data()).toList();
+        QuerySnapshot<Map<String, dynamic>> snap;
+        try {
+          snap = await _buildQuery().get();
+        } catch (e) {
+          try {
+            snap = await _db.collection(_table).limit(_limit ?? 50).get();
+          } catch (_) {
+            rethrow;
+          }
+        }
+        var rows = snap.docs.map((d) {
+          final data = Map<String, dynamic>.from(d.data());
+          data.putIfAbsent('id', () => d.id);
+          data.putIfAbsent('uid', () => d.id);
+          return data;
+        }).toList();
         for (final group in _orGroups) {
           rows = rows
               .where((row) => group.any((c) => _matchesOrClause(row, c)))

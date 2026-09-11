@@ -29,9 +29,10 @@ class RoomSettingsScreen extends StatefulWidget {
   final String roomId;
   final String initialName;
   final String initialPassword;
+  final String? initialTopic;
   final String? roomAvatarPath;
   final List<Map<String, dynamic>> admins;
-  final void Function(String name, String password, String? photoUrl)? onConfirm;
+  final void Function(String name, String password, String? photoUrl, String? topic)? onConfirm;
   final bool isModerator;
 
   const RoomSettingsScreen({
@@ -39,6 +40,7 @@ class RoomSettingsScreen extends StatefulWidget {
     required this.roomId,
     this.initialName = '',
     this.initialPassword = '',
+    this.initialTopic,
     this.roomAvatarPath,
     this.admins = const [],
     this.onConfirm,
@@ -55,28 +57,50 @@ class _RoomSettingsScreenState extends State<RoomSettingsScreen> {
   late final TextEditingController _topicCtrl;
   bool _isLocked = false;
   String? _roomAvatar;
+  int _adminCount = 0;
   int _blacklistCount = 0;
   final SupabaseService _firebaseService = SupabaseService();
+  StreamSubscription? _roomSub;
+  StreamSubscription? _blacklistSub;
 
   @override
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.initialName);
     _pwdCtrl = TextEditingController(text: widget.initialPassword);
-    _topicCtrl = TextEditingController();
+    _topicCtrl = TextEditingController(text: widget.initialTopic ?? '');
     _isLocked = widget.initialPassword.isNotEmpty;
     _roomAvatar = widget.roomAvatarPath;
-    _loadBlacklistCount();
+    _adminCount = widget.admins.length;
+    _listenData();
   }
 
-  void _loadBlacklistCount() {
-    _firebaseService.getRoomBlockedUids(widget.roomId).then((uids) {
-      if (mounted) setState(() => _blacklistCount = uids.length);
+  void _listenData() {
+    _roomSub = _firebaseService.roomStream(widget.roomId).listen((room) {
+      if (!mounted || room == null) return;
+      setState(() {
+        _adminCount = room.moderators.length;
+        if (_topicCtrl.text.isEmpty && room.announcement.isNotEmpty) {
+          _topicCtrl.text = room.announcement;
+        }
+        if (_roomAvatar == null && room.roomPhotoUrl.isNotEmpty) {
+          _roomAvatar = room.roomPhotoUrl;
+        }
+      });
+    });
+
+    _blacklistSub = _firebaseService.roomBlocksStream(widget.roomId).listen((list) {
+      if (!mounted) return;
+      setState(() {
+        _blacklistCount = list.length;
+      });
     });
   }
 
   @override
   void dispose() {
+    _roomSub?.cancel();
+    _blacklistSub?.cancel();
     _nameCtrl.dispose();
     _pwdCtrl.dispose();
     _topicCtrl.dispose();
@@ -151,7 +175,7 @@ class _RoomSettingsScreenState extends State<RoomSettingsScreen> {
                     _buildListRow(
                       icon: R.next2Ic,
                       label: 'Admin',
-                      count: widget.admins.length,
+                      count: _adminCount,
                       onTap: () => _showAdminSheet(context),
                     ),
                     const SizedBox(height: 24),
@@ -180,7 +204,6 @@ class _RoomSettingsScreenState extends State<RoomSettingsScreen> {
                       );
                     },
                   ),
-                  const SizedBox(height: 24),
                   const SizedBox(height: 32),
                 ],
               ),
@@ -194,7 +217,8 @@ class _RoomSettingsScreenState extends State<RoomSettingsScreen> {
               onTap: () {
                 final name = _nameCtrl.text.trim();
                 final pwd = _isLocked ? _pwdCtrl.text.trim() : '';
-                widget.onConfirm?.call(name, pwd, _roomAvatar);
+                final topic = _topicCtrl.text.trim();
+                widget.onConfirm?.call(name, pwd, _roomAvatar, topic);
                 Navigator.pop(context);
               },
               child: Container(
@@ -501,9 +525,9 @@ class _RoomSettingsScreenState extends State<RoomSettingsScreen> {
               ),
             const SizedBox(width: 8),
             R.image(
-              R.roomCameraLogoIc,
-              width: 30,
-              height: 30,
+              icon,
+              width: 20,
+              height: 20,
             ),
           ],
         ),
@@ -513,42 +537,9 @@ class _RoomSettingsScreenState extends State<RoomSettingsScreen> {
 
   // ── Admin sheet ─────────────────────────────────────────────────
   void _showAdminSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF211211),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _UserListSheet(
-            title: 'Admins',
-            users: widget.admins,
-            emptyMessage: 'No admins assigned yet',
-            actionLabel: 'Remove Admin',
-            onAction: (user) {},
-          ),
-          Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-          GestureDetector(
-            onTap: () {
-              Navigator.pop(ctx);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => RoomAdminsScreen(roomId: widget.roomId)),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              alignment: Alignment.center,
-              child: const Text(
-                'عرض الكل',
-                style: TextStyle(color: Colors.white, fontSize: 14),
-              ),
-            ),
-          ),
-        ],
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => RoomAdminsScreen(roomId: widget.roomId)),
     );
   }
 
@@ -557,145 +548,6 @@ class _RoomSettingsScreenState extends State<RoomSettingsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => BlacklistScreen(roomId: widget.roomId)),
-    );
-  }
-}
-
-// ─── User list bottom sheet (Admin / Blacklist) ──────────────────
-class _UserListSheet extends StatelessWidget {
-  final String title;
-  final List<Map<String, dynamic>> users;
-  final String emptyMessage;
-  final String actionLabel;
-  final void Function(Map<String, dynamic> user)? onAction;
-
-  const _UserListSheet({
-    required this.title,
-    required this.users,
-    required this.emptyMessage,
-    required this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.6,
-      child: Column(
-        children: [
-          // Drag handle
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 8, bottom: 4),
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0x33FFFFFF),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: const Icon(Icons.close, color: Colors.white70),
-                ),
-              ],
-            ),
-          ),
-          Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-          Expanded(
-            child: users.isEmpty
-                ? Center(
-                    child: Text(
-                      emptyMessage,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white54,
-                      ),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: users.length,
-                    separatorBuilder: (_, __) =>
-                        Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-                    itemBuilder: (_, i) {
-                      final u = users[i];
-                      return ListTile(
-                        leading: ClipOval(
-                          child: Image.asset(
-                            u['avatar']?.toString() ?? R.avaBoy,
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              width: 40,
-                              height: 40,
-                              color: AppColors.cardBg,
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          u['name']?.toString() ?? 'User',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Text(
-                          'ID: ${u['id'] ?? '---'}',
-                          style: const TextStyle(
-                            color: Colors.white54,
-                            fontSize: 11,
-                          ),
-                        ),
-                        trailing: GestureDetector(
-                          onTap: () {
-                            onAction?.call(u);
-                            Navigator.pop(context);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.accentRed.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              actionLabel,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFFE82323),
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
     );
   }
 }

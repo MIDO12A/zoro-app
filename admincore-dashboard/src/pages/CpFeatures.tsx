@@ -1,5 +1,6 @@
 import { useEffect, useState, useContext } from 'react';
 import { I18nContext } from '../lib/i18n';
+import { listenCollection } from '../lib/supabase';
 import { getCpGifts, addCpGift, updateCpGift, deleteCpGift, getCpCars, addCpCar, updateCpCar, deleteCpCar, getCpSettings, updateCpSetting, getCpRankRewards, upsertCpRankReward, deleteCpRankReward, distributeCpRewards, expireCpRewards, getCpRewardConfig, saveCpRewardConfig, getActiveRewards, getDistributionHistory, getGifts, getStoreItems } from '../lib/db';
 import { uploadAppAsset } from '../lib/storage';
 import type { CpGiftModel, CpCarModel, CpRankRewardModel, GiftModel, StoreItemModel } from '../types';
@@ -95,6 +96,7 @@ export default function CpFeaturesPage() {
   // Rewards state
   const [rewards, setRewards] = useState<CpRankRewardModel[]>([]);
   const [rewardsPeriod, setRewardsPeriod] = useState('all');
+  const [rewardsLoading, setRewardsLoading] = useState(false);
   const [rewardForm, setRewardForm] = useState({
     period: 'daily',
     rank_position: 1,
@@ -105,6 +107,7 @@ export default function CpFeaturesPage() {
     label_en: '',
     svga_url: '',
     image_url: '',
+    is_active: true,
   });
   const [editingReward, setEditingReward] = useState<string | null>(null);
   const [showAddReward, setShowAddReward] = useState(false);
@@ -143,10 +146,13 @@ export default function CpFeaturesPage() {
 
   const loadRewards = async () => {
     try {
+      setRewardsLoading(true);
       const r = await getCpRankRewards();
       setRewards(r);
     } catch (e) {
       console.warn('loadRewards error:', e);
+    } finally {
+      setRewardsLoading(false);
     }
   };
 
@@ -204,18 +210,37 @@ export default function CpFeaturesPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Realtime: أي تعديل على cp_rank_rewards (من تبويب آخر/نافذة أخرى) يظهر فوراً.
+  useEffect(() => {
+    const unsub = listenCollection('cp_rank_rewards', rows => {
+      setRewards(rows.map((r: any) => ({
+        id: r.id,
+        period: r.period ?? 'weekly',
+        rank_position: Number(r.rank_position ?? 1),
+        slot_index: Number(r.slot_index ?? 0),
+        reward_type: r.reward_type ?? 'frame_svga',
+        label_ar: r.label_ar ?? '',
+        label_en: r.label_en ?? '',
+        svga_url: r.svga_url ?? '',
+        image_url: r.image_url ?? '',
+        isActive: r.isActive !== false,
+      })));
+    });
+    return unsub;
+  }, []);
+
   const resetGiftForm = () => { setGiftForm(defaultGiftForm); setEditingGift(null); setShowAddGift(false); };
   const resetCarForm = () => { setCarForm(defaultCarForm); setEditingCar(null); setShowAddCar(false); };
-  const resetRewardForm = () => { setRewardForm({ period: 'daily', rank_position: 1, sort_order: 0, reward_type: 'frame_svga', label_ar: '', label_en: '', svga_url: '', image_url: '' }); setEditingReward(null); setShowAddReward(false); };
+  const resetRewardForm = () => { setRewardForm({ period: 'daily', rank_position: 1, sort_order: 0, target_partner: 'both', reward_type: 'frame_svga', label_ar: '', label_en: '', svga_url: '', image_url: '', is_active: true }); setEditingReward(null); setShowAddReward(false); };
 
   const handleEditReward = (r: CpRankRewardModel) => {
     setEditingReward(r.id);
     setShowAddReward(false);
-    setRewardForm({ period: r.period || 'daily', rank_position: r.rank_position ?? 1, sort_order: r.slot_index, reward_type: r.reward_type || 'frame_svga', label_ar: r.label_ar, label_en: r.label_en, svga_url: r.svga_url || '', image_url: r.image_url || '' });
+    setRewardForm({ period: r.period || 'daily', rank_position: r.rank_position ?? 1, sort_order: r.slot_index, target_partner: 'both', reward_type: r.reward_type || 'frame_svga', label_ar: r.label_ar, label_en: r.label_en, svga_url: r.svga_url || '', image_url: r.image_url || '', is_active: r.isActive !== false });
   };
 
   const handleSaveReward = async () => {
-    await upsertCpRankReward(editingReward, { ...rewardForm, rank_position: rewardForm.rank_position, slot_index: rewardForm.sort_order });
+    await upsertCpRankReward(editingReward, { ...rewardForm, isActive: rewardForm.is_active, rank_position: rewardForm.rank_position, slot_index: rewardForm.sort_order });
     resetRewardForm();
     loadRewards();
     showMsg('Saved!');
@@ -223,7 +248,7 @@ export default function CpFeaturesPage() {
 
   const handleAddReward = async () => {
     if (!rewardForm.label_ar) { showMsg('Please enter Arabic label'); return; }
-    await upsertCpRankReward(null, { ...rewardForm, rank_position: rewardForm.rank_position, slot_index: rewardForm.sort_order });
+    await upsertCpRankReward(null, { ...rewardForm, isActive: rewardForm.is_active, rank_position: rewardForm.rank_position, slot_index: rewardForm.sort_order });
     resetRewardForm();
     loadRewards();
     showMsg('Added!');
@@ -740,7 +765,7 @@ export default function CpFeaturesPage() {
       {activeTab === 'rewards' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-slate-500 text-xs">{rewards.length} {isAr ? 'مكافأة' : 'rewards'}</p>
+            <p className="text-slate-500 text-xs">{rewardsLoading ? (isAr ? 'جارٍ التحميل...' : 'Loading...') : `${rewards.length} ${isAr ? 'مكافأة' : 'rewards'}`}</p>
             <button onClick={() => { resetRewardForm(); setShowAddReward(!showAddReward); }}
               className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-xs text-white font-semibold rounded-lg flex items-center gap-1">
               <Plus className="w-3.5 h-3.5" /> {showAddReward ? (isAr ? 'إلغاء' : 'Cancel') : (isAr ? 'إضافة مكافأة' : 'Add Reward')}
@@ -838,6 +863,12 @@ export default function CpFeaturesPage() {
                   <p className="text-[10px] text-slate-500 mt-0.5">{isAr ? 'نوع المكافأة يحدد مكان ظهورها في شاشة التصنيف (إطار = على الصورة)' : 'Reward type determines where it appears on the ranking screen'}</p>
                 </div>
               </div>
+              <div className="flex items-center gap-3 pt-1">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={rewardForm.is_active} onChange={e => setRewardForm(p => ({ ...p, is_active: e.target.checked }))} className="w-4 h-4" />
+                  <span className="text-xs text-slate-300">{isAr ? 'مفعلة (تظهر للمستخدمين)' : 'Active (visible to users)'}</span>
+                </label>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] uppercase text-slate-400 font-bold mb-1">{isAr ? 'الاسم (عربي)' : 'Label (Arabic)'}</label>
@@ -870,7 +901,25 @@ export default function CpFeaturesPage() {
               ) : (
                 <div className="flex flex-wrap gap-3">
                   {sorted.map(r => (
-                    <div key={r.id} className="bg-[#161618] rounded-lg border border-white/5 p-3 w-36">
+                    <div key={r.id} className={`bg-[#161618] rounded-lg border p-3 w-36 ${r.isActive === false ? 'border-rose-500/20 opacity-70' : 'border-white/5'}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded ${r.isActive === false ? 'bg-rose-600/20 text-rose-400' : 'bg-emerald-600/20 text-emerald-400'}`}>
+                          {r.isActive === false ? (isAr ? 'معطلة' : 'Off') : (isAr ? 'مفعلة' : 'On')}
+                        </span>
+                        <button
+                          onClick={async () => {
+                            const next = r.isActive === false;
+                            if (confirm((isAr ? `تفعيل المكافأة «${r.label_ar}»؟` : `Enable reward "${r.label_ar}"?`) + (next ? '' : (isAr ? '\nلن تظهر في التطبيق' : '\nIt will no longer appear in the app')))) {
+                              await upsertCpRankReward(r.id, { ...r, isActive: next });
+                              showMsg(next ? (isAr ? '✅ تم التفعيل' : '✅ Enabled') : (isAr ? '⏸️ تم التعطيل' : '⏸️ Disabled'));
+                            }
+                          }}
+                          className={`px-2 py-0.5 text-[10px] rounded ${r.isActive === false ? 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400' : 'bg-rose-600/20 hover:bg-rose-600/30 text-rose-400'}`}
+                          title={isAr ? 'تفعيل/تعطيل' : 'Toggle active'}
+                        >
+                          {r.isActive === false ? (isAr ? 'تفعيل' : 'Enable') : (isAr ? 'تعطيل' : 'Disable')}
+                        </button>
+                      </div>
                       <div className="flex items-center justify-center h-16 mb-2">
                         {r.svga_url ? (
                           <img src={r.svga_url} className="w-12 h-12 object-contain rounded" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />

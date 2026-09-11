@@ -9,9 +9,9 @@ import '../../services/level_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/app_update_dialog.dart';
+import '../../widgets/user_id_widget.dart';
 import '../../core/supabase_compat.dart';
-import '../../screens/room/widgets/svga_player.dart';
-import '../../screens/room/widgets/vap_player.dart';
+import '../../screens/room/widgets/svga_frame.dart';
 import '../follow/follow_recent_screen.dart';
 import '../profile/account_management_screen.dart';
 import '../wallet/wallet_main_screen.dart';
@@ -24,7 +24,7 @@ import 'edit_profile_screen.dart';
 import '../setting/feedback_screen.dart';
 import '../vip/vip_center_screen.dart';
 import '../vip/vip_intro_screen.dart';
-import '../../features/cp/cp_detail_full_screen.dart';
+import '../../features/cp/cp_space_screen.dart';
 import '../../features/host_agency/host_agency_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
 import '../../features/signin/weekly_signin_screen.dart';
@@ -71,39 +71,25 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildFrameWidget(String activeFrame) {
-    if (activeFrame.startsWith('http')) {
-      final type = detectAssetType(activeFrame);
-      if (type == AssetType.svga) {
-        return SvgaPlayer(
-          assetPath: activeFrame,
-          fit: BoxFit.contain,
-          loops: true,
-        );
-      }
-      if (type == AssetType.vap || type == AssetType.mp4) {
-        return VapPlayer(
-          url: activeFrame,
-          fit: BoxFit.contain,
-          loops: true,
-        );
-      }
-      return Image(
-        image: R.cachedImage(activeFrame),
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const SizedBox(),
-      );
-    }
+    if (activeFrame.isEmpty) return const SizedBox();
+    String resolved = activeFrame;
     final storeItem = SupabaseService().getStoreItemSync(activeFrame);
-    final frameAsset = storeItem?.svgaAsset;
-    if (frameAsset != null) {
-      return SvgaPlayer(
-        assetPath: frameAsset,
+    if (storeItem != null && storeItem.svgaAsset != null && storeItem.svgaAsset!.isNotEmpty) {
+      resolved = storeItem.svgaAsset!;
+    }
+    if (resolved.toLowerCase().endsWith('.svga') ||
+        resolved.toLowerCase().endsWith('.vap') ||
+        resolved.toLowerCase().endsWith('.mp4') ||
+        resolved.startsWith('http') ||
+        resolved.startsWith('assets/svga/')) {
+      return SvgaFrame(
+        svgaPath: resolved,
+        size: 122,
         fit: BoxFit.contain,
-        loops: true,
       );
     }
     return Image.asset(
-      activeFrame,
+      resolved,
       fit: BoxFit.contain,
       errorBuilder: (_, __, ___) => const SizedBox(),
     );
@@ -219,27 +205,11 @@ class ProfileScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 7),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-              R.image(R.commonUserIdIc,
-                width: 20,
-                height: 20,
-              ),
-                const SizedBox(width: 2),
-                Text(
-                  'ID: ${user?.customId?.isNotEmpty == true ? user!.customId : ((1000000 + (user?.uid.hashCode.abs() ?? 0) % 9000000).toString())}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF9BA1B6),
-                  ),
-                ),
-                const SizedBox(width: 2),
-              R.image(R.commonIdCopyIc,
-                width: 20,
-                height: 20,
-              ),
-              ],
+            UserIdWidget(
+              idText: user?.customId?.isNotEmpty == true
+                  ? user!.customId
+                  : ((1000000 + (user?.uid.hashCode.abs() ?? 0) % 9000000).toString()),
+              countryCode: user?.country,
             ),
             const SizedBox(height: 8),
             _buildLevelDisplay(user),
@@ -250,15 +220,70 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildLevelDisplay(dynamic user) {
+    final hasVip = (user?.ownedVipItems != null && (user.ownedVipItems as List).isNotEmpty) ||
+        (user?.activeNecklace != null && user.activeNecklace.toString().isNotEmpty) ||
+        (user?.rechargeLevel != null && (user.rechargeLevel as int) > 1) ||
+        (user?.rechargeExp != null && (user.rechargeExp as int) > 0);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (hasVip) ...[
+                _buildVipNecklace(user),
+                const SizedBox(width: 8),
+              ],
+              _levelIcon(user?.wealthLevel ?? 1, 'wealth'),
+              const SizedBox(width: 8),
+              _levelIcon(user?.rechargeLevel ?? 1, 'recharge'),
+            ],
+          ),
+        ),
+        _buildBadgesRow(user),
+      ],
+    );
+  }
+
+  Widget _buildVipNecklace(dynamic user) {
+    String necklace = user?.activeNecklace?.toString() ?? '';
+    if (necklace.isEmpty) {
+      final lvl = ((user?.rechargeLevel ?? 1) as int).clamp(1, 5);
+      necklace = 'assets/svga/v${lvl}_left_bottom.svga';
+    }
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: SvgaFrame(
+        svgaPath: necklace,
+        size: 28,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _buildBadgesRow(dynamic user) {
+    final badges = (user?.ownedBadges as List<String>?) ?? [];
+    if (badges.isEmpty) return const SizedBox();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _levelIcon(user?.wealthLevel ?? 1, 'wealth'),
-          const SizedBox(width: 8),
-          _levelIcon(user?.rechargeLevel ?? 1, 'recharge'),
-        ],
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 6,
+        alignment: WrapAlignment.center,
+        children: badges.take(4).map((badgeId) {
+          final storeItem = SupabaseService().getStoreItemSync(badgeId);
+          final iconUrl = storeItem?.iconAsset ?? storeItem?.svgaAsset;
+          if (iconUrl == null || iconUrl.isEmpty) return const SizedBox();
+          return SizedBox(
+            width: 22,
+            height: 22,
+            child: iconUrl.endsWith('.svga')
+                ? SvgaFrame(svgaPath: iconUrl, size: 22)
+                : Image.network(iconUrl, width: 22, height: 22, errorBuilder: (_, __, ___) => const SizedBox()),
+          );
+        }).toList(),
       ),
     );
   }
@@ -535,19 +560,19 @@ class ProfileScreen extends StatelessWidget {
           _buildDivider(),
           _buildMenuItem(
             R.mineCpIc,
-            'CP',
+            'علاقات CP',
             null,
             () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const CPDetailFullScreen()),
+                MaterialPageRoute(builder: (context) => const CpSpaceScreen()),
               );
             },
           ),
           _buildDivider(),
           _buildMenuItem(
             R.mineUnionIc,
-            'وكالة المضيفين',
+            'وكالة المضيفين (إدارة الوكالة)',
             null,
             () {
               Navigator.push(

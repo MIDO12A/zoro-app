@@ -65,6 +65,14 @@ function md5(s) {
 }
 
 function docIdFor(table, row) {
+  // cp_rank_rewards: معرّف وثيقة حتمي (period_rank{position}_slot{index})
+  // ليتمكن upsert من لوحة التحكم من الكتابة فوق نفس الوثيقة.
+  if (table === 'cp_rank_rewards') {
+    const p = row.period || 'weekly';
+    const r = row.rank_position ?? 1;
+    const s = row.slot_index ?? 0;
+    return `${p}_rank${r}_slot${s}`;
+  }
   const kf = KEY_FIELDS[table];
   if (kf && row[kf] != null) return String(row[kf]);
   if (row.id != null) return String(row.id);
@@ -207,6 +215,7 @@ for (const file of FILES) {
   const sql = readFileSync(path, 'utf8');
   const stmts = extractInserts(sql);
   for (const { table, row } of stmts) {
+    if (table === 'cp_rank_rewards' && row.isActive === undefined) row.isActive = true;
     const id = docIdFor(table, row);
     await db.collection(table).doc(id).set(row, { merge: true });
     total++;
@@ -227,6 +236,7 @@ const TOUCH = [
   'host_agencies', 'host_agency_members', 'commission_settings',
   'host_milestones', 'host_agency_join_requests', 'agency_diamond_ledger',
   'agency_withdrawal_requests', 'user_vips', 'ranking_frames', 'gift_banner_configs',
+  'cp_requests', 'cp_couples', 'cp_gift_logs', 'user_rewards',
 ];
 for (const col of TOUCH) {
   try {

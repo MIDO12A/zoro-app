@@ -170,13 +170,14 @@ class _CPRewardsScreenState extends State<CPRewardsScreen> {
   }
 
   Widget _buildRewardsDisplay(DynamicConfigService cfg) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: CpService.getRankRewards(period: _period),
+    // StreamBuilder: يعرض مكافآت الفترة لحظياً (أي تعديل من لوحة التحكم يظهر فوراً)
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: CpService.rewardsStream(period: _period),
       builder: (context, snapshot) {
-        final rewards = snapshot.data ?? [];
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator(color: cfg.cpGold, strokeWidth: 2));
         }
+        final rewards = snapshot.data ?? [];
         if (rewards.isEmpty) return const SizedBox.shrink();
 
         final bgUrl = _settings['rewards_box_bg'] as String? ?? '';

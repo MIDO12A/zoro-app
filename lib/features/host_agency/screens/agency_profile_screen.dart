@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 
+import 'agency_exit_screen.dart';
 import '../data/agency_models.dart';
 import '../data/agency_repository.dart';
+import '../../../providers/user_provider.dart';
+import '../../../services/level_service.dart';
+import '../../../widgets/user_id_widget.dart';
+import '../../../config/r.dart';
 import '../../../core/cache/encrypted_image_provider.dart';
 
 // ═══════════════════════════════════════════════════════════════════
-//  AgencyProfileScreen — الملف العام للوكالة
-//  يعرض: اللوجو + الاسم + الوصف + الإحصائيات + زر انضمام + الأعضاء
+//  AgencyProfileScreen — شاشة تفاصيل وطلب الانضمام إلى الوكالة
+//  مطابقة 1:1 للتطبيق الأصلي (UnionApplyActivity & union_activity_detail_info.xml)
 // ═══════════════════════════════════════════════════════════════════
 class AgencyProfileScreen extends StatefulWidget {
   final String agencyId;
@@ -19,9 +24,9 @@ class AgencyProfileScreen extends StatefulWidget {
 
 class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
   AgencyCard? _agency;
-  List<Map<String, dynamic>> _members = [];
   bool _loading = true;
   bool _joining = false;
+  String? _error;
 
   @override
   void initState() {
@@ -29,19 +34,16 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
     _load();
   }
 
-  String? _error;
-
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final agency = await AgencyRepository.getProfile(widget.agencyId);
-      final members = agency != null
-          ? await AgencyRepository.getMembers(widget.agencyId, limit: 20)
-          : <Map<String, dynamic>>[];
       if (!mounted) return;
       setState(() {
-        _agency  = agency;
-        _members = members;
+        _agency = agency;
         _loading = false;
       });
     } catch (e) {
@@ -60,13 +62,83 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
       await AgencyRepository.requestJoin(widget.agencyId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✅ تم إرسال طلب الانضمام'), backgroundColor: Color(0xFF2E7D32)),
+        const SnackBar(
+          content: Text('✅ تم إرسال طلب الانضمام بنجاح'),
+          backgroundColor: Color(0xFF2E7D32),
+        ),
       );
       await _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('تعذر إرسال الطلب: $e'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('تعذر إرسال الطلب: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _joining = false);
+    }
+  }
+
+  Future<void> _leaveAgency() async {
+    final exitResult = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => const AgencyExitScreen()),
+    );
+    if (exitResult == true) {
+      await _load();
+      return;
+    }
+
+    if (!mounted) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF222028),
+        title: const Text('تأكيد الانسحاب المباشر', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'هل تريد تأكيد الانسحاب المباشر من هذه الوكالة الآن؟ سيتم إنهاء عضويتك فوراً.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('إلغاء', style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('تأكيد الانسحاب'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _joining = true);
+    try {
+      await AgencyRepository.leaveAgency(widget.agencyId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ تم الانسحاب من الوكالة بنجاح'),
+          backgroundColor: Color(0xFF2E7D32),
+        ),
+      );
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تعذر الانسحاب: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _joining = false);
@@ -76,381 +148,716 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D1A),
+      backgroundColor: const Color(0xFF1A1A1A),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: Color(0xFFD4AF37)))
           : _error != null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.white38, size: 48),
-                      const SizedBox(height: 12),
-                      Text('تعذر تحميل بيانات الوكالة', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 15)),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _load,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('إعادة المحاولة'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFD4AF37),
-                          foregroundColor: Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
+              ? _buildErrorView()
               : _agency == null
-                  ? Center(child: Text('لم يتم العثور على الوكالة', style: TextStyle(color: Colors.white.withOpacity(0.5))))
+                  ? _buildNotFoundView()
                   : _buildContent(),
     );
   }
 
-  Widget _buildContent() {
-    final a = _agency!;
-    final tierColor = _tierColors[a.tier] ?? const Color(0xFFD4AF37);
-
-    return CustomScrollView(
-      slivers: [
-        // ── Hero SliverAppBar ──────────────────────────────────────
-        SliverAppBar(
-          backgroundColor: const Color(0xFF0D0D1A),
-          foregroundColor: Colors.white,
-          expandedHeight: 220,
-          pinned: true,
-          flexibleSpace: FlexibleSpaceBar(
-            collapseMode: CollapseMode.parallax,
-            background: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Background gradient
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [tierColor.withOpacity(0.3), const Color(0xFF0D0D1A)],
-                    ),
-                  ),
-                ),
-                // Logo
-                Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(height: 48),
-                      Container(
-                        width: 90,
-                        height: 90,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: tierColor.withOpacity(0.2),
-                          border: Border.all(color: tierColor, width: 2.5),
-                          image: a.photoUrl != null
-                              ? DecorationImage(image: EncryptedImageProvider(a.photoUrl!), fit: BoxFit.cover)
-                              : null,
-                        ),
-                        child: a.photoUrl == null
-                            ? Center(child: Text(a.name.characters.first,
-                                style: TextStyle(color: tierColor, fontSize: 32, fontWeight: FontWeight.bold)))
-                            : null,
-                      ),
-                      const SizedBox(height: 10),
-                      Row(mainAxisSize: MainAxisSize.min, children: [
-                        Text(a.name,
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                        if (a.isHallOfFame) ...[
-                          const SizedBox(width: 6),
-                          const Text('🏆', style: TextStyle(fontSize: 16)),
-                        ],
-                      ]),
-                      if (a.agencyPublicId != null) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD4AF37).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.5)),
-                          ),
-                          child: Text(
-                            'ID: ${a.agencyPublicId}',
-                            style: const TextStyle(
-                              color: Color(0xFFD4AF37),
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // ── Body ───────────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Tier + rank chip row
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  _InfoChip(label: a.tier.label, color: tierColor),
-                  if (a.rank != null) _InfoChip(label: '#${a.rank} في التصنيف', color: Colors.white54),
-                  if (a.country != null) _InfoChip(label: '📍 ${a.country}', color: Colors.white38),
-                ]),
-
-                const SizedBox(height: 16),
-
-                // Description
-                if (a.description != null && a.description!.isNotEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(a.description!,
-                      style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 14, height: 1.6),
-                    ),
-                  ),
-
-                const SizedBox(height: 16),
-
-                // Stats row
-                _buildStatsRow(a, tierColor),
-
-                const SizedBox(height: 20),
-
-                // Join button
-                if (a.canJoin)
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _joining ? null : _join,
-                      icon: _joining
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                          : const Icon(Icons.group_add_rounded),
-                      label: Text(_joining ? 'جارٍ الإرسال...' : 'طلب الانضمام'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: tierColor,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    ),
-                  )
-                else if (a.hasPendingRequest)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
-                    ),
-                    child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.hourglass_top_rounded, color: Colors.orange, size: 18),
-                      SizedBox(width: 8),
-                      Text('تم إرسال طلب الانضمام — في انتظار الموافقة', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600)),
-                    ]),
-                  )
-                else if (a.isMember)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.green.withOpacity(0.3)),
-                    ),
-                    child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
-                      SizedBox(width: 8),
-                      Text('أنت عضو في هذه الوكالة', style: TextStyle(color: Colors.green, fontWeight: FontWeight.w600)),
-                    ]),
-                  ),
-
-                const SizedBox(height: 24),
-
-                // Members section
-                Text('أعضاء الوكالة', style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
-                  fontSize: 16, fontWeight: FontWeight.bold,
-                )),
-                const SizedBox(height: 12),
-
-                ..._members.take(10).map((m) => _MemberRow(data: m)),
-
-                if (_members.length > 10)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Center(child: Text('+${_members.length - 10} عضو آخر',
-                      style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13))),
-                  ),
-
-                const SizedBox(height: 32),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatsRow(AgencyCard a, Color tierColor) {
-    return Row(
-      children: [
-        Expanded(child: _StatBlock(
-          icon: '👥',
-          value: a.memberCount.toString(),
-          label: 'عضو',
-          color: tierColor,
-        )),
-        const SizedBox(width: 10),
-        Expanded(child: _StatBlock(
-          icon: '♦',
-          value: _fmtK(a.totalDiamondsMonthly),
-          label: 'ألماس الشهر',
-          color: const Color(0xFFB39DDB),
-        )),
-        const SizedBox(width: 10),
-        Expanded(child: _StatBlock(
-          icon: '💎',
-          value: _fmtK(a.totalDiamondsCumulative),
-          label: 'تراكمي',
-          color: const Color(0xFF6ADBF5),
-        )),
-      ],
-    );
-  }
-
-  static const _tierColors = {
-    AgencyTier.bronze:   Color(0xFFCD7F32),
-    AgencyTier.silver:   Color(0xFFC0C0C0),
-    AgencyTier.gold:     Color(0xFFD4AF37),
-    AgencyTier.platinum: Color(0xFF6ADBF5),
-    AgencyTier.diamond:  Color(0xFFB39DDB),
-  };
-
-  static String _fmtK(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}K';
-    return n.toString();
-  }
-}
-
-// ─── Widgets ────────────────────────────────────────────────────────
-
-class _InfoChip extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _InfoChip({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class _StatBlock extends StatelessWidget {
-  final String icon;
-  final String value;
-  final String label;
-  final Color color;
-  const _StatBlock({required this.icon, required this.value, required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Column(children: [
-        Text(icon, style: const TextStyle(fontSize: 20)),
-        const SizedBox(height: 4),
-        Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
-      ]),
-    );
-  }
-}
-
-class _MemberRow extends StatelessWidget {
-  final Map<String, dynamic> data;
-  const _MemberRow({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    final profile = data['profile'] as Map<String, dynamic>? ?? {};
-    final name    = profile['display_name'] as String? ?? '—';
-    final avatar  = profile['avatar_url'] as String?;
-    final level   = (profile['level'] as num?)?.toInt() ?? 1;
-    final role    = data['role'] as String? ?? 'host';
-    final diamonds = (data['diamonds_earned_monthly'] as num?)?.toInt() ?? 0;
-
-    final roleColors = {
-      'owner':      const Color(0xFFD4AF37),
-      'supervisor': const Color(0xFF6ADBF5),
-      'host':       Colors.white54,
-    };
-    final roleLabels = {
-      'owner':      'مالك',
-      'supervisor': 'مشرف',
-      'host':       'مضيف',
-    };
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+  Widget _buildErrorView() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // Avatar
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: const Color(0xFFD4AF37).withOpacity(0.2),
-            backgroundImage: avatar != null ? EncryptedImageProvider(avatar) : null,
-            child: avatar == null ? Text(name.characters.first, style: const TextStyle(color: Color(0xFFD4AF37))) : null,
+          const Icon(Icons.error_outline, color: Colors.white38, size: 48),
+          const SizedBox(height: 12),
+          const Text(
+            'تعذر تحميل بيانات الوكالة',
+            style: TextStyle(color: Colors.white70, fontSize: 15),
           ),
-          const SizedBox(width: 10),
-          // Name + level
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(name, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-              Text('Lv.$level · ${roleLabels[role] ?? role}',
-                style: TextStyle(color: roleColors[role] ?? Colors.white54, fontSize: 11)),
-            ]),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh),
+            label: const Text('إعادة المحاولة'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFD4AF37),
+              foregroundColor: Colors.black,
+            ),
           ),
-          // Diamonds
-          Text('${_fmtK(diamonds)} ♦',
-            style: const TextStyle(color: Color(0xFFB39DDB), fontWeight: FontWeight.bold, fontSize: 13)),
         ],
       ),
     );
   }
 
-  static String _fmtK(int n) {
-    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
-    if (n >= 1000)    return '${(n / 1000).toStringAsFixed(0)}K';
-    return n.toString();
+  Widget _buildNotFoundView() {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset(
+            'assets/mipmap-xxhdpi/common_empty_ic_1.webp',
+            width: 120,
+            height: 120,
+            errorBuilder: (_, __, ___) => const Icon(Icons.search_off, color: Colors.white38, size: 64),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'لم يتم العثور على الوكالة',
+            style: TextStyle(color: Colors.white60, fontSize: 15),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF303030)),
+            child: const Text('رجوع', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    final a = _agency!;
+    final topPadding = MediaQuery.of(context).padding.top;
+    final rank = a.rank ?? 1;
+
+    // تحديد خلفية الهالة حسب التصنيف تماماً كما في التطبيق الأصلي (UnionApplyActivity.kt):
+    // 1 -> union_my_agency_avatar_1_bg
+    // 2 -> union_my_agency_avatar_2_bg
+    // 3 -> union_my_agency_avatar_3_bg
+    // default -> union_my_agency_avatar_4_bg
+    String auraBgAsset;
+    if (rank == 1) {
+      auraBgAsset = 'assets/mipmap-xxhdpi/union_my_agency_avatar_1_bg.webp';
+    } else if (rank == 2) {
+      auraBgAsset = 'assets/mipmap-xxhdpi/union_my_agency_avatar_2_bg.webp';
+    } else if (rank == 3) {
+      auraBgAsset = 'assets/mipmap-xxhdpi/union_my_agency_avatar_3_bg.webp';
+    } else {
+      auraBgAsset = 'assets/mipmap-xxhdpi/union_my_agency_avatar_4_bg.webp';
+    }
+
+    return Stack(
+      children: [
+        // ── 1. خلفية الشاشة الأساسية المطابقة للأصل (iv_header_bg) ──
+        Positioned.fill(
+          child: Image.asset(
+            'assets/mipmap-xxhdpi/union_my_agency_bg.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Image.asset(
+              'assets/mipmap-xxhdpi/union_my_agency_bg.9.png',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF0F0E17)),
+            ),
+          ),
+        ),
+
+        // ── 2. محتوى الوسط التمريري (NestedScrollView) ──
+        Positioned.fill(
+          bottom: 175, // يترك مساحة كافية لبطاقة المستخدم والزر السفلية
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                SizedBox(height: topPadding + 44 + 20),
+
+                // عنوان التصنيف: Last week's ranking / تصنيف الأسبوع الماضي
+                const Text(
+                  'تصنيف الأسبوع الماضي',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 5),
+
+                // رقم الترتيب مع أيقونة TOP الأصلية (tv_rank_top)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/mipmap-xxhdpi/union_rank_top_ic.webp',
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'TOP $rank',
+                      style: const TextStyle(
+                        fontSize: 38,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFFFFAD),
+                        fontStyle: FontStyle.italic,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // ── بطاقة الوكالة المركزية مع الهالة والتاج والإطار (iv_bg + iv_avatar_bg + iv_rank_crown) ──
+                Stack(
+                  alignment: Alignment.topCenter,
+                  children: [
+                    // صورة الهالة الخلفية للرتبة (iv_bg)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: AspectRatio(
+                        aspectRatio: 1 / 1.267,
+                        child: Image.asset(
+                          auraBgAsset,
+                          fit: BoxFit.fill,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+
+                    // التاج الذهبي للمركز الأول حصراً (iv_rank_crown)
+                    if (rank == 1)
+                      Positioned(
+                        top: 75,
+                        child: Image.asset(
+                          'assets/mipmap-xxhdpi/union_agency_avatar_heder_ic.webp',
+                          width: 48,
+                          height: 38,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      ),
+
+                    // إطار الأفاتار وصورة الوكالة المستديرة الحواف (iv_avatar_bg + iv_avatar)
+                    Positioned(
+                      top: 100,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // إطار الصورة المزخرف (iv_avatar_bg: 129x129dp)
+                          Image.asset(
+                            'assets/mipmap-xxhdpi/union_avatar_border_ic.png',
+                            width: 129,
+                            height: 129,
+                            fit: BoxFit.fill,
+                            errorBuilder: (_, __, ___) => Container(
+                              width: 129,
+                              height: 129,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: const Color(0xFFFFD700), width: 2),
+                              ),
+                            ),
+                          ),
+
+                          // صورة الوكالة (iv_avatar: 117x117dp مع حواف دائرية 17dp)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(17),
+                            child: SizedBox(
+                              width: 117,
+                              height: 117,
+                              child: a.photoUrl != null && a.photoUrl!.isNotEmpty
+                                  ? Image(
+                                      image: EncryptedImageProvider(a.photoUrl!),
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _buildAvatarFallback(a.name),
+                                    )
+                                  : _buildAvatarFallback(a.name),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // اسم وتفاصيل الوكالة أسفل الأفاتار
+                    Positioned(
+                      top: 242,
+                      left: 30,
+                      right: 30,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // اسم الوكالة (tv_name)
+                          Text(
+                            a.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // بيانات الوكالة الثلاثية متراصة في المنتصف (الدولة، الأعضاء، ID)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Column(
+                              children: [
+                                // علم واسم الدولة (iv_country + tv_country_name)
+                                _buildAgencyMetaRow(
+                                  icon: (a.country != null && a.country!.isNotEmpty)
+                                      ? ClipRRect(
+                                          borderRadius: BorderRadius.circular(2),
+                                          child: Image.network(
+                                            'https://flagcdn.com/w40/${a.country!.toLowerCase()}.png',
+                                            width: 20,
+                                            height: 13,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => const Text('📍', style: TextStyle(fontSize: 12)),
+                                          ),
+                                        )
+                                      : const Text('📍', style: TextStyle(fontSize: 12)),
+                                  text: a.country ?? 'عالمي',
+                                ),
+                                const SizedBox(height: 9),
+
+                                // عدد الأعضاء (iv_member_ic + tv_member_count)
+                                _buildAgencyMetaRow(
+                                  icon: Image.asset(
+                                    'assets/mipmap-xxhdpi/union_info_member_ic.webp',
+                                    width: 20,
+                                    height: 20,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.people, size: 18, color: Color(0xFFFFFFAD)),
+                                  ),
+                                  text: '${a.memberCount}',
+                                ),
+                                const SizedBox(height: 9),
+
+                                // معرف الوكالة (iv_id_ic + tv_member_id)
+                                _buildAgencyMetaRow(
+                                  icon: Image.asset(
+                                    'assets/mipmap-xxhdpi/union_info_id_ic.webp',
+                                    width: 20,
+                                    height: 20,
+                                    fit: BoxFit.contain,
+                                    errorBuilder: (_, __, ___) => const Icon(Icons.badge, size: 18, color: Color(0xFFFFFFAD)),
+                                  ),
+                                  text: a.agencyPublicId ?? a.id,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 30),
+              ],
+            ),
+          ),
+        ),
+
+        // ── 3. شريط العنوان والرجوع العلوي (iv_back + tv_title) ──
+        Positioned(
+          top: topPadding,
+          left: 0,
+          right: 0,
+          height: 48,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // زر الرجوع الأصلي (back_white_2)
+              Positioned(
+                left: 6,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: Image.asset(
+                    'assets/mipmap-xxhdpi/back_white_2.webp',
+                    width: 24,
+                    height: 24,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+              // عنوان الشاشة: تفاصيل الوكالة (union_detail_title)
+              const Text(
+                'تفاصيل الوكالة',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── 4. البطاقة السفلية للمستخدم وزر التأكيد (cl_guild_user_info) ──
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: _buildBottomApplicantCard(a),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAvatarFallback(String name) {
+    return Container(
+      color: const Color(0xFF2C243B),
+      alignment: Alignment.center,
+      child: Text(
+        name.isNotEmpty ? name.characters.first : 'U',
+        style: const TextStyle(
+          color: Color(0xFFFFFFAD),
+          fontSize: 34,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAgencyMetaRow({required Widget icon, required String text}) {
+    return SizedBox(
+      width: 170,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          SizedBox(width: 22, height: 20, child: Center(child: icon)),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xFFFFFFAD),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// البطاقة السفلية الثابتة لعرض بيانات مقدم الطلب وزر الانضمام الذهبي (cl_guild_user_info)
+  Widget _buildBottomApplicantCard(AgencyCard a) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final user = userProvider.currentUser;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // منحنى علوي مزخرف (union_tab_bg)
+          Image.asset(
+            'assets/mipmap-xxhdpi/union_tab_bg.webp',
+            width: double.infinity,
+            height: 14,
+            fit: BoxFit.fill,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+
+          // بطاقة بيانات المستخدم المتقدم (cl_user_info)
+          Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // صورة المستخدم الدائرية بحجم 48x48dp (iv_user_avatar)
+                ClipOval(
+                  child: SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: (user?.photoUrl != null && user!.photoUrl.isNotEmpty)
+                        ? Image(
+                            image: R.cachedImage(user.photoUrl),
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Image.asset(R.avaBoy, fit: BoxFit.cover),
+                          )
+                        : Image.asset(R.avaBoy, fit: BoxFit.cover),
+                  ),
+                ),
+
+                const SizedBox(width: 14),
+
+                // تفاصيل المستخدم (الاسم، الدولة، الجنس، المعرف، المستوى، أيقونة الوكالة)
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // السطر الأول: علم الدولة + الاسم + أيقونة الجنس
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (user?.country != null && user!.country.isNotEmpty) ...[
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(2),
+                              child: Image.network(
+                                'https://flagcdn.com/w40/${user.country.toLowerCase()}.png',
+                                width: 20,
+                                height: 12,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Flexible(
+                            child: Text(
+                              user?.name ?? 'مستخدم',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Image.asset(
+                            (user?.gender == 'female') ? R.sexFemaleIc : R.sexMaleIc,
+                            width: 18,
+                            height: 16,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+
+                      // السطر الثاني: معرف المستخدم UserIdWidget مطابق للأصل تماماً
+                      UserIdWidget(
+                        idText: (user?.customId != null && user!.customId.isNotEmpty)
+                            ? user.customId
+                            : ((1000000 + (user?.uid.hashCode.abs() ?? 0) % 9000000).toString()),
+                        showCopy: false,
+                        fontSize: 11.5,
+                      ),
+                      const SizedBox(height: 5),
+
+                      // السطر الثالث: أيقونة الوكالة union_ic + شارات المستوى (RankLevelView)
+                      Row(
+                        children: [
+                          Image.asset(
+                            'assets/mipmap-xxhdpi/union_ic.webp',
+                            width: 20,
+                            height: 20,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                          const SizedBox(width: 6),
+                          _buildLevelBadge(user?.wealthLevel ?? 1, 'wealth'),
+                          const SizedBox(width: 6),
+                          _buildLevelBadge(user?.rechargeLevel ?? 1, 'recharge'),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // زر تقديم الطلب الأصلي الذهبي أو تم التقديم الرمادي (tv_confirm)
+          Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: bottomInset > 0 ? bottomInset + 8 : 18,
+            ),
+            child: _buildActionButton(a),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLevelBadge(int level, String type) {
+    final config = LevelService().getLevelConfig(type, level);
+    final url = config?.imageUrl;
+    if (url != null && url.isNotEmpty) {
+      return SizedBox(
+        width: 38,
+        height: 18,
+        child: R.loadAsset(url, fit: BoxFit.contain),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2C2518),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFFFD700), width: 0.8),
+      ),
+      child: Text(
+        'Lv.$level',
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFFFFFFAD),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(AgencyCard a) {
+    // الحالة 1: يمكنه التقديم (union_btn_pre_bg: تدرج ذهبي نص بني داكن #FF59370D)
+    if (a.canJoin) {
+      return GestureDetector(
+        onTap: _joining ? null : _join,
+        child: Container(
+          width: double.infinity,
+          height: 48,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFAE9B5), Color(0xFFF1CC87)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x59F1CC87),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          alignment: Alignment.center,
+          child: _joining
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF59370D)),
+                )
+              : const Text(
+                  'تقديم طلب الانضمام',
+                  style: TextStyle(
+                    color: Color(0xFF59370D),
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+        ),
+      );
+    }
+
+    // الحالة 2: تم التقديم وموجود طلب معلق (union_btn_nor_bg: رمادي #303030، نص #565964)
+    if (a.hasPendingRequest) {
+      return Container(
+        width: double.infinity,
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF303030),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        alignment: Alignment.center,
+        child: const Text(
+          'تم التقديم',
+          style: TextStyle(
+            color: Color(0xFF565964),
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
+    // الحالة 3: عضو بالفعل في الوكالة -> بطاقة العضوية + زر الانسحاب من الوكالة
+    if (a.isMember) {
+      return Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E3A24),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFF2E7D32), width: 1),
+              ),
+              alignment: Alignment.center,
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle_rounded, color: Color(0xFF4CAF50), size: 18),
+                  SizedBox(width: 6),
+                  Text(
+                    'أنت عضو',
+                    style: TextStyle(
+                      color: Color(0xFF4CAF50),
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 4,
+            child: GestureDetector(
+              onTap: _joining ? null : _leaveAgency,
+              child: Container(
+                height: 48,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3B1E22),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFFE53935), width: 1),
+                ),
+                alignment: Alignment.center,
+                child: _joining
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.exit_to_app, color: Color(0xFFFF5252), size: 18),
+                          SizedBox(width: 6),
+                          Text(
+                            'الانسحاب من الوكالة',
+                            style: TextStyle(
+                              color: Color(0xFFFF5252),
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // افتراضي: معطل
+    return Container(
+      width: double.infinity,
+      height: 48,
+      decoration: BoxDecoration(
+        color: const Color(0xFF303030),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      alignment: Alignment.center,
+      child: const Text(
+        'غير متاح الانضمام',
+        style: TextStyle(
+          color: Color(0xFF565964),
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
   }
 }

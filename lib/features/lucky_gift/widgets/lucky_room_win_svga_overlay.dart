@@ -32,13 +32,13 @@ class LuckyRoomWinSvgaOverlay extends StatefulWidget {
   /// إرجاع مسار الـ SVGA الأنسب لقيمة المضاعف
   static String? getWinSvgaPath(int multiplier, {bool isArabic = true}) {
     if (multiplier >= 1000) {
-      return isArabic ? 'assets/svga/ar1000.svga' : 'assets/svga/en1000.svga';
+      return 'assets/svga/gift_1000.svga';
     } else if (multiplier >= 500) {
-      return isArabic ? 'assets/svga/ar500.svga' : 'assets/svga/en500.svga';
+      return 'assets/svga/gift_500.svga';
     } else if (multiplier >= 250) {
-      return isArabic ? 'assets/svga/ar250.svga' : 'assets/svga/en250.svga';
+      return 'assets/svga/gift_250.svga';
     } else if (multiplier >= 100) {
-      return isArabic ? 'assets/svga/ar100.svga' : 'assets/svga/en100.svga';
+      return 'assets/svga/gift_100.svga';
     } else if (multiplier >= 50) {
       return 'assets/svga/gift_50.svga';
     } else if (multiplier >= 20) {

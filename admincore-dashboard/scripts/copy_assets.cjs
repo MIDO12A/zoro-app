@@ -13,7 +13,11 @@ function copyFolderSync(from, to) {
   fs.readdirSync(from).forEach(element => {
     const stat = fs.lstatSync(path.join(from, element));
     if (stat.isFile()) {
-      fs.copyFileSync(path.join(from, element), path.join(to, element));
+      try {
+        fs.copyFileSync(path.join(from, element), path.join(to, element));
+      } catch (err) {
+        // Ignore locked or busy files
+      }
     } else if (stat.isDirectory()) {
       copyFolderSync(path.join(from, element), path.join(to, element));
     }

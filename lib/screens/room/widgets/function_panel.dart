@@ -20,90 +20,57 @@ class FunctionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
 
-    final interactionItems = [
-      {
-        'key': 'Magic Farm',
-        'label': isAr ? 'المزرعة السحرية' : 'Magic Farm',
-        'asset': '',
-      },
-      {
-        'key': 'PK Team',
-        'label': isAr ? 'فريق بي كي' : 'PK Team',
-        'asset': '',
-      },
-      {
-        'key': 'Lucky Bag',
-        'label': isAr ? 'حقيبة الحظ' : 'Lucky Bag',
-        'asset': '',
-      },
-    ];
-
     final functionItems = [
+      {
+        'key': 'Mixer',
+        'label': isAr ? 'الميكسر' : 'Mixer',
+        'asset': R.roomSetMixerIc,
+      },
       {
         'key': 'Settings',
         'label': isAr ? 'إعداد الغرفة' : 'Room Settings',
         'asset': R.roomSetSetIc,
       },
       {
-        'key': 'Gift Value',
-        'label': isAr ? 'قيمة الهدية' : 'Gift Value',
-        'asset': R.roomSetGiftIc,
+        'key': 'Seat Style',
+        'label': isAr ? 'شكل المقاعد' : 'Seat Style',
+        'asset': R.roomSetSeatStyle,
       },
       {
-        'key': 'Mixer',
-        'label': isAr ? 'خلاط' : 'Mixer',
-        'asset': R.roomSetMixerIc,
+        'key': 'Report',
+        'label': isAr ? 'إبلاغ' : 'Report',
+        'asset': R.roomSetReportIc,
       },
-      {
-        'key': 'Volume',
-        'label': isAr ? 'مستوى صوت الغرفة' : 'Room Volume',
-        'asset': R.roomSetVolumeIc,
-      },
-        {
-          'key': 'Seat Style',
-          'label': isAr ? 'شكل المقاعد' : 'Seat Style',
-          'asset': R.roomSetSeatStyle,
-        },
       if (isOwner)
         {
           'key': 'Room Background',
           'label': isAr ? 'خلفية الغرفة' : 'Room Background',
-          'asset': R.roomSetSeatStyle, // Reusing icon for now
+          'asset': R.roomSetSeatStyle,
         },
-      {
-        'key': 'Mute Mic',
-        'label': isAr ? 'إيقاف الميكروفون' : 'Mute Mic',
-        'asset': '',
-      },
-      {
-        'key': 'Mic Mode',
-        'label': isAr ? 'نمط الميكروفون' : 'Mic Mode',
-        'asset': '',
-      },
     ];
 
     final effectItems = [
       {
-        'key': 'Clear Messages',
-        'label': isAr ? 'مسح الرسائل' : 'Clear Messages',
-        'asset': '',
-      },
-      {
-        'key': 'Message Settings',
-        'label': isAr ? 'إعدادات الرسائل' : 'Message Settings',
-        'asset': '',
-      },
-      {
         'key': 'Effect',
-        'label': isAr ? 'إعدادات التأثيرات' : 'Effects Settings',
+        'label': isAr ? 'إعدادات التأثيرات' : 'Effect Settings',
         'asset': R.roomSetEffectIc,
+      },
+      {
+        'key': 'Volume',
+        'label': isAr ? 'صوت الغرفة' : 'Room Volume',
+        'asset': R.roomSetVolumeIc,
+      },
+      {
+        'key': 'Gift Value',
+        'label': isAr ? 'قيمة الهدية' : 'Gift Value',
+        'asset': R.roomSetGiftIc,
       },
     ];
 
     return Container(
-      decoration: BoxDecoration(
-        color: DynamicConfigService().roomFunctionsPanelBgColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      decoration: const BoxDecoration(
+        color: Color(0xFF16151A), // shape_room_chat_bg
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       padding: const EdgeInsets.only(top: 20, bottom: 32),
       child: SingleChildScrollView(
@@ -111,11 +78,9 @@ class FunctionPanel extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildSection(context, isAr ? 'تفاعل الغرفة' : 'Room Interaction', interactionItems),
-            const SizedBox(height: 24),
             _buildSection(context, isAr ? 'وظائف الغرفة' : 'Room Functions', functionItems),
             const SizedBox(height: 24),
-            _buildSection(context, isAr ? 'إعدادات التأثيرات' : 'إعدادات التأثيرات', effectItems),
+            _buildSection(context, isAr ? 'إعدادات التأثيرات' : 'Effect Settings', effectItems),
           ],
         ),
       ),
@@ -150,9 +115,10 @@ class FunctionPanel extends StatelessWidget {
               return SizedBox(
                 width: (MediaQuery.of(context).size.width - 48) / 4,
                 child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onTap: () {
                     final key = item['key']!;
-                    if (key == 'Settings' || key == 'Mixer' || key == 'Volume' || key == 'Seat Style' || key == 'Effect' || key == 'Room Background' || key == 'Clear Messages' || key == 'Message Settings' || key == 'Lucky Bag') {
+                    if (key == 'Settings' || key == 'Mixer' || key == 'Volume' || key == 'Seat Style' || key == 'Effect' || key == 'Gift Value' || key == 'Report' || key == 'Room Background' || key == 'Clear Messages' || key == 'Message Settings' || key == 'Lucky Bag') {
                       onItemTap?.call(key);
                     } else {
                       final label = item['label']!;
@@ -207,41 +173,14 @@ class FunctionPanel extends StatelessWidget {
   }
 
   Widget _fallbackIcon(String labelKey) {
-    switch (labelKey) {
-      case 'Magic Farm':
-        return _buildItemIcon(Icons.forest, [const Color(0xFF4CAF50), const Color(0xFF2E7D32)]);
-      case 'PK Team':
-        return _buildItemIcon(Icons.local_fire_department, [const Color(0xFFFF5722), const Color(0xFFD84315)]);
-      case 'Lucky Bag':
-        return _buildItemIcon(Icons.shopping_bag, [const Color(0xFFFFC107), const Color(0xFFE65100)]);
-      case 'Gift Value':
-        return _buildItemIcon(Icons.card_giftcard, [const Color(0xFFE91E63), const Color(0xFFC2185B)]);
-      case 'Mute Mic':
-        return _buildItemIcon(Icons.mic_off, [const Color(0xFF78909C), const Color(0xFF455A64)]);
-      case 'Mic Mode':
-        return _buildItemIcon(Icons.mic, [const Color(0xFF26A69A), const Color(0xFF00796B)]);
-      case 'Clear Messages':
-        return _buildItemIcon(Icons.cleaning_services, [const Color(0xFF42A5F5), const Color(0xFF1565C0)]);
-      case 'Message Settings':
-        return _buildItemIcon(Icons.chat_bubble_outline, [const Color(0xFFAB47BC), const Color(0xFF6A1B9A)]);
-      default:
-        return _buildItemIcon(Icons.settings, [const Color(0xFF90A4AE), const Color(0xFF37474F)]);
-    }
-  }
-
-  Widget _buildItemIcon(IconData icon, List<Color> gradientColors) {
     return Container(
       width: 48,
       height: 48,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        gradient: LinearGradient(
-          colors: gradientColors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white.withValues(alpha: 0.08),
+        shape: BoxShape.circle,
       ),
-      child: Icon(icon, color: Colors.white, size: 24),
+      child: const Icon(Icons.tune, color: Colors.white70, size: 22),
     );
   }
 }

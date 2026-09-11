@@ -75,5 +75,9 @@ flutter {
 }
 
 dependencies {
+    // Firebase BOM
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
+    // ✅ SVGAPlayer Native — نفس المكتبة التي يستخدمها التطبيق الأصلي
+    //    تُشغَّل عبر PlatformView (AndroidView) من Flutter لتحقيق سرعة Native
+    implementation("com.github.yyued:SVGAPlayer-Android:2.6.1")
 }

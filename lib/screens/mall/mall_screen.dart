@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../config/r.dart' show R;
+import '../../config/r.dart';
 import '../../services/dynamic_config_service.dart';
 import '../../services/supabase_service.dart';
 import '../../models/store_item_model.dart';
@@ -466,7 +466,9 @@ class _MallScreenState extends State<MallScreen>
                       padding: const EdgeInsets.all(16),
                       child: item.isVideo
                           ? VapPlayer(url: item.animationUrl!, width: 80, height: 80, fit: BoxFit.contain)
-                          : R.loadImage(item.iconAsset, fit: BoxFit.contain),
+                          : ((item.svgaAsset != null && item.svgaAsset!.isNotEmpty) || item.iconAsset.endsWith('.svga') || detectAssetType(item.iconAsset) == AssetType.svga)
+                              ? SvgaPlayer(assetPath: item.svgaAsset ?? item.iconAsset, width: 80, height: 80, fit: BoxFit.contain)
+                              : R.loadImage(item.iconAsset, fit: BoxFit.contain),
                     ),
                   ),
                   Padding(

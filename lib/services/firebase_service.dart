@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -289,30 +291,42 @@ class FirebaseService {
   // ═══════════════════════════════════════════════════════
 
   Future<bool> takeSeat(String roomId, int seatIndex, UserModel user) async {
+    final ref = _db.collection('room_seats').doc('${roomId}_$seatIndex');
+    final seatData = {
+      'room_id': roomId,
+      'seat_index': seatIndex,
+      'uid': user.uid,
+      'custom_id': user.customId,
+      'name': user.name,
+      'photo_url': user.photoUrl,
+      'active_frame': user.activeFrame,
+      'active_car': user.activeCar,
+      'is_muted': false,
+      'taken_at': _now(),
+    };
     try {
-      final ref = _db.collection('room_seats').doc('${roomId}_$seatIndex');
       await _db.runTransaction((txn) async {
         final existing = await txn.get(ref);
-        if (existing.exists) {
+        if (existing.exists && (existing.data()?['uid'] != user.uid)) {
           throw Exception('seat taken');
         }
-        txn.set(ref, {
-          'room_id': roomId,
-          'seat_index': seatIndex,
-          'uid': user.uid,
-          'custom_id': user.customId,
-          'name': user.name,
-          'photo_url': user.photoUrl,
-          'active_frame': user.activeFrame,
-          'active_car': user.activeCar,
-          'is_muted': false,
-          'taken_at': _now(),
-        });
+        txn.set(ref, seatData);
       });
       return true;
     } catch (e) {
-      debugPrint('takeSeat error (possible race): $e');
-      return false;
+      if (e.toString().contains('seat taken')) return false;
+      debugPrint('takeSeat transaction error, using direct set fallback: $e');
+      try {
+        final snap = await ref.get();
+        if (snap.exists && (snap.data()?['uid'] != user.uid)) {
+          return false;
+        }
+        await ref.set(seatData);
+        return true;
+      } catch (err) {
+        debugPrint('takeSeat direct fallback error: $err');
+        return false;
+      }
     }
   }
 
@@ -320,8 +334,31 @@ class FirebaseService {
     await _db.collection('room_seats').doc('${roomId}_$seatIndex').delete();
   }
 
+  Future<void> leaveSeatForUser(String roomId, String uid) async {
+    try {
+      final snap = await _db
+          .collection('room_seats')
+          .where('room_id', isEqualTo: roomId)
+          .where('uid', isEqualTo: uid)
+          .get();
+      for (final doc in snap.docs) {
+        await doc.reference.delete();
+      }
+    } catch (e) {
+      debugPrint('leaveSeatForUser error: $e');
+    }
+  }
+
   Future<void> toggleMute(String roomId, int seatIndex, bool muted) async {
-    await _db.collection('room_seats').doc('${roomId}_$seatIndex').update({'is_muted': muted});
+    try {
+      final ref = _db.collection('room_seats').doc('${roomId}_$seatIndex');
+      final snap = await ref.get();
+      if (snap.exists) {
+        await ref.update({'is_muted': muted});
+      }
+    } catch (e) {
+      debugPrint('toggleMute error: $e');
+    }
   }
 
   Stream<Map<int, Map<String, dynamic>>> seatsStream(String roomId) {
@@ -395,6 +432,7 @@ class FirebaseService {
     required String giftId,
     String giftName = '',
     String? animationAsset,
+    String? defaultImage,
     required String senderId,
     required String senderName,
     required String senderPhotoUrl,
@@ -403,61 +441,26 @@ class FirebaseService {
     required int value,
     int count = 1,
   }) async {
-    // Server-authoritative send first (V1.8): the backend reads the TRUE gift
-    // price from gifts/{giftId} inside a transaction, so the client can't pay
-    // less than the real price. Fall back to the legacy client transaction
-    // ONLY when the API server is unreachable (offline/dev), not when the
-    // server rejects the request (insufficient coins / gift not found).
-    try {
-      await ApiService().sendGift(
-        giftId: giftId,
-        receiverId: receiverId,
-        roomId: roomId,
-        count: count,
-      );
-      // Value/name are used afterwards for local notification & history only.
-      try {
-        await sendNotification(
-          uid: receiverId,
-          type: 'gift',
-          actorUid: senderId,
-          title: '🎁 هدية من $senderName',
-          body: '$senderName أرسل لك "$giftName" x$count',
-          data: <String, dynamic>{
-            'sender_name': senderName,
-            'sender_photo': senderPhotoUrl,
-            'gift_id': giftId,
-            'gift_name': giftName,
-            'gift_image': animationAsset ?? '',
-            'value': value,
-            'count': count,
-            'room_id': roomId,
-          },
-        );
-      } catch (_) {}
-      return true;
-    } catch (e) {
-      final apiDown = e is ApiException
-          ? (e.statusCode == 500 || e.statusCode == 502 || e.statusCode == 503 ||
-              e.statusCode == 504 || e.statusCode == 404 || e.statusCode == 0)
-          : true;
-      if (!apiDown) {
-        debugPrint('sendGift: server rejected send: $e');
-        return false;
-      }
-      debugPrint('sendGift: server unreachable ($e), using legacy client send');
-    }
-
     final id = const Uuid().v4();
     final totalCost = value * count;
     final senderRef = _db.collection('users').doc(senderId);
 
+    // Look up agency membership outside transaction to prevent Firestore transaction query errors
+    DocumentReference? agencyMemberRef;
+    try {
+      final memberQs = await _db
+          .collection('host_agency_members')
+          .where('user_id', isEqualTo: receiverId)
+          .limit(1)
+          .get();
+      if (memberQs.docs.isNotEmpty) {
+        agencyMemberRef = memberQs.docs.first.reference;
+      }
+    } catch (_) {}
+
     try {
       await _db.runTransaction((txn) async {
         // ── ALL READS FIRST ──
-        // Firestore transactions forbid any read after the first write;
-        // interleaving them made every gift transaction throw and roll back
-        // silently (coins were never deducted).
         final senderSnap = await txn.get(senderRef);
         if (!senderSnap.exists) throw Exception('sender missing');
         final senderCoins = _asInt(senderSnap.data()?['coins']);
@@ -472,13 +475,9 @@ class FirebaseService {
         final walletRef = _db.collection('user_wallets').doc(receiverId);
         final wSnap = await txn.get(walletRef);
 
-        final memberQs = await _db.collection('host_agency_members')
-            .where('user_id', isEqualTo: receiverId)
-            .limit(1)
-            .get();
         DocumentSnapshot? agencyMemberSnap;
-        if (memberQs.docs.isNotEmpty) {
-           agencyMemberSnap = await txn.get(memberQs.docs.first.reference);
+        if (agencyMemberRef != null) {
+          agencyMemberSnap = await txn.get(agencyMemberRef);
         }
 
         // ── THEN ALL WRITES ──
@@ -487,6 +486,8 @@ class FirebaseService {
           'gift_id': giftId,
           'gift_name': giftName,
           'animation_asset': animationAsset,
+          'icon_asset': defaultImage ?? animationAsset ?? '',
+          'default_image': defaultImage ?? animationAsset ?? '',
           'sender_id': senderId,
           'sender_name': senderName,
           'sender_photo_url': senderPhotoUrl,
@@ -503,9 +504,23 @@ class FirebaseService {
           'room_id': roomId,
           'sender_uid': senderId,
           'sender_name': senderName,
+          'sender_photo_url': senderPhotoUrl,
           'type': 'gift',
           'text': '$senderName 🎁 $giftName x$count → $receiverName',
-          'image_url': animationAsset ?? '',
+          'image_url': defaultImage ?? animationAsset ?? '',
+          'gift_payload': {
+            'gift_id': giftId,
+            'gift_name': giftName,
+            'receiver_name': receiverName,
+            'receiver_id': receiverId,
+            'count': count,
+            'gift_icon': defaultImage ?? animationAsset ?? '',
+            'coin_value': value,
+            'animation_asset': animationAsset,
+            'default_image': defaultImage,
+            'sender_name': senderName,
+            'sender_photo_url': senderPhotoUrl,
+          },
           'created_at': DateTime.now().toIso8601String(),
         });
 
@@ -526,10 +541,33 @@ class FirebaseService {
 
         if (roomSnap.exists) {
           final rm = roomSnap.data() ?? {};
+          final currentRocket = _asInt(rm['rocket_energy']);
+          final rocketTarget = _asInt(rm['rocket_target']) > 0 ? _asInt(rm['rocket_target']) : 5000;
+          final newRocket = currentRocket + totalCost;
+          final isBurst = newRocket >= rocketTarget;
           txn.update(roomRef, {
             'total_gifts': _asInt(rm['total_gifts']) + totalCost,
             'hot_value': _asInt(rm['hot_value']) + totalCost,
+            'rocket_energy': isBurst ? 0 : newRocket,
+            if (isBurst) 'rocket_burst_active': true,
+            if (isBurst) 'rocket_burst_id': const Uuid().v4(),
+            if (isBurst) 'rocket_burst_time': DateTime.now().toIso8601String(),
           });
+
+          // Global broadcast for big gifts
+          if (totalCost >= 5000) {
+            txn.set(_db.collection('broadcasts').doc(const Uuid().v4()), {
+              'sender_uid': senderId,
+              'sender_name': senderName,
+              'sender_photo_url': senderPhotoUrl,
+              'room_id': roomId,
+              'room_name': rm['name']?.toString() ?? 'غرفة صوتية',
+              'content': 'أرسل هدية كبرى: $giftName x$count!',
+              'gift_icon': defaultImage ?? animationAsset ?? '',
+              'type': 'big_gift',
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          }
         }
 
         if (wSnap.exists) {
@@ -566,45 +604,58 @@ class FirebaseService {
       return false;
     }
 
-    // Host target evaluation and milestone awards
+    // Host target evaluation and milestone awards (non-fatal, background)
     try {
-      await AgencyTargetEvaluator.evaluateHostTargets(receiverId);
-    } catch (e) {
-      debugPrint('sendGift: target evaluation error: $e');
+      AgencyTargetEvaluator.evaluateHostTargets(receiverId);
+    } catch (_) {}
+
+    // Real-time notification for the receiver (non-fatal, background)
+    unawaited(sendNotification(
+      uid: receiverId,
+      type: 'gift',
+      actorUid: senderId,
+      title: '🎁 هدية من $senderName',
+      body: '$senderName أرسل لك "$giftName" x$count ($totalCost)',
+      data: <String, dynamic>{
+        'sender_name': senderName,
+        'sender_photo': senderPhotoUrl,
+        'gift_id': giftId,
+        'gift_name': giftName,
+        'gift_image': animationAsset ?? '',
+        'value': value,
+        'count': count,
+        'room_id': roomId,
+      },
+    ).catchError((_) {}));
+
+    // بث الهدايا الفاخرة للبانر الماركي العام لجميع الغرف (view_room_all_banner.xml)
+    if (totalCost >= 500) {
+      unawaited(Future(() async {
+        try {
+          await _db.collection('broadcasts').add({
+            'sender_uid': senderId,
+            'sender_name': senderName,
+            'sender_photo_url': senderPhotoUrl,
+            'room_id': roomId,
+            'room_name': 'غرفة صوتية',
+            'content': 'أرسل $giftName x$count بقيمة $totalCost عملة!',
+            'gift_icon': animationAsset ?? '',
+            'type': 'big_gift',
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        } catch (_) {}
+      }));
     }
 
-    // Real-time notification for the receiver (non-fatal)
-    try {
-      await sendNotification(
-        uid: receiverId,
-        type: 'gift',
-        actorUid: senderId,
-        title: '🎁 هدية من $senderName',
-        body: '$senderName أرسل لك "$giftName" x$count ($totalCost)',
-        data: <String, dynamic>{
-          'sender_name': senderName,
-          'sender_photo': senderPhotoUrl,
-          'gift_id': giftId,
-          'gift_name': giftName,
-          'gift_image': animationAsset ?? '',
-          'value': value,
-          'count': count,
-          'room_id': roomId,
-        },
-      );
-    } catch (e) {
-      debugPrint('sendGift: notification error: $e');
-    }
-
-    // XP side-effects (non-fatal)
-    try {
-      final levelService = LevelService();
-      await levelService.loadAllLevels();
-      await levelService.addExp(uid: senderId, type: 'wealth', amount: totalCost);
-      await levelService.addExp(uid: receiverId, type: 'gems', amount: totalCost);
-    } catch (e) {
-      debugPrint('sendGift: XP award error: $e');
-    }
+    // XP side-effects (non-fatal, background)
+    unawaited(Future(() async {
+      try {
+        final levelService = LevelService();
+        await levelService.loadAllLevels();
+        await levelService.addExp(uid: senderId, type: 'wealth', amount: totalCost);
+        await levelService.addExp(uid: receiverId, type: 'gems', amount: totalCost);
+      } catch (_) {}
+    }));
 
     return true;
   }
@@ -612,6 +663,39 @@ class FirebaseService {
   /// ═══════════════════════════════════════════════════════
   /// LUCKY GIFTS & BURST SYSTEM (FIREBASE FIRESTORE)
   /// ═══════════════════════════════════════════════════════
+
+  List<int> drawLuckyMultipliers(int count) {
+    final odds = [
+      {'multiplier': 0, 'weight': 650},
+      {'multiplier': 1, 'weight': 200},
+      {'multiplier': 2, 'weight': 90},
+      {'multiplier': 5, 'weight': 40},
+      {'multiplier': 10, 'weight': 15},
+      {'multiplier': 50, 'weight': 4},
+      {'multiplier': 100, 'weight': 1},
+      {'multiplier': 500, 'weight': 1},
+    ];
+
+    final totalWeight = odds.fold<int>(0, (tot, item) => tot + (item['weight'] as int));
+    final random = Random.secure();
+    final results = <int>[];
+
+    for (int i = 0; i < count; i++) {
+      int roll = random.nextInt(totalWeight);
+      int accumulated = 0;
+      int chosenMultiplier = 0;
+
+      for (final tier in odds) {
+        accumulated += tier['weight'] as int;
+        if (roll < accumulated) {
+          chosenMultiplier = tier['multiplier'] as int;
+          break;
+        }
+      }
+      results.add(chosenMultiplier);
+    }
+    return results;
+  }
 
   Future<Map<String, dynamic>?> sendLuckyGift({
     required String roomId,
@@ -631,46 +715,197 @@ class FirebaseService {
     int count = 1,
     String? comboId,
     int comboCount = 1,
+    List<int>? preDrawnMultipliers,
   }) async {
-    // Server-authoritative draw first: SHAPE THE RESULT WITHOUT TRUSTING CLIENT.
-    // The backend deducts coins, credits winnings/receiver and writes the
-    // room_messages strip inside ONE transaction — the client cannot cheat
-    // the multiplier odds. Fall back to the legacy client draw only when the
-    // API server is unreachable (offline/dev), not on server-denied errors
-    // such as 'insufficient_coins'.
+    final cardCount = count < 4 ? 4 : (count > 8 ? 8 : count);
+    final multipliers = preDrawnMultipliers ?? drawLuckyMultipliers(cardCount);
+    int totalWonCoins = 0;
+    for (final m in multipliers) {
+      totalWonCoins += (value * m);
+    }
+    final totalCost = value * count;
+    final isBigWin = multipliers.any((m) => m >= 50);
+    final maxMultiplier = multipliers.isEmpty ? 0 : multipliers.reduce((curr, next) => curr > next ? curr : next);
+
+    final id = const Uuid().v4();
+    final senderRef = _db.collection('users').doc(senderId);
+
     try {
-      final res = await ApiService().drawLuckyGift(
-        giftId: giftId,
-        receiverId: receiverId,
-        roomId: roomId,
-        count: count,
-        comboCount: comboCount,
-        comboId: comboId,
-      );
-      if (res['success'] == true) {
-        return {
-          'success': true,
-          'wonCoins': res['wonCoins'] ?? 0,
-          'multipliers': (res['multipliers'] as List?)?.cast<num>().map((m) => m.toInt()).toList() ?? const [],
-          'maxMultiplier': (res['maxMultiplier'] as num?)?.toInt() ?? 0,
-          'isBigWin': res['isBigWin'] == true,
-        };
+      await _db.runTransaction((txn) async {
+        final senderSnap = await txn.get(senderRef);
+        if (!senderSnap.exists) throw Exception('sender missing');
+        final senderCoins = _asInt(senderSnap.data()?['coins']);
+        if (senderCoins < totalCost) throw Exception('insufficient coins');
+
+        final receiverRef = _db.collection('users').doc(receiverId);
+        final recvSnap = await txn.get(receiverRef);
+
+        final roomRef = _db.collection('rooms').doc(roomId);
+        final roomSnap = await txn.get(roomRef);
+
+        final walletRef = _db.collection('user_wallets').doc(receiverId);
+        final wSnap = await txn.get(walletRef);
+
+        // تسجيل العملية في sent_lucky_gifts
+        txn.set(_db.collection('sent_lucky_gifts').doc(id), {
+          'id': id,
+          'gift_id': giftId,
+          'gift_name': giftName,
+          'gift_name_ar': giftNameAr,
+          'gift_icon_url': giftIconUrl,
+          'sender_id': senderId,
+          'sender_name': senderName,
+          'sender_photo_url': senderPhotoUrl,
+          'receiver_id': receiverId,
+          'receiver_name': receiverName,
+          'room_id': roomId,
+          'value': value,
+          'count': count,
+          'combo_id': comboId ?? id,
+          'combo_count': comboCount,
+          'won_coins': totalWonCoins,
+          'multipliers': multipliers,
+          'is_big_win': isBigWin,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        // بث الحدث اللحظي للغرفة عبر room_messages
+        txn.set(_db.collection('room_messages').doc(const Uuid().v4()), {
+          'msg_id': const Uuid().v4(),
+          'room_id': roomId,
+          'sender_uid': senderId,
+          'sender_name': senderName,
+          'sender_photo_url': senderPhotoUrl,
+          'type': 'lucky_gift',
+          'text': '$senderName 🍀 $giftNameAr x$count (فاز بـ $totalWonCoins 🪙)',
+          'gift_payload': {
+            'roomId': roomId,
+            'sender': {
+              'id': senderId,
+              'nickname': senderName,
+              'avatar': senderPhotoUrl,
+            },
+            'receiver': {
+              'id': receiverId,
+              'nickname': receiverName,
+            },
+            'gift': {
+              'id': giftId,
+              'giftName': giftName,
+              'giftNameAr': giftNameAr,
+              'coinPrice': value,
+              'giftIconUrl': giftIconUrl,
+              'giftCoverUrl': giftCoverUrl,
+              'giftBgUrl': giftBgUrl,
+              'svgaAnimUrl': svgaAnimUrl,
+            },
+            'combo': {
+              'comboId': comboId ?? id,
+              'comboCount': comboCount,
+              'times': count,
+            },
+            'results': {
+              'multipliers': multipliers,
+              'cards': List.generate(multipliers.length, (i) => {
+                'index': i,
+                'multiplier': multipliers[i],
+                'wonCoins': value * multipliers[i],
+                'giftName': giftNameAr,
+                'giftIcon': giftIconUrl,
+              }),
+              'totalWonCoins': totalWonCoins,
+              'maxMultiplier': maxMultiplier,
+              'isBigWin': isBigWin,
+            },
+          },
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
+        // خصم التكلفة وإيداع أرباح الحظ في محفظة المرسل ذرّياً
+        final sd = senderSnap.data() ?? {};
+        final sentTotal = _asInt(sd['total_gifts_sent']);
+        txn.update(senderRef, {
+          'coins': senderCoins - totalCost + totalWonCoins,
+          'total_gifts_sent': sentTotal + totalCost,
+        });
+
+        if (recvSnap.exists) {
+          final rd = recvSnap.data() ?? {};
+          txn.update(receiverRef, {
+            'diamonds': _asInt(rd['diamonds']) + totalCost,
+            'total_gifts_received': _asInt(rd['total_gifts_received']) + totalCost,
+          });
+        }
+
+        if (roomSnap.exists) {
+          final rm = roomSnap.data() ?? {};
+          final currentRocket = _asInt(rm['rocket_energy']);
+          final rocketTarget = _asInt(rm['rocket_target']) > 0 ? _asInt(rm['rocket_target']) : 5000;
+          final newRocket = currentRocket + totalCost;
+          final isBurst = newRocket >= rocketTarget;
+          txn.update(roomRef, {
+            'total_gifts': _asInt(rm['total_gifts']) + totalCost,
+            'hot_value': _asInt(rm['hot_value']) + totalCost,
+            'rocket_energy': isBurst ? 0 : newRocket,
+            if (isBurst) 'rocket_burst_active': true,
+            if (isBurst) 'rocket_burst_id': const Uuid().v4(),
+            if (isBurst) 'rocket_burst_time': DateTime.now().toIso8601String(),
+          });
+        }
+
+        if (wSnap.exists) {
+          final wd = wSnap.data() ?? {};
+          txn.update(walletRef, {'diamond_balance': _asInt(wd['diamond_balance']) + totalCost});
+        } else {
+          txn.set(walletRef, {'user_id': receiverId, 'diamond_balance': totalCost, 'gold_balance': 0});
+        }
+      });
+
+      // بث الفوز الكبير عبر جميع الغرف في التطبيق (Global Big Win Broadcast)
+      if (isBigWin || maxMultiplier >= 20) {
+        unawaited(Future(() async {
+          try {
+            await _db.collection('broadcasts').add({
+              'sender_uid': senderId,
+              'sender_name': senderName,
+              'sender_photo_url': senderPhotoUrl,
+              'room_id': roomId,
+              'room_name': 'غرفة صوتية',
+              'content': '🎉 فاز بمضاعف $maxMultiplier X في هدية الحظ $giftNameAr!',
+              'gift_icon': giftIconUrl,
+              'multiplier': maxMultiplier,
+              'type': 'lucky_gift',
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          } catch (err) {
+            debugPrint('broadcasts error: $err');
+          }
+
+          try {
+            await _db.collection('global_announcements').add({
+              'type': 'lucky_big_win',
+              'sender_name': senderName,
+              'gift_name': giftNameAr,
+              'room_id': roomId,
+              'multiplier': maxMultiplier,
+              'total_won': totalWonCoins,
+              'created_at': DateTime.now().toIso8601String(),
+            });
+          } catch (err) {
+            debugPrint('global_announcements error: $err');
+          }
+        }));
       }
-      debugPrint('sendLuckyGift: server draw returned failure: $res');
-      return null;
+
+      return {
+        'success': true,
+        'wonCoins': totalWonCoins,
+        'multipliers': multipliers,
+        'maxMultiplier': maxMultiplier,
+        'isBigWin': isBigWin,
+      };
     } catch (e) {
-      // Client-side lucky draws are DISABLED for security — the server is the
-      // only authority for drawing multipliers and moving coins. If the API is
-      // unreachable, the send fails (no local fallback, no coin write here).
-      final apiDown = e is ApiException
-          ? (e.statusCode == 500 || e.statusCode == 502 || e.statusCode == 503 ||
-              e.statusCode == 504 || e.statusCode == 404 || e.statusCode == 0)
-          : true;
-      if (!apiDown) {
-        debugPrint('sendLuckyGift: server rejected draw: $e');
-        return null;
-      }
-      debugPrint('sendLuckyGift: client draw disabled (server-only). Server unreachable: $e');
+      debugPrint('sendLuckyGift error: $e');
       return null;
     }
   }
@@ -1644,32 +1879,24 @@ class FirebaseService {
   Future<void> logEntrance(String roomId, String uid, String name, String photoUrl,
       String? entranceItem, {String? carItem}) async {
     final now = _now();
-    if (entranceItem != null && entranceItem.isNotEmpty) {
-      await _db.collection('room_messages').doc(const Uuid().v4()).set({
-        'msg_id': const Uuid().v4(),
-        'room_id': roomId,
-        'sender_uid': uid,
-        'sender_name': name,
-        'sender_photo_url': photoUrl,
-        'text': '$name entered the room',
-        'type': 'entrance',
-        'image_url': entranceItem,
-        'created_at': now,
-      });
-    }
-    if (carItem != null && carItem.isNotEmpty && carItem != entranceItem) {
-      await _db.collection('room_messages').doc(const Uuid().v4()).set({
-        'msg_id': const Uuid().v4(),
-        'room_id': roomId,
-        'sender_uid': uid,
-        'sender_name': name,
-        'sender_photo_url': photoUrl,
-        'text': '$name entered with car',
-        'type': 'entrance',
-        'image_url': carItem,
-        'created_at': now,
-      });
-    }
+    final primaryAsset = (carItem != null && carItem.isNotEmpty)
+        ? carItem
+        : ((entranceItem != null && entranceItem.isNotEmpty) ? entranceItem : '');
+    final text = (carItem != null && carItem.isNotEmpty)
+        ? '$name entered with car'
+        : '$name entered the room';
+
+    await _db.collection('room_messages').doc(const Uuid().v4()).set({
+      'msg_id': const Uuid().v4(),
+      'room_id': roomId,
+      'sender_uid': uid,
+      'sender_name': name,
+      'sender_photo_url': photoUrl,
+      'text': text,
+      'type': 'entrance',
+      'image_url': primaryAsset,
+      'created_at': now,
+    });
   }
 
   Future<void> logExit(String roomId, String name) async {
@@ -1677,7 +1904,7 @@ class FirebaseService {
       'msg_id': const Uuid().v4(),
       'room_id': roomId,
       'sender_uid': '',
-      'sender_name': '',
+      'sender_name': name,
       'sender_photo_url': '',
       'text': '$name left the room',
       'type': 'entrance',
@@ -1706,6 +1933,107 @@ class FirebaseService {
           'timestamp': e['created_at'],
         };
       }).toList();
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // GLOBAL BROADCASTS & ROOM ROCKET (CRYSTAL BURST)
+  // ═══════════════════════════════════════════════════════
+
+  Stream<List<Map<String, dynamic>>> globalBroadcastStream() {
+    return _db
+        .collection('broadcasts')
+        .orderBy('created_at', descending: true)
+        .limit(10)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => {'id': d.id, ...d.data()}).toList());
+  }
+
+  Future<void> sendGlobalBroadcast({
+    required String senderUid,
+    required String senderName,
+    required String senderPhotoUrl,
+    required String roomId,
+    required String roomName,
+    required String content,
+    String? giftIcon,
+    int? multiplier,
+    String type = 'lucky_gift', // 'lucky_gift', 'big_gift', 'admin_notice', 'crystal_rocket'
+  }) async {
+    await _db.collection('broadcasts').add({
+      'sender_uid': senderUid,
+      'sender_name': senderName,
+      'sender_photo_url': senderPhotoUrl,
+      'room_id': roomId,
+      'room_name': roomName,
+      'content': content,
+      'gift_icon': giftIcon,
+      'multiplier': multiplier,
+      'type': type,
+      'created_at': _now(),
+    });
+  }
+
+  Stream<Map<String, dynamic>> roomRocketStream(String roomId) {
+    return _db.collection('rooms').doc(roomId).snapshots().map((snap) {
+      final data = snap.data() ?? {};
+      final energy = (data['rocket_energy'] as num?)?.toInt() ?? 0;
+      final target = (data['rocket_target'] as num?)?.toInt() ?? 5000;
+      final burstActive = data['rocket_burst_active'] == true;
+      final burstId = data['rocket_burst_id']?.toString() ?? '';
+      return {
+        'energy': energy,
+        'target': target,
+        'burst_active': burstActive,
+        'burst_id': burstId,
+      };
+    });
+  }
+
+  Future<void> addRocketEnergy(String roomId, int coins) async {
+    final ref = _db.collection('rooms').doc(roomId);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      if (!snap.exists) return;
+      final data = snap.data() ?? {};
+      final current = (data['rocket_energy'] as num?)?.toInt() ?? 0;
+      final target = (data['rocket_target'] as num?)?.toInt() ?? 5000;
+      final newEnergy = current + coins;
+      if (newEnergy >= target) {
+        final burstId = const Uuid().v4();
+        tx.update(ref, {
+          'rocket_energy': 0,
+          'rocket_burst_active': true,
+          'rocket_burst_id': burstId,
+          'rocket_burst_time': _now(),
+        });
+      } else {
+        tx.update(ref, {'rocket_energy': newEnergy});
+      }
+    });
+  }
+
+  Future<void> endRocketBurst(String roomId) async {
+    await _db.collection('rooms').doc(roomId).update({
+      'rocket_burst_active': false,
+    });
+  }
+
+  Stream<Map<String, dynamic>> luckyGiftRatesStream() {
+    return _db.collection('app_config').doc('lucky_gift_rates').snapshots().map((snap) {
+      return snap.data() ?? {
+        'multipliers': [5, 10, 20, 50, 100, 250, 500, 1000],
+        'default_rates': {
+          '5': 0.30,
+          '10': 0.15,
+          '20': 0.05,
+          '50': 0.02,
+          '100': 0.008,
+          '250': 0.003,
+          '500': 0.001,
+          '1000': 0.0005,
+        }
+      };
     });
   }
 
@@ -1868,6 +2196,66 @@ class FirebaseService {
     } catch (e) {
       debugPrint('isUserBlockedFromRoom error: $e');
       return false;
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> roomBlocksStream(String roomId) {
+    return _db
+        .collection('room_blocks')
+        .where('room_id', isEqualTo: roomId)
+        .snapshots()
+        .map((snap) => snap.docs.map((e) => Map<String, dynamic>.from(e.data())).toList());
+  }
+
+  Stream<bool> userRoomBanStream(String roomId, String uid) {
+    return _db
+        .collection('room_blocks')
+        .doc('${roomId}_$uid')
+        .snapshots()
+        .map((snap) => snap.exists);
+  }
+
+  Future<void> kickUserFromRoom(String roomId, String kickerUid, String targetUid, {
+    String kickerName = '',
+    String targetName = '',
+    bool addToBlacklist = false,
+    String reason = 'Kicked by administrator',
+  }) async {
+    try {
+      // 1. If addToBlacklist is checked, save to room_blocks
+      if (addToBlacklist) {
+        await blockUserFromRoom(roomId, kickerUid, targetUid, reason: reason);
+      }
+      // 2. Remove user from seats
+      for (int i = 0; i < 20; i++) {
+        final seatDoc = await _db.collection('room_seats').doc('${roomId}_$i').get();
+        if (seatDoc.exists && seatDoc.data()?['uid'] == targetUid) {
+          await leaveSeat(roomId, i);
+        }
+      }
+      // 3. Remove user presence
+      await leaveRoom(roomId, targetUid);
+      // 4. Send a kick signal message to room_messages so the client can listen & auto-exit
+      final msgId = const Uuid().v4();
+      final kickMsg = MessageModel(
+        msgId: msgId,
+        roomId: roomId,
+        senderUid: kickerUid,
+        senderName: kickerName.isNotEmpty ? kickerName : 'Admin',
+        senderPhotoUrl: '',
+        text: '$targetName تم طرده من الغرفة بواسطة $kickerName',
+        type: 'room_kick',
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        giftPayload: {
+          'kickedUid': targetUid,
+          'targetName': targetName,
+          'isBlacklisted': addToBlacklist,
+          'reason': reason,
+        },
+      );
+      await _db.collection('room_messages').doc(msgId).set(kickMsg.toMap());
+    } catch (e) {
+      debugPrint('kickUserFromRoom error: $e');
     }
   }
 
@@ -2043,17 +2431,49 @@ class FirebaseService {
     for (var entry in top50) {
       final userSnap = await _db.collection('users').doc(entry.key).get();
       final ud = userSnap.data() ?? {};
+      final customId = (ud['custom_id'] ?? ud['customId'] ?? ud['display_id'] ?? ud['id'] ?? '').toString();
+      final displayNumericId = customId.isNotEmpty ? customId : entry.key;
       results.add({
         'uid': entry.key,
-        'id': (ud['customId'] ?? ud['id'] ?? '').toString(),
+        'id': displayNumericId,
+        'custom_id': displayNumericId,
         'name': (ud['name'] ?? 'Unknown').toString(),
         'photo_url': (ud['photo_url'] ?? ud['photoUrl'] ?? '').toString(),
         'level': ud['level'] ?? 1,
         'total_gifts_sent': isWealth ? entry.value : _asInt(ud['total_gifts_sent']),
         'total_gifts_received': !isWealth ? entry.value : _asInt(ud['total_gifts_received']),
-        'user_id': entry.key,
+        'user_id': displayNumericId,
       });
     }
+
+    if (results.isEmpty) {
+      try {
+        final field = isWealth ? 'total_gifts_sent' : 'total_gifts_received';
+        final userSnap = await _db.collection('users')
+            .orderBy(field, descending: true)
+            .limit(50)
+            .get();
+        for (var doc in userSnap.docs) {
+          final ud = doc.data();
+          final val = _asInt(ud[field]);
+          if (val <= 0) continue;
+          final customId = (ud['custom_id'] ?? ud['customId'] ?? ud['display_id'] ?? ud['id'] ?? '').toString();
+          final displayNumericId = customId.isNotEmpty ? customId : doc.id;
+          results.add({
+            'uid': doc.id,
+            'id': displayNumericId,
+            'custom_id': displayNumericId,
+            'name': (ud['name'] ?? 'Unknown').toString(),
+            'photo_url': (ud['photo_url'] ?? ud['photoUrl'] ?? '').toString(),
+            'level': ud['level'] ?? 1,
+            'total_gifts_sent': isWealth ? val : _asInt(ud['total_gifts_sent']),
+            'total_gifts_received': !isWealth ? val : _asInt(ud['total_gifts_received']),
+            'user_id': displayNumericId,
+          });
+        }
+      } catch (_) {}
+    }
+
     return results;
   }
 
@@ -2075,10 +2495,14 @@ class FirebaseService {
     for (var entry in top10) {
       final userSnap = await _db.collection('users').doc(entry.key).get();
       final ud = userSnap.data() ?? {};
+      final customId = (ud['custom_id'] ?? ud['customId'] ?? ud['display_id'] ?? ud['id'] ?? '').toString();
+      final displayNumericId = customId.isNotEmpty ? customId : entry.key;
       results.add({
-        'user_id': entry.key,
+        'user_id': displayNumericId,
+        'custom_id': displayNumericId,
+        'uid': entry.key,
         'user_name': ud['name'] ?? 'Unknown',
-        'user_photo_url': ud['photo_url'] ?? '',
+        'user_photo_url': (ud['photo_url'] ?? ud['photoUrl'] ?? '').toString(),
         'total_value': entry.value,
       });
     }
@@ -2088,21 +2512,36 @@ class FirebaseService {
     int limit = 50,
   }) async {
     try {
-      final snap = await _db
-          .collection('rooms')
-          .orderBy('total_gifts', descending: true)
-          .limit(limit)
-          .get();
-      return snap.docs.map((doc) {
+      QuerySnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await _db
+            .collection('rooms')
+            .orderBy('total_gifts', descending: true)
+            .limit(limit)
+            .get();
+      } catch (e) {
+        snap = await _db.collection('rooms').limit(limit).get();
+      }
+      final list = snap.docs.map((doc) {
         final data = doc.data();
+        final photo = (data['room_photo_url'] ?? data['cover_image'] ?? data['photo_url'] ?? data['image'] ?? data['bg_image'] ?? '').toString();
+        final name = (data['name'] ?? data['title'] ?? 'Room').toString();
+        final roomId = (data['room_id'] ?? data['custom_id'] ?? doc.id).toString();
         return {
           'id': doc.id,
-          'name': data['title'] ?? 'Room',
-          'photoUrl': data['image'] ?? '',
-          'user_id': data['room_id'] ?? doc.id,
+          'room_doc_id': doc.id,
+          'name': name,
+          'photoUrl': photo,
+          'photo_url': photo,
+          'user_id': roomId,
+          'room_id': roomId,
+          'host_name': (data['host_name'] ?? '').toString(),
+          'password': (data['password'] ?? '').toString(),
           'points': (data['total_gifts'] as num?)?.toInt() ?? 0,
         };
       }).toList();
+      list.sort((a, b) => (b['points'] as int).compareTo(a['points'] as int));
+      return list;
     } catch (e) {
       debugPrint('getRoomGlobalRanking error: $e');
       return [];

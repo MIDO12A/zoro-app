@@ -34,9 +34,11 @@ class FlutterVapView(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val executor = Executors.newCachedThreadPool()
     private var lastPlayedFile: File? = null
+    private var lastPlayPath: String? = null
     private var destroyed = false
     private var deleteOnEnd = false
     private var scaleType: ScaleType = ScaleType.FIT_XY
+    private var playGeneration = 0
 
     private var textReplacements: Map<String, String> = emptyMap()
     private var imageReplacements: Map<String, String> = emptyMap()
@@ -59,22 +61,23 @@ class FlutterVapView(
         }
 
         animView.setScaleType(scaleType)
+        animView.setMute(true)
         animView.setAnimListener(this)
         animView.setFetchResource(this)
 
         methodChannel.setMethodCallHandler { call, result ->
             when (call.method) {
                 "stop" -> {
+                    playGeneration++
+                    lastPlayPath = null
                     animView.stopPlay()
-                    Handler(Looper.getMainLooper()).postDelayed({
-                        result.success(animView.isRunning())
-                    }, 100)
+                    result.success(false)
                 }
 
                 "play" -> {
                     val path = call.argument<String>("path")
                     val sourceType = call.argument<String>("sourceType")
-                    val repeatCount = call.argument<Int>("repeatCount") ?: 1
+                    val repeatCount = normalizeLoop(call.argument<Int>("repeatCount") ?: 1)
                     val delete = call.argument<Boolean>("deleteOnEnd") ?: true
                     val textMap = call.argument<Map<String, String>>("textReplacement") ?: emptyMap()
                     val imageMap = call.argument<Map<String, String>>("imageReplacement") ?: emptyMap()
@@ -83,11 +86,19 @@ class FlutterVapView(
                     imageReplacements = imageMap
 
                     if (path != null && sourceType != null) {
+                        if (path == lastPlayPath && animView.isRunning()) {
+                            result.success(null)
+                            return@setMethodCallHandler
+                        }
+                        playGeneration++
+                        val gen = playGeneration
                         if (animView.isRunning()) {
                             animView.stopPlay()
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                playWithParams(path, sourceType, repeatCount, delete)
-                            }, 100)
+                            mainHandler.postDelayed({
+                                if (!destroyed && gen == playGeneration) {
+                                    playWithParams(path, sourceType, repeatCount, delete)
+                                }
+                            }, 160)
                         } else {
                             playWithParams(path, sourceType, repeatCount, delete)
                         }
@@ -135,29 +146,45 @@ class FlutterVapView(
 
         executor.execute {
             try {
-                val bmp: Bitmap? = if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
+                val rawBytes = if (targetUrl.startsWith("http://") || targetUrl.startsWith("https://")) {
                     val conn = URL(targetUrl).openConnection() as HttpURLConnection
-                    conn.connectTimeout = 6000
-                    conn.readTimeout = 6000
+                    conn.connectTimeout = 4000
+                    conn.readTimeout = 4000
                     conn.doInput = true
                     conn.connect()
-                    val stream = conn.inputStream
-                    BitmapFactory.decodeStream(stream)
+                    conn.inputStream.use { it.readBytes() }
                 } else {
-                    BitmapFactory.decodeFile(targetUrl)
+                    File(targetUrl).readBytes()
                 }
+
+                val options = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, options)
+
+                var sampleSize = 1
+                val targetSize = 256
+                while (options.outWidth / (sampleSize * 2) >= targetSize && options.outHeight / (sampleSize * 2) >= targetSize) {
+                    sampleSize *= 2
+                }
+
+                val decodeOptions = BitmapFactory.Options().apply {
+                    inSampleSize = sampleSize
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                val bmp = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, decodeOptions)
 
                 if (bmp != null) {
                     synchronized(bitmapCache) {
                         bitmapCache[targetUrl] = bmp
                     }
-                    result(bmp)
+                    mainHandler.post { result(bmp) }
                 } else {
-                    result(null)
+                    mainHandler.post { result(null) }
                 }
             } catch (e: Exception) {
                 Log.e("FlutterVapView", "Error fetching image for tag $tag: ${e.message}")
-                result(null)
+                mainHandler.post { result(null) }
             }
         }
     }
@@ -213,12 +240,23 @@ class FlutterVapView(
         }
     }
 
+    /**
+     * Tencent AnimPlayer playLoop is remaining play count:
+     * 1 = play once, N = play N times, Int.MAX_VALUE ≈ infinite.
+     * <= 0 or -1 from Dart is treated as infinite.
+     */
+    private fun normalizeLoop(repeatCount: Int): Int {
+        return if (repeatCount <= 0) Int.MAX_VALUE else repeatCount
+    }
+
     private fun playWithParams(path: String, sourceType: String, repeatCount: Int, delete: Boolean) {
         try {
+            lastPlayPath = path
             when (sourceType) {
                 "file" -> {
                     val file = File(path)
                     if (file.exists()) {
+                        animView.setMute(true)
                         animView.setLoop(repeatCount)
                         animView.startPlay(file)
                         lastPlayedFile = file
@@ -231,6 +269,7 @@ class FlutterVapView(
                 "asset" -> {
                     loadAsset(path)?.let { file ->
                         try {
+                            animView.setMute(true)
                             animView.setLoop(repeatCount)
                             animView.startPlay(file)
                             file.deleteOnExit()
@@ -256,13 +295,26 @@ class FlutterVapView(
 
     override fun dispose() {
         try {
-            animView.stopPlay()
+            destroyed = true
+            playGeneration++
+            lastPlayPath = null
             methodChannel.setMethodCallHandler(null)
+            if (animView.isRunning()) {
+                animView.stopPlay()
+            }
             if (deleteOnEnd) {
                 lastPlayedFile?.delete()
             }
-            synchronized(bitmapCache) {
-                bitmapCache.clear()
+            executor.execute {
+                synchronized(bitmapCache) {
+                    for (bmp in bitmapCache.values) {
+                        if (!bmp.isRecycled) {
+                            bmp.recycle()
+                        }
+                    }
+                    bitmapCache.clear()
+                }
+                executor.shutdown()
             }
         } catch (e: Exception) {
             Log.e("FlutterVapView", "Error during dispose", e)
@@ -278,11 +330,7 @@ class FlutterVapView(
     }
 
     override fun onVideoRender(frameIndex: Int, config: com.tencent.qgame.animplayer.AnimConfig?) {
-        if (!destroyed) {
-            mainHandler.post {
-                methodChannel.invokeMethod("onVideoRender", mapOf("frameIndex" to frameIndex))
-            }
-        }
+        // Ignored to prevent high-frequency (60fps) bridge IPC flooding unless specifically needed
     }
 
     override fun onVideoComplete() {

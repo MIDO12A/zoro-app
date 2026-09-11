@@ -8,7 +8,7 @@ import type {
   HostAgencyMemberModel, HostMilestoneModel, CommissionSettingModel,
   AgencyJoinRequestModel, AgencyLedgerEntryModel, AgencyWithdrawalRequestModel,
   HostAgencyModel, CpGiftModel, CpCarModel, CpEventSettings, CpRankRewardModel,
-  SigninRewardModel,
+  SigninRewardModel, AgencyApplicationModel,
 } from '../types'
 
 // ---- Auth Admin ----
@@ -677,74 +677,549 @@ export function subscribeAgencies(cb: (agencies: AgencyModel[]) => void) {
 
 export async function getHostAgencies(): Promise<HostAgencyModel[]> {
   try {
-    const { data } = await supabase.from('host_agencies').select('*').order('name')
-    return mapList<HostAgencyModel>((data ?? []).map((a: any) => ({
-      ...a,
-      owner_name: a.owner_id?.slice(0, 8),
-    })))
-  } catch { return [] }
+    const { data: agenciesData } = await supabase.from('host_agencies').select('*').order('name');
+    const agencies = agenciesData ?? [];
+    if (agencies.length === 0) return [];
+
+    // Fetch members to compute real active member counts
+    const { data: membersData } = await supabase.from('host_agency_members').select('agency_id, status');
+    const memberCounts: Record<string, number> = {};
+    (membersData ?? []).forEach((m: any) => {
+      if (m.status === 'active') {
+        memberCounts[m.agency_id] = (memberCounts[m.agency_id] || 0) + 1;
+      }
+    });
+
+    // Fetch owner details
+    const ownerIds = Array.from(new Set(agencies.map((a: any) => a.owner_id).filter(Boolean)));
+    const ownersMap: Record<string, any> = {};
+    if (ownerIds.length > 0) {
+      const { data: usersData } = await supabase.from('users').select('id, name, custom_id, photo_url, avatar');
+      (usersData ?? []).forEach((u: any) => {
+        if (ownerIds.includes(u.id) || ownerIds.includes(u.custom_id)) {
+          ownersMap[u.id] = u;
+          if (u.custom_id) ownersMap[u.custom_id] = u;
+        }
+      });
+    }
+
+    return mapList<HostAgencyModel>(agencies.map((a: any) => {
+      const owner = ownersMap[a.owner_id];
+      const realCount = memberCounts[a.id] ?? a.member_count ?? 0;
+      return {
+        ...a,
+        member_count: realCount,
+        owner_name: owner?.name || owner?.displayName || a.owner_id?.slice(0, 8),
+        owner_avatar: owner?.photo_url || owner?.avatar || '',
+      };
+    }));
+  } catch { return []; }
 }
 
-export async function createHostAgency(name: string, ownerId: string, commissionRate: number, specialty: string): Promise<HostAgencyModel | null> {
+export async function createHostAgency(name: string, ownerId: string, commissionRate: number, specialty: string, extra?: Partial<HostAgencyModel>): Promise<HostAgencyModel | null> {
   try {
-    const { data } = await supabase.from('host_agencies').insert({
-      name, owner_id: ownerId, commission_rate: commissionRate, specialty,
-    }).select('*').single()
-    return data as HostAgencyModel
-  } catch { return null }
+    const payload = {
+      name,
+      owner_id: ownerId,
+      commission_rate: commissionRate,
+      specialty,
+      is_active: true,
+      member_count: 1,
+      tier: extra?.tier || 'bronze',
+      description: extra?.description || null,
+      country: extra?.country || null,
+      photo_url: extra?.photo_url || null,
+      created_at: new Date().toISOString(),
+    };
+    const { data } = await supabase.from('host_agencies').insert(payload).select('*').single();
+    if (data) {
+      // Add owner to members table
+      await supabase.from('host_agency_members').upsert({
+        agency_id: (data as any).id,
+        user_id: ownerId,
+        role: 'owner',
+        status: 'active',
+        joined_at: new Date().toISOString(),
+      });
+      // Set agency_id on user
+      await supabase.from('users').update({ agency_id: (data as any).id }).eq('id', ownerId);
+
+      // Send congratulations notification to owner
+      const adminLabel = extra?.adminName || 'إدارة التطبيق';
+      await sendSystemNotification({
+        userId: ownerId,
+        title: 'مبروك! تم فتح وكالتك بنجاح 🎉',
+        body: `مبروك! تم فتح وكالة [${name}] بنجاح بواسطة المشرف [${adminLabel}]. يمكنك الآن الدخول إلى مركز إدارة الوكالة وإضافة المضيفين.`,
+        type: 'system',
+        action: 'agency_created',
+        extraData: { agency_id: (data as any).id, agency_name: name, admin_name: adminLabel },
+      });
+    }
+    return data as HostAgencyModel;
+  } catch { return null; }
 }
 
 export async function updateHostAgency(id: string, updates: Partial<HostAgencyModel>): Promise<boolean> {
-  try { await supabase.from('host_agencies').update(updates).eq('id', id); return true } catch { return false }
+  try { await supabase.from('host_agencies').update(updates).eq('id', id); return true; } catch { return false; }
 }
 
 export async function deleteHostAgency(id: string): Promise<boolean> {
-  try { await supabase.from('host_agencies').delete().eq('id', id); return true } catch { return false }
+  try {
+    await supabase.from('host_agencies').delete().eq('id', id);
+    await supabase.from('host_agency_members').delete().eq('agency_id', id);
+    return true;
+  } catch { return false; }
 }
 
 export async function getCommissionSettings(): Promise<CommissionSettingModel[]> {
   try {
-    const { data } = await supabase.from('commission_settings').select('*').order('key')
-    return mapList<CommissionSettingModel>(data ?? [])
-  } catch { return [] }
+    const { data } = await supabase.from('commission_settings').select('*').order('key');
+    return mapList<CommissionSettingModel>(data ?? []);
+  } catch { return []; }
 }
 
 export async function updateCommissionSetting(id: string, value: number): Promise<boolean> {
   try {
-    // استخدم upsert (setDoc merge) بدل update حتى يعمل تحديث الإعداد
-    // حتى لو لم تكن الوثيقة موجودة بعد (كان updateDoc يرمي not-found).
     await supabase.from('commission_settings').upsert({
       key: id, value, updated_at: new Date().toISOString(),
-    })
-    return true
-  } catch { return false }
+    });
+    return true;
+  } catch { return false; }
 }
 
 export async function getHostAgencyMembers(agencyId?: string): Promise<HostAgencyMemberModel[]> {
   try {
-    let query = supabase.from('host_agency_members').select('*').order('joined_at')
-    if (agencyId) query = query.eq('agency_id', agencyId)
-    const { data } = await query
-    return mapList<HostAgencyMemberModel>((data ?? []).map((m: any) => ({
-      ...m,
-      user_name: m.user_id?.slice(0, 8),
-    })))
-  } catch { return [] }
+    let query = supabase.from('host_agency_members').select('*').order('joined_at');
+    if (agencyId) query = query.eq('agency_id', agencyId);
+    const { data } = await query;
+    const members = data ?? [];
+    if (members.length === 0) return [];
+
+    // Fetch user details for each member
+    const userIds = Array.from(new Set(members.map((m: any) => m.user_id).filter(Boolean)));
+    const usersMap: Record<string, any> = {};
+    if (userIds.length > 0) {
+      const { data: usersData } = await supabase.from('users').select('id, name, custom_id, photo_url, avatar');
+      (usersData ?? []).forEach((u: any) => {
+        usersMap[u.id] = u;
+        if (u.custom_id) usersMap[u.custom_id] = u;
+      });
+    }
+
+    return mapList<HostAgencyMemberModel>(members.map((m: any) => {
+      const u = usersMap[m.user_id];
+      return {
+        ...m,
+        user_name: u?.name || u?.displayName || m.user_id?.slice(0, 8),
+        custom_id: u?.custom_id || '',
+        avatar_url: u?.photo_url || u?.avatar || '',
+      };
+    }));
+  } catch { return []; }
+}
+
+export async function addAgencyMember(agencyId: string, userQuery: string, role: string = 'host'): Promise<{ success: boolean; message: string }> {
+  try {
+    const q = userQuery.trim();
+    if (!q) return { success: false, message: 'يرجى كتابة UID أو رقم المعرف (ID)' };
+
+    // Search in users table
+    const { data: users } = await supabase.from('users').select('id, name, custom_id');
+    const targetUser = (users || []).find((u: any) => u.id === q || u.custom_id === q);
+
+    if (!targetUser) {
+      return { success: false, message: 'لم يتم العثور على مستخدم بهذا المعرف أو الـ ID' };
+    }
+
+    const userId = targetUser.id;
+
+    // Check if already a member in this agency
+    const { data: existing } = await supabase.from('host_agency_members')
+      .select('*')
+      .eq('agency_id', agencyId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existing && existing.status === 'active') {
+      return { success: false, message: 'المستخدم منضم بالفعل لهذه الوكالة' };
+    }
+
+    await supabase.from('host_agency_members').upsert({
+      agency_id: agencyId,
+      user_id: userId,
+      role,
+      status: 'active',
+      joined_at: new Date().toISOString(),
+    });
+
+    await supabase.from('users').update({ agency_id: agencyId }).eq('id', userId);
+    await adjustAgencyMemberCount(agencyId, 1);
+
+    // Send system notification
+    const roleLabel = role === 'supervisor' ? 'مشرف' : 'مضيف';
+    await sendSystemNotification({
+      userId,
+      title: '🎙️ انضمام إلى وكالة مضيفين',
+      body: `تمت إضافتك بنجاح إلى الوكالة برتبة [${roleLabel}] بواسطة الإدارة. يمكنك الآن تصفح لوحة تحكم الوكالة من ملفك الشخصي.`,
+      type: 'system',
+      action: 'agency_member_added',
+      extraData: { agency_id: agencyId, role },
+    });
+
+    return { success: true, message: `تمت إضافة ${targetUser.name || 'المستخدم'} للوكالة بنجاح!` };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'حدث خطأ أثناء إضافة العضو' };
+  }
+}
+
+// ---- Agency Applications (طلبات فتح الوكالات: قبول / رفض) ----
+
+export async function getAgencyApplications(statusFilter?: string, typeFilter?: string): Promise<AgencyApplicationModel[]> {
+  try {
+    const applications: AgencyApplicationModel[] = [];
+
+    // 1. Fetch from agency_applications
+    let appQuery = supabase.from('agency_applications').select('*').order('created_at', { ascending: false });
+    if (statusFilter) appQuery = appQuery.eq('status', statusFilter);
+    if (typeFilter) appQuery = appQuery.eq('agency_type', typeFilter);
+    const { data: appData } = await appQuery;
+
+    if (appData && Array.isArray(appData)) {
+      applications.push(...appData.map((d: any) => ({
+        id: d.id,
+        user_id: d.user_id,
+        user_name: d.user_name || d.user_id?.slice(0, 8),
+        custom_id: d.custom_id || '',
+        user_avatar: d.user_avatar || '',
+        agency_type: d.agency_type || 'host',
+        agency_name: d.agency_name || 'وكالة جديدة',
+        agency_logo: d.agency_logo || '',
+        country: d.country || '',
+        whatsapp: d.whatsapp || '',
+        description: d.description || '',
+        doc_type: d.doc_type || '',
+        doc_number: d.doc_number || '',
+        doc_front_url: d.doc_front_url || '',
+        doc_back_url: d.doc_back_url || '',
+        video_url: d.video_url || '',
+        status: d.status || 'pending',
+        rejection_reason: d.rejection_reason || '',
+        created_at: d.created_at || new Date().toISOString(),
+        reviewed_at: d.reviewed_at,
+      })));
+    }
+
+    // 2. Also check host_verifications for any applications submitted via verification
+    const { data: verifData } = await supabase.from('host_verifications').select('*').order('created_at', { ascending: false });
+    if (verifData && Array.isArray(verifData)) {
+      for (const v of verifData) {
+        // Skip if already in applications
+        if (!applications.some(a => a.user_id === v.uid && a.id === `verif_${v.id || v.uid}`)) {
+          applications.push({
+            id: `verif_${v.id || v.uid}`,
+            user_id: v.uid,
+            user_name: v.full_name || v.uid?.slice(0, 8),
+            custom_id: '',
+            user_avatar: v.face_photo1_url || '',
+            agency_type: 'host',
+            agency_name: `وكالة ${v.full_name || 'المضيف'}`,
+            country: v.country || '',
+            whatsapp: v.whatsapp || '',
+            description: v.previous_platforms ? `منصات سابقة: ${v.previous_platforms}` : '',
+            doc_type: v.doc_type || '',
+            doc_number: v.doc_number || '',
+            doc_front_url: v.doc_front_url || '',
+            doc_back_url: v.doc_back_url || '',
+            video_url: v.video_url || '',
+            status: (v.status === 'approved' ? 'approved' : v.status === 'rejected' ? 'rejected' : 'pending'),
+            created_at: v.created_at || new Date().toISOString(),
+          });
+        }
+      }
+    }
+
+    // Fetch user details to enrich with real names and avatars
+    const userIds = Array.from(new Set(applications.map(a => a.user_id).filter(Boolean)));
+    if (userIds.length > 0) {
+      const { data: usersData } = await supabase.from('users').select('id, name, custom_id, photo_url, avatar');
+      const uMap: Record<string, any> = {};
+      (usersData ?? []).forEach((u: any) => { uMap[u.id] = u; });
+      applications.forEach(a => {
+        const u = uMap[a.user_id];
+        if (u) {
+          if (!a.user_name || a.user_name.length < 3) a.user_name = u.name;
+          a.custom_id = u.custom_id || a.custom_id;
+          if (!a.user_avatar) a.user_avatar = u.photo_url || u.avatar || '';
+        }
+      });
+    }
+
+    let result = applications;
+    if (statusFilter) result = result.filter(a => a.status === statusFilter);
+    if (typeFilter) result = result.filter(a => a.agency_type === typeFilter);
+
+    return result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } catch { return []; }
+}
+
+export async function approveAgencyApplication(app: AgencyApplicationModel, adminName: string = 'إدارة التطبيق'): Promise<{ success: boolean; message: string }> {
+  try {
+    const now = new Date().toISOString();
+
+    if (app.agency_type === 'host') {
+      // 1. Create Host Agency
+      const agencyData = {
+        name: app.agency_name || `وكالة ${app.user_name}`,
+        owner_id: app.user_id,
+        description: app.description || 'وكالة مضيفين معتمدة',
+        photo_url: app.agency_logo || app.user_avatar || null,
+        country: app.country || null,
+        commission_rate: 0.1, // 10%
+        specialty: 'mixed',
+        tier: 'bronze',
+        is_active: true,
+        member_count: 1,
+        total_diamonds_earned: 0,
+        monthly_diamonds: 0,
+        created_at: now,
+      };
+
+      const { data: createdAgency, error: agErr } = await supabase.from('host_agencies').insert(agencyData).select('*').single();
+      const agencyId = (createdAgency as any)?.id;
+
+      if (agencyId) {
+        // 2. Add owner to host_agency_members
+        await supabase.from('host_agency_members').upsert({
+          agency_id: agencyId,
+          user_id: app.user_id,
+          role: 'owner',
+          status: 'active',
+          joined_at: now,
+        });
+
+        // 3. Set user's agency_id
+        await supabase.from('users').update({ agency_id: agencyId }).eq('id', app.user_id);
+      }
+
+      await sendSystemNotification({
+        userId: app.user_id,
+        title: 'مبروك! تم قبول طلب فتح الوكالة 🎉',
+        body: `مبروك! تم قبول طلبك وفتح وكالة [${app.agency_name}] بنجاح بواسطة المشرف [${adminName}]. يمكنك الآن الدخول لإدارة وكالتك.`,
+        type: 'system',
+        action: 'agency_approved',
+        extraData: { agency_name: app.agency_name, admin_name: adminName },
+      });
+    } else if (app.agency_type === 'recharge') {
+      // Set user as recharge agent
+      await supabase.from('users').update({
+        is_recharge_agent: true,
+        recharge_agency_name: app.agency_name || 'وكالة الشحن المعتمدة',
+        recharge_agency_logo: app.agency_logo || null,
+        whatsapp_number: app.whatsapp || null,
+      }).eq('id', app.user_id);
+
+      await sendSystemNotification({
+        userId: app.user_id,
+        title: 'مبروك! تم تفعيل وكالة الشحن 🎉',
+        body: `مبروك! تم قبول طلبك واعتمادك كوكيل شحن رسمي [${app.agency_name}] بواسطة المشرف [${adminName}].`,
+        type: 'system',
+        action: 'recharge_agency_approved',
+        extraData: { agency_name: app.agency_name, admin_name: adminName },
+      });
+    }
+
+    // Update application record
+    if (app.id.startsWith('verif_')) {
+      const verifDocId = app.id.replace('verif_', '');
+      await supabase.from('host_verifications').update({ status: 'approved' }).eq('uid', app.user_id);
+    } else {
+      await supabase.from('agency_applications').update({
+        status: 'approved',
+        reviewed_at: now,
+      }).eq('id', app.id);
+    }
+
+    return { success: true, message: `تم قبول طلب فتح الوكالة بنجاح وتم تفعيل الوكالة!` };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'حدث خطأ أثناء قبول الطلب' };
+  }
+}
+
+export async function rejectAgencyApplication(appId: string, userId: string, reason: string = '', adminName: string = 'إدارة التطبيق'): Promise<{ success: boolean; message: string }> {
+  try {
+    const now = new Date().toISOString();
+    if (appId.startsWith('verif_')) {
+      await supabase.from('host_verifications').update({ status: 'rejected' }).eq('uid', userId);
+    } else {
+      await supabase.from('agency_applications').update({
+        status: 'rejected',
+        rejection_reason: reason.trim() || 'لم تستوفِ متطلبات فتح الوكالة',
+        reviewed_at: now,
+      }).eq('id', appId);
+    }
+
+    await sendSystemNotification({
+      userId: userId,
+      title: 'إشعار بخصوص طلب فتح الوكالة ⚠️',
+      body: `تم رفض طلب فتح الوكالة من قبل المشرف [${adminName}]. سبب الرفض: ${reason.trim() || 'لم يتم استيفاء الشروط المطلوبة'}.`,
+      type: 'system',
+      action: 'agency_rejected',
+      extraData: { reason, admin_name: adminName },
+    });
+
+    return { success: true, message: 'تم رفض الطلب بنجاح' };
+  } catch (err: any) {
+    return { success: false, message: err?.message || 'حدث خطأ أثناء رفض الطلب' };
+  }
+}
+
+export async function createAgencyApplication(payload: Partial<AgencyApplicationModel>): Promise<boolean> {
+  try {
+    await supabase.from('agency_applications').insert({
+      user_id: payload.user_id,
+      user_name: payload.user_name || '',
+      agency_type: payload.agency_type || 'host',
+      agency_name: payload.agency_name || '',
+      agency_logo: payload.agency_logo || '',
+      country: payload.country || '',
+      whatsapp: payload.whatsapp || '',
+      description: payload.description || '',
+      doc_type: payload.doc_type || '',
+      doc_number: payload.doc_number || '',
+      doc_front_url: payload.doc_front_url || '',
+      doc_back_url: payload.doc_back_url || '',
+      video_url: payload.video_url || '',
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    });
+    return true;
+  } catch { return false; }
 }
 
 export async function getHostMilestones(): Promise<HostMilestoneModel[]> {
   try {
     const { data } = await supabase.from('host_milestones').select('*').order('sort_order')
-    return mapList<HostMilestoneModel>(data ?? [])
+    return (data ?? []).map((m: any) => ({
+      id: m.id,
+      title: m.title ?? '',
+      target_diamonds: Number(m.target_diamonds ?? m.targetDiamonds ?? 0),
+      targetDiamonds: Number(m.target_diamonds ?? m.targetDiamonds ?? 0),
+      reward_type: m.reward_type ?? m.rewardType ?? 'salary_usd',
+      rewardType: m.reward_type ?? m.rewardType ?? 'salary_usd',
+      reward_value: Number(m.reward_value ?? m.rewardValue ?? 0),
+      rewardValue: Number(m.reward_value ?? m.rewardValue ?? 0),
+      reward_item_id: m.reward_item_id ?? m.rewardItemId ?? null,
+      rewardItemId: m.reward_item_id ?? m.rewardItemId ?? null,
+      reward_image_url: m.reward_image_url ?? m.rewardImageUrl ?? m.image_url ?? m.imageUrl ?? null,
+      rewardImageUrl: m.reward_image_url ?? m.rewardImageUrl ?? m.image_url ?? m.imageUrl ?? null,
+      background_url: m.background_url ?? m.backgroundUrl ?? null,
+      backgroundUrl: m.background_url ?? m.backgroundUrl ?? null,
+      agent_commission_rate: Number(m.agent_commission_rate ?? m.agentCommissionRate ?? 0.1),
+      agentCommissionRate: Number(m.agent_commission_rate ?? m.agentCommissionRate ?? 0.1),
+      period_type: m.period_type ?? m.periodType ?? 'monthly',
+      periodType: m.period_type ?? m.periodType ?? 'monthly',
+      is_active: m.is_active !== false && m.isActive !== false,
+      isActive: m.is_active !== false && m.isActive !== false,
+      sort_order: Number(m.sort_order ?? m.sortOrder ?? 0),
+      sortOrder: Number(m.sort_order ?? m.sortOrder ?? 0),
+    })) as any;
   } catch { return [] }
 }
 
 export async function updateHostMilestone(id: string, updates: Partial<HostMilestoneModel>): Promise<boolean> {
-  try { await supabase.from('host_milestones').update(updates).eq('id', id); return true } catch { return false }
+  try {
+    const raw: any = updates;
+    const targetDiamonds = Number(raw.target_diamonds ?? raw.targetDiamonds ?? 0);
+    const rewardValue = Number(raw.reward_value ?? raw.rewardValue ?? 0);
+    const agentCommissionRate = Number(raw.agent_commission_rate ?? raw.agentCommissionRate ?? 0.1);
+    const sortOrder = Number(raw.sort_order ?? raw.sortOrder ?? 0);
+    const rewardType = raw.reward_type ?? raw.rewardType ?? 'salary_usd';
+    const periodType = raw.period_type ?? raw.periodType ?? 'monthly';
+    const isActive = raw.is_active !== false && raw.isActive !== false;
+    const rewardItemId = raw.reward_item_id ?? raw.rewardItemId ?? null;
+    const rewardImageUrl = raw.reward_image_url ?? raw.rewardImageUrl ?? null;
+    const backgroundUrl = raw.background_url ?? raw.backgroundUrl ?? null;
+    const title = raw.title ?? '';
+
+    const normalized = {
+      title,
+      target_diamonds: targetDiamonds,
+      targetDiamonds,
+      reward_type: rewardType,
+      rewardType,
+      reward_value: rewardValue,
+      rewardValue,
+      agent_commission_rate: agentCommissionRate,
+      agentCommissionRate,
+      sort_order: sortOrder,
+      sortOrder,
+      period_type: periodType,
+      periodType,
+      is_active: isActive,
+      isActive,
+      reward_item_id: rewardItemId,
+      rewardItemId,
+      reward_image_url: rewardImageUrl,
+      rewardImageUrl,
+      background_url: backgroundUrl,
+      backgroundUrl,
+      updated_at: new Date().toISOString(),
+    };
+
+    await supabase.from('host_milestones').update(normalized).eq('id', id);
+    return true;
+  } catch (e) {
+    console.error('updateHostMilestone error:', e);
+    return false;
+  }
 }
 
 export async function createHostMilestone(milestone: Omit<HostMilestoneModel, 'id'>): Promise<boolean> {
-  try { await supabase.from('host_milestones').insert(milestone); return true } catch { return false }
+  try {
+    const raw: any = milestone;
+    const targetDiamonds = Number(raw.target_diamonds ?? raw.targetDiamonds ?? 0);
+    const rewardValue = Number(raw.reward_value ?? raw.rewardValue ?? 0);
+    const agentCommissionRate = Number(raw.agent_commission_rate ?? raw.agentCommissionRate ?? 0.1);
+    const sortOrder = Number(raw.sort_order ?? raw.sortOrder ?? 0);
+    const rewardType = raw.reward_type ?? raw.rewardType ?? 'salary_usd';
+    const periodType = raw.period_type ?? raw.periodType ?? 'monthly';
+    const isActive = raw.is_active !== false && raw.isActive !== false;
+    const rewardItemId = raw.reward_item_id ?? raw.rewardItemId ?? null;
+    const rewardImageUrl = raw.reward_image_url ?? raw.rewardImageUrl ?? null;
+    const backgroundUrl = raw.background_url ?? raw.backgroundUrl ?? null;
+    const title = raw.title ?? '';
+
+    const normalized = {
+      title,
+      target_diamonds: targetDiamonds,
+      targetDiamonds,
+      reward_type: rewardType,
+      rewardType,
+      reward_value: rewardValue,
+      rewardValue,
+      agent_commission_rate: agentCommissionRate,
+      agentCommissionRate,
+      sort_order: sortOrder,
+      sortOrder,
+      period_type: periodType,
+      periodType,
+      is_active: isActive,
+      isActive,
+      reward_item_id: rewardItemId,
+      rewardItemId,
+      reward_image_url: rewardImageUrl,
+      rewardImageUrl,
+      background_url: backgroundUrl,
+      backgroundUrl,
+      created_at: new Date().toISOString(),
+    };
+
+    await supabase.from('host_milestones').insert(normalized);
+    return true;
+  } catch (e) {
+    console.error('createHostMilestone error:', e);
+    return false;
+  }
 }
 
 export async function deleteHostMilestone(id: string): Promise<boolean> {
@@ -802,10 +1277,144 @@ export async function updateAgencyMemberRole(agencyId: string, userId: string, r
 
 export async function removeAgencyMember(agencyId: string, userId: string): Promise<boolean> {
   try {
-    await supabase.from('host_agency_members').update({ status: 'kicked' }).eq('agency_id', agencyId).eq('user_id', userId)
-    await adjustAgencyMemberCount(agencyId, -1)
-    return true
-  } catch { return false }
+    await supabase.from('host_agency_members').delete().eq('agency_id', agencyId).eq('user_id', userId);
+    await supabase.from('users').update({ agency_id: null }).eq('id', userId);
+    await adjustAgencyMemberCount(agencyId, -1);
+    return true;
+  } catch { return false; }
+}
+
+export async function sendSystemNotification(data: {
+  userId: string;
+  title: string;
+  body: string;
+  type?: string;
+  action?: string;
+  extraData?: Record<string, unknown>;
+}): Promise<boolean> {
+  try {
+    const payload = {
+      user_id: data.userId,
+      uid: data.userId,
+      title: data.title,
+      body: data.body,
+      type: data.type || 'system',
+      sent_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      is_read: false,
+      data: {
+        action: data.action || 'system_notice',
+        ...(data.extraData || {}),
+      },
+    };
+    await supabase.from('notifications').insert(payload);
+    return true;
+  } catch (e) {
+    console.warn('sendSystemNotification failed:', e);
+    return false;
+  }
+}
+
+export async function searchUserProfile(queryStr: string): Promise<{
+  id: string;
+  uid: string;
+  name: string;
+  custom_id: string;
+  photo_url: string;
+  coins: number;
+  agency_id?: string;
+  is_recharge_agent?: boolean;
+} | null> {
+  const q = queryStr.trim().toLowerCase();
+  if (!q) return null;
+  try {
+    const { data: users } = await supabase.from('users').select('*');
+    if (!users || !Array.isArray(users)) return null;
+    const found = users.find((u: any) => {
+      const uid = String(u.id || u.uid || '').toLowerCase();
+      const cid = String(u.custom_id || u.customId || u.display_id || '').toLowerCase();
+      return uid === q || cid === q;
+    });
+    if (!found) return null;
+    return {
+      id: found.id || found.uid,
+      uid: found.uid || found.id,
+      name: found.name || 'بدون اسم',
+      custom_id: String(found.custom_id || found.customId || found.id?.slice(0, 8) || ''),
+      photo_url: found.photo_url || found.photoUrl || found.avatar || '',
+      coins: Number(found.coins || 0),
+      agency_id: found.agency_id || undefined,
+      is_recharge_agent: Boolean(found.is_recharge_agent),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function sendAgencyInvitation(params: {
+  userId: string;
+  agencyName: string;
+  agencyId?: string;
+  adminName?: string;
+  agencyLogo?: string;
+  type?: 'host' | 'recharge';
+}): Promise<boolean> {
+  const adminName = params.adminName || 'إدارة التطبيق';
+  return await sendSystemNotification({
+    userId: params.userId,
+    title: 'دعوة لفتح وكالة جديدة 🏢',
+    body: `دعاك المشرف [${adminName}] لتكون رئيساً لوكالة [${params.agencyName}]. هل تود قبول فتح الوكالة؟`,
+    type: 'agency_invite',
+    action: 'agency_invite',
+    extraData: {
+      agency_name: params.agencyName,
+      agency_id: params.agencyId || '',
+      agency_logo: params.agencyLogo || '',
+      admin_name: adminName,
+      agency_type: params.type || 'host',
+      invited_at: new Date().toISOString(),
+    },
+  });
+}
+
+export async function updateRechargeAgency(userId: string, data: {
+  recharge_agency_name?: string;
+  recharge_agency_logo?: string;
+  whatsapp_number?: string;
+  coins?: number;
+  recharge_commission_rate?: number;
+  adminName?: string;
+}): Promise<boolean> {
+  try {
+    const adminName = data.adminName || 'إدارة التطبيق';
+    await supabase.from('users').update({
+      ...data,
+      is_recharge_agent: true,
+    }).eq('id', userId);
+
+    // Send congratulation notification
+    await sendSystemNotification({
+      userId,
+      title: 'مبروك! تم تفعيل وكالة الشحن 🎉',
+      body: `مبروك! تم تفعيل وكالة الشحن المعتمدة [${data.recharge_agency_name || 'وكالة الشحن'}] لحسابك بنجاح بواسطة المشرف [${adminName}]. يمكنك الآن البدء بشحن العملات للمستخدمين.`,
+      type: 'system',
+      action: 'recharge_agency_approved',
+      extraData: {
+        admin_name: adminName,
+      },
+    });
+
+    return true;
+  } catch { return false; }
+}
+
+export async function revokeRechargeAgency(userId: string): Promise<boolean> {
+  try {
+    await supabase.from('users').update({
+      is_recharge_agent: false,
+    }).eq('id', userId);
+    return true;
+  } catch { return false; }
 }
 
 // ---- Agency Ledger ----
@@ -1476,53 +2085,80 @@ export async function deleteSigninReward(id: string) {
   catch (e) { console.warn('deleteSigninReward failed:', e) }
 }
 
-// ---- CP Rank Rewards (via cp_settings JSON fallback — migration pending) ----
-// TODO: بعد تشغيل PENDING_MIGRATIONS.sql، أرجع استخدم الجدول مباشرة
+// ---- CP Rank Rewards (بمجموعة Firestore cp_rank_rewards مباشرة) ----
+// FIX: التعديلات تذهب الآن وثيقة-بـ-وثيقة إلى مجموعة `cp_rank_rewards`
+//      — نفس المجموعة التي يقرأ منها تطبيق Flutter — بدلاً من JSON blob
+//      في cp_settings["cp_rank_rewards_data"] (كانت سبب عدم ظهور التعديلات).
+const CP_RANK_REWARDS = 'cp_rank_rewards';
 
-const REWARDS_KEY = 'cp_rank_rewards_data';
-
-async function _readRewards(): Promise<CpRankRewardModel[]> {
-  try {
-    const { data } = await supabase.from('cp_settings').select('value').eq('key', REWARDS_KEY).maybeSingle();
-    if (data?.value) return JSON.parse(data.value);
-  } catch { /* ignore */ }
-  return [];
+function _rewardDocId(id: unknown, data: Partial<CpRankRewardModel>): string {
+  if (id != null && String(id).length > 0) return String(id);
+  const p = data.period || 'weekly';
+  const r = data.rank_position ?? 1;
+  const s = data.slot_index ?? 0;
+  return `${p}_rank${r}_slot${s}`;
 }
 
-async function _writeRewards(items: CpRankRewardModel[]) {
-  await supabase.from('cp_settings').upsert(
-    { key: REWARDS_KEY, value: JSON.stringify(items), updated_at: new Date().toISOString() },
-    { onConflict: 'key' }
-  );
+function _normalizeRewardRow(d: any): CpRankRewardModel {
+  return {
+    id: d.id ?? d.docId ?? '',
+    period: d.period ?? 'weekly',
+    rank_position: Number(d.rank_position ?? 1),
+    slot_index: Number(d.slot_index ?? 0),
+    reward_type: d.reward_type ?? 'frame_svga',
+    label_ar: d.label_ar ?? '',
+    label_en: d.label_en ?? '',
+    svga_url: d.svga_url ?? '',
+    image_url: d.image_url ?? '',
+    isActive: d.isActive !== false,
+  } as CpRankRewardModel;
 }
 
 export async function getCpRankRewards(period?: string): Promise<CpRankRewardModel[]> {
   try {
-    const all = await _readRewards();
-    if (period) return all.filter(r => r.period === period).sort((a, b) => a.rank_position - b.rank_position || a.slot_index - b.slot_index);
-    return all.sort((a, b) => a.rank_position - b.rank_position || a.slot_index - b.slot_index);
-  } catch { return []; }
+    const { data } = await supabase.from(CP_RANK_REWARDS).select();
+    let rows: CpRankRewardModel[] = (Array.isArray(data) ? data : []).map(_normalizeRewardRow);
+
+    // Fallback قديم: لو المجموعة فارغة نقرأ الـ JSON blob القديم حتى لا يضيع التكوين.
+    if (rows.length === 0) {
+      const { data: legacy } = await supabase.from('cp_settings').select('value').eq('key', 'cp_rank_rewards_data').maybeSingle();
+      if (legacy?.value) {
+        const parsed = JSON.parse(legacy.value);
+        if (Array.isArray(parsed)) rows = parsed.map(_normalizeRewardRow);
+      }
+    }
+
+    const filtered = period ? rows.filter(r => r.period === period) : rows;
+    return filtered.sort((a, b) => a.rank_position - b.rank_position || a.slot_index - b.slot_index);
+  } catch (e) {
+    console.warn('getCpRankRewards failed:', e);
+    return [];
+  }
 }
 
-export async function upsertCpRankReward(id: number | null, data: Partial<CpRankRewardModel>) {
+export async function upsertCpRankReward(id: string | number | null, data: Partial<CpRankRewardModel>) {
   try {
-    const all = await _readRewards();
-    if (id) {
-      const idx = all.findIndex(r => r.id === id);
-      if (idx >= 0) all[idx] = { ...all[idx], ...data } as CpRankRewardModel;
-    } else {
-      const newId = Date.now() + Math.floor(Math.random() * 1000);
-      all.push({ id: newId, period: 'weekly', rank_position: 1, slot_index: 0, reward_type: 'frame_svga', label_ar: '', label_en: '', svga_url: '', image_url: '', ...data } as CpRankRewardModel);
-    }
-    await _writeRewards(all);
+    const docId = _rewardDocId(id, data);
+    const values = {
+      id: docId,
+      period: data.period ?? 'weekly',
+      rank_position: Number(data.rank_position ?? 1),
+      slot_index: Number(data.slot_index ?? 0),
+      reward_type: data.reward_type ?? 'frame_svga',
+      label_ar: data.label_ar ?? '',
+      label_en: data.label_en ?? '',
+      svga_url: data.svga_url ?? '',
+      image_url: data.image_url ?? '',
+      isActive: data.isActive !== false,
+      updated_at: new Date().toISOString(),
+    };
+    await supabase.from(CP_RANK_REWARDS).upsert(values, { onConflict: 'id' });
   } catch (e) { console.warn('upsertCpRankReward failed:', e); }
 }
 
-export async function deleteCpRankReward(id: number) {
+export async function deleteCpRankReward(id: string | number) {
   try {
-    const all = await _readRewards();
-    const filtered = all.filter(r => r.id !== id);
-    await _writeRewards(filtered);
+    await supabase.from(CP_RANK_REWARDS).delete().eq('id', id);
   } catch (e) { console.warn('deleteCpRankReward failed:', e); }
 }
 
@@ -1587,8 +2223,8 @@ export async function distributeCpRewards(): Promise<{ success: boolean; message
     const { data: cfgData } = await supabase.from('cp_settings').select('value').eq('key', 'cp_reward_period_config').maybeSingle();
     const cfg = cfgData?.value ? JSON.parse(cfgData.value) : { period_type: 'weekly', custom_days: 0, reward_duration_days: 7, last_distribution: '', next_distribution: '', last_period_start: '' };
 
-    const { data: rewardsData } = await supabase.from('cp_settings').select('value').eq('key', 'cp_rank_rewards_data').maybeSingle();
-    const rankRewards: any[] = rewardsData?.value ? JSON.parse(rewardsData.value) : [];
+    // FIX: تُقرأ قوالب المكافآت من مجموعة cp_rank_rewards مباشرة (نفس مصدر تطبيق Flutter).
+    const rankRewards: any[] = await getCpRankRewards();
 
     const periodKey = cfg.period_type === 'monthly' ? 'month_score' : 'week_score';
     const periodCol = cfg.period_type === 'monthly' ? 'month_score' : 'week_score';
@@ -1703,6 +2339,23 @@ async function _assignToUser(userUid: string, rewards: ActiveRewardEntry['reward
     if (necklaces.length > 0) updates.owned_level_necklaces = necklaces;
     await supabase.from('users').update(updates).eq('uid', userUid);
   }
+
+  // سجل منح المكافأة لكل مستخدم (مجموعة user_rewards): مصدر موحّد للوحة والتطبيق.
+  try {
+    for (const r of rewards) {
+      await supabase.from('user_rewards').add({
+        user_uid: userUid,
+        reward_type: r.type,
+        label_ar: r.label_ar,
+        label_en: r.label_en,
+        svga_url: r.svga_url,
+        image_url: r.image_url,
+        source: 'cp_rank_reward',
+        expires_at: r.expires_at,
+        created_at: new Date().toISOString(),
+      });
+    }
+  } catch { /* ignore */ }
 }
 
 export async function expireCpRewards(): Promise<{ removed: number }> {

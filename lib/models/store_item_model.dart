@@ -29,18 +29,18 @@ class StoreItemModel {
 
   factory StoreItemModel.fromMap(Map<String, dynamic> map) {
     return StoreItemModel(
-      itemId: map['item_id']?.toString() ?? '',
+      itemId: map['item_id']?.toString() ?? map['itemId']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
       category: map['category']?.toString() ?? '',
-      iconAsset: map['icon_asset']?.toString() ?? '',
+      iconAsset: map['icon_asset']?.toString() ?? map['iconAsset']?.toString() ?? '',
       price: (map['price'] ?? 0).toInt(),
-      svgaAsset: map['svga_asset']?.toString(),
-      videoAsset: map['video_asset']?.toString(),
-      isPremium: map['is_premium'] as bool? ?? false,
-      nameKey: map['name_key']?.toString(),
-      photoKey: map['photo_key']?.toString(),
-      defaultImage: map['default_image']?.toString(),
-      isHidden: map['is_hidden'] as bool? ?? map['hide_from_store'] as bool? ?? map['is_event_only'] as bool? ?? false,
+      svgaAsset: map['svga_asset']?.toString() ?? map['svgaAsset']?.toString(),
+      videoAsset: map['video_asset']?.toString() ?? map['videoAsset']?.toString(),
+      isPremium: (map['is_premium'] ?? map['isPremium']) as bool? ?? false,
+      nameKey: map['name_key']?.toString() ?? map['nameKey']?.toString() ?? map['name_keys']?.toString(),
+      photoKey: map['photo_key']?.toString() ?? map['photoKey']?.toString() ?? map['photo_keys']?.toString(),
+      defaultImage: map['default_image']?.toString() ?? map['defaultImage']?.toString(),
+      isHidden: map['is_hidden'] as bool? ?? map['isHidden'] as bool? ?? map['hide_from_store'] as bool? ?? map['is_event_only'] as bool? ?? false,
     );
   }
 
@@ -50,16 +50,25 @@ class StoreItemModel {
 
   Map<String, dynamic> toMap() => {
         'item_id': itemId,
+        'itemId': itemId,
         'name': name,
         'category': category,
         'icon_asset': iconAsset,
+        'iconAsset': iconAsset,
         'price': price,
         'svga_asset': svgaAsset,
+        'svgaAsset': svgaAsset,
         'video_asset': videoAsset,
+        'videoAsset': videoAsset,
         'is_premium': isPremium,
+        'isPremium': isPremium,
         if (nameKey != null) 'name_key': nameKey,
+        if (nameKey != null) 'nameKey': nameKey,
         if (photoKey != null) 'photo_key': photoKey,
+        if (photoKey != null) 'photoKey': photoKey,
         if (defaultImage != null) 'default_image': defaultImage,
+        if (defaultImage != null) 'defaultImage': defaultImage,
         'is_hidden': isHidden,
+        'isHidden': isHidden,
       };
 }

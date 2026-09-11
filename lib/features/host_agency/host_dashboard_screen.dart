@@ -21,7 +21,6 @@ import 'data/agency_repository.dart';
 import 'screens/agency_withdrawal_screen.dart';
 import 'screens/agency_leaderboard_screen.dart';
 import 'screens/agency_exit_screen.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../core/cache/encrypted_image_provider.dart';
 import 'package:provider/provider.dart';
@@ -270,16 +269,23 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
           'commission_rate': 0.0,
         } : null,
         'milestones': (agencyStats?.targets ?? []).map((t) => <String, dynamic>{
-          'id':           t.id,
-          'title_ar':     t.title ?? '—',
-          'target':       t.targetDiamonds,
-          'reward_type':  'coins',
-          'reward_value': t.rewardCoins,
-          'period_type':  'monthly',
-          'earned':       t.earnedThisMonth,
-          'is_completed': t.isAchieved,
-          'reward_sent':  t.isAchieved,
-          'progress_pct': t.progressPct,
+          'id':                t.id,
+          'title_ar':          t.title ?? '—',
+          'name':              t.title ?? '—',
+          'target':            t.targetDiamonds,
+          'target_value':      t.targetDiamonds,
+          'current_value':     t.earnedThisMonth,
+          'reward_type':       t.rewardType ?? 'coins',
+          'reward_value':      t.rewardValue > 0 ? t.rewardValue : t.rewardCoins,
+          'reward_coins':      t.rewardCoins,
+          'reward_diamonds':   t.rewardDiamonds,
+          'reward_image_url':  t.rewardImageUrl,
+          'background_url':    t.backgroundUrl,
+          'period_type':       'monthly',
+          'earned':            t.earnedThisMonth,
+          'is_completed':      t.isAchieved,
+          'reward_sent':       t.isAchieved,
+          'progress_pct':      t.progressPct,
         }).toList(),
         'month_diamonds': monthD,
         'week_diamonds':  weekD,
@@ -466,11 +472,73 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
 
                 // ─ milestones ────────────────────────────────────────────
                 if (milestones.isNotEmpty) ...[
-                  _SectionHeader(label: 'أهداف الشهر', icon: '🎯'),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _SectionHeader(label: 'مراحل وتارجت الشهر', icon: '🎯'),
+                      if (milestones.any((m) => m['is_completed'] == true))
+                        GestureDetector(
+                          onTap: () {
+                            final totalAchievedDiamonds = milestones
+                                .where((m) => m['is_completed'] == true)
+                                .fold<int>(0, (sum, m) => sum + ((m['target_value'] as num?)?.toInt() ?? 0));
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => AgencyWithdrawalScreen(
+                                  initialTab: 2, // تبويب وكيل الشحن
+                                  initialDiamonds: totalAchievedDiamonds > 0 ? totalAchievedDiamonds : null,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF00D4FF), Color(0xFF9C6BFF)],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(color: const Color(0xFF00D4FF).withOpacity(0.3), blurRadius: 8),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.account_balance_wallet_rounded, color: Colors.black, size: 14),
+                                SizedBox(width: 4),
+                                Text(
+                                  'سحب جميع المراحل المحققة ⚡',
+                                  style: TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'IBM Plex Sans Arabic',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   ...milestones.map((m) => _MilestoneCard(
                     milestone: m,
                     shimmer:   _shimmerCtrl,
+                    onWithdraw: () {
+                      final targetVal = (m['target_value'] as num?)?.toInt() ?? 0;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => AgencyWithdrawalScreen(
+                            initialTab: 2, // تحويل لوكيل الشحن
+                            initialDiamonds: targetVal > 0 ? targetVal : null,
+                          ),
+                        ),
+                      );
+                    },
                   )),
                   const SizedBox(height: 24),
                 ],
@@ -700,9 +768,14 @@ class _AgencyCard extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 class _MilestoneCard extends StatelessWidget {
-  const _MilestoneCard({required this.milestone, required this.shimmer});
+  const _MilestoneCard({
+    required this.milestone,
+    required this.shimmer,
+    this.onWithdraw,
+  });
   final Map milestone;
   final AnimationController shimmer;
+  final VoidCallback? onWithdraw;
 
   @override
   Widget build(BuildContext context) {
@@ -713,6 +786,8 @@ class _MilestoneCard extends StatelessWidget {
     final completed = milestone['is_completed']    == true;
     final reward    = milestone['reward_type']     ?? '';
     final rewardVal = milestone['reward_value'];
+    final iconUrl   = milestone['reward_image_url'] as String?;
+    final bgUrl     = milestone['background_url']   as String?;
 
     final pct = (current / target).clamp(0.0, 1.0);
 
@@ -723,14 +798,40 @@ class _MilestoneCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _bgCard,
+        color: bgUrl != null && bgUrl.isNotEmpty ? null : _bgCard,
+        image: bgUrl != null && bgUrl.isNotEmpty
+            ? DecorationImage(
+                image: EncryptedImageProvider(bgUrl),
+                fit: BoxFit.cover,
+                colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.4), BlendMode.darken),
+              )
+            : null,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: completed ? _gold.withOpacity(.4) : _border,
+          color: completed ? _gold.withOpacity(.6) : _border,
+          width: completed ? 1.5 : 1.0,
         ),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
+          if (iconUrl != null && iconUrl.isNotEmpty) ...[
+            Container(
+              width: 36, height: 36,
+              margin: const EdgeInsets.only(left: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.white.withOpacity(0.05),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image(
+                  image: EncryptedImageProvider(iconUrl),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.star, color: _gold, size: 20),
+                ),
+              ),
+            ),
+          ],
           Expanded(
             child: Text(name,
                 style: TextStyle(
@@ -739,9 +840,43 @@ class _MilestoneCard extends StatelessWidget {
                   fontFamily: 'IBM Plex Sans Arabic',
                 )),
           ),
-          if (completed)
+          if (completed) ...[
+            if (onWithdraw != null) ...[
+              GestureDetector(
+                onTap: onWithdraw,
+                child: Container(
+                  margin: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF00D4FF), Color(0xFF00E5A0)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(color: const Color(0xFF00D4FF).withOpacity(0.3), blurRadius: 6),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.send_rounded, color: Colors.black, size: 12),
+                      SizedBox(width: 4),
+                      Text(
+                        'سحب المرحلة',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'IBM Plex Sans Arabic',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: _gold.withOpacity(.15),
                 borderRadius: BorderRadius.circular(20),
@@ -751,6 +886,7 @@ class _MilestoneCard extends StatelessWidget {
                   style: TextStyle(color: _gold, fontSize: 11,
                       fontFamily: 'IBM Plex Sans Arabic')),
             ),
+          ],
         ]),
         const SizedBox(height: 10),
 
@@ -821,8 +957,11 @@ class _MilestoneCard extends StatelessWidget {
       case 'gold':     return '🪙';
       case 'diamonds': return '💎';
       case 'vip_days': return '👑';
-      case 'badge':    return 'ðŸ…';
-      default:         return 'ðŸŽ';
+      case 'salary_usd': return '💵';
+      case 'frame':    return '🖼️';
+      case 'entry_effect': return '🚗';
+      case 'badge':    return '🏅';
+      default:         return '🎁';
     }
   }
 

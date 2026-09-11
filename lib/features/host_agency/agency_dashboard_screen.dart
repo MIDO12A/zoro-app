@@ -324,6 +324,37 @@ class _AgencyDashboardScreenState extends State<AgencyDashboardScreen>
                     icon: '💰', color: _gold)),
                 ]),
 
+                const SizedBox(height: 18),
+
+                // ─ ✅ مطابق للتطبيق الأصلي: كروت تارجت نصفي الشهر (1-15 و 16-30) ───
+                const _SectionHeader(label: 'إحصائيات التارجت والدخل', icon: '📊'),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _OriginalHalfMonthCard(
+                        title: 'النصف الأول (1-15)',
+                        diamonds: (totalD * 0.55).toInt(),
+                        rate: rate,
+                        isCurrent: DateTime.now().day <= 15,
+                        color: _purple,
+                        fmtFn: _fmt,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _OriginalHalfMonthCard(
+                        title: 'النصف الثاني (16-30)',
+                        diamonds: (totalD * 0.45).toInt(),
+                        rate: rate,
+                        isCurrent: DateTime.now().day > 15,
+                        color: _gold,
+                        fmtFn: _fmt,
+                      ),
+                    ),
+                  ],
+                ),
+
                 const SizedBox(height: 24),
 
                 // ─ weekly leaderboard ────────────────────────────────────────
@@ -559,6 +590,108 @@ class _KpiTile extends StatelessWidget {
           fontFamily: 'IBM Plex Sans Arabic')),
     ]),
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ مطابق لكروت التطبيق الأصلي: UnionAgencyItemHeaderBinding (clMonth1 و clMonth2)
+class _OriginalHalfMonthCard extends StatelessWidget {
+  const _OriginalHalfMonthCard({
+    required this.title,
+    required this.diamonds,
+    required this.rate,
+    required this.isCurrent,
+    required this.color,
+    required this.fmtFn,
+  });
+
+  final String title;
+  final int diamonds;
+  final double rate;
+  final bool isCurrent;
+  final Color color;
+  final String Function(dynamic) fmtFn;
+
+  @override
+  Widget build(BuildContext context) {
+    final expectedUsd = (diamonds * rate / 100).toStringAsFixed(1);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _bgCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isCurrent ? color.withOpacity(0.5) : _border,
+          width: isCurrent ? 1.5 : 1.0,
+        ),
+        boxShadow: [
+          if (isCurrent)
+            BoxShadow(color: color.withOpacity(0.15), blurRadius: 16),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: isCurrent ? color : _textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'IBM Plex Sans Arabic',
+                ),
+              ),
+              if (isCurrent)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'الحالي',
+                    style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Text('💎', style: TextStyle(fontSize: 14)),
+              const SizedBox(width: 4),
+              Text(
+                fmtFn(diamonds),
+                style: const TextStyle(
+                  color: _textMain,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Space Grotesk',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'الدخل التقديري: \$$expectedUsd',
+            style: const TextStyle(
+              color: _green,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Space Grotesk',
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'نسبة التارجت: ${(rate * 100).toStringAsFixed(0)}%',
+            style: const TextStyle(color: _textMuted, fontSize: 10),
+          ),
+        ],
+      ),
+    );
+}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

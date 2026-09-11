@@ -1,13 +1,93 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svga/flutter_svga.dart';
-import 'package:dio/dio.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:crypto/crypto.dart';
-import 'dart:convert';
+
+import '../../../services/media_cache_service.dart';
+import '../../../services/performance_monitor.dart';
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SvgaNativePlayer — يُشغّل SVGA بمكتبة SVGAPlayer-Android الأصلية
+// عبر AndroidView (PlatformView) بدلاً من Flutter Canvas.
+// النتيجة: نفس سرعة التطبيق الأصلي تماماً على Android.
+// ═══════════════════════════════════════════════════════════════════════════
+class SvgaNativePlayer extends StatefulWidget {
+  final String url;
+  final double? width;
+  final double? height;
+  final bool loops;
+  final VoidCallback? onReady;
+  final VoidCallback? onError;
+
+  const SvgaNativePlayer({
+    super.key,
+    required this.url,
+    this.width,
+    this.height,
+    this.loops = true,
+    this.onReady,
+    this.onError,
+  });
+
+  @override
+  State<SvgaNativePlayer> createState() => _SvgaNativePlayerState();
+}
+
+class _SvgaNativePlayerState extends State<SvgaNativePlayer> {
+  MethodChannel? _channel;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget.width ?? 200.0;
+    final h = widget.height ?? 200.0;
+    return RepaintBoundary(
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: AndroidView(
+          viewType: 'svga_native_view',
+          creationParams: <String, dynamic>{
+            'url': widget.url,
+            'loops': widget.loops,
+          },
+          creationParamsCodec: const StandardMessageCodec(),
+          onPlatformViewCreated: (int viewId) {
+            _channel = MethodChannel('svga_native_view_$viewId');
+            _channel!.setMethodCallHandler((call) async {
+              switch (call.method) {
+                case 'onReady':
+                  widget.onReady?.call();
+                  break;
+                case 'onError':
+                  widget.onError?.call();
+                  break;
+              }
+            });
+          },
+        ),
+      ),
+    );
+  }
+
+  /// أوامر خارجية: تشغيل / إيقاف / مسح
+  Future<void> play()  => _channel?.invokeMethod('play')  ?? Future.value();
+  Future<void> stop()  => _channel?.invokeMethod('stop')  ?? Future.value();
+  Future<void> clear() => _channel?.invokeMethod('clear') ?? Future.value();
+
+  @override
+  void dispose() {
+    _channel?.setMethodCallHandler(null);
+    super.dispose();
+  }
+}
 
 class SvgaPlayer extends StatefulWidget {
   final String assetPath;
@@ -33,49 +113,84 @@ class SvgaPlayer extends StatefulWidget {
     this.defaultImageUrl,
   });
 
-  static final Map<String, Uint8List> _bytesMemoryCache = {};
+  // ── طبقة ذاكرة محدودة (LRU) للبايتات — بديلة للـ Map غير المحدودة سابقاً
+  //    التي كانت تحتفظ بكل SVGAs حتى موت التطبيق (تسريب ذاكرة).
+  static final LinkedHashMap<String, Uint8List> _bytesCache = LinkedHashMap();
+  static int _bytesTotal = 0;
+  static const int _maxBytesTotal = 32 * 1024 * 1024; // 32MB with cap
+
+  // ── ذاكرة Decoded (MovieEntity) WHY: تجنّب إعادة فك بروتوكول SVGA
+  //    لنفس الملف بلا Dynamic Content — 8 إدخالات (4 عادي + 4 template).
+  static final LinkedHashMap<String, MovieEntity> _decodedCache = LinkedHashMap();
+  static const int _maxDecoded = 8;
+
+  static bool _isNetwork(String url) =>
+      url.startsWith('http://') || url.startsWith('https://');
 
   /// Pre-downloads an SVGA [url] into the shared cache so future plays are instant.
-  /// Returns the local file path if cached, or null on failure.
+  /// التحميل خارج الـ Isolate الرئيسي (لا يوقف الـ UI).
   static Future<String?> prefetch(String url) async {
-    if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
+    if (!_isNetwork(url)) return null;
     try {
-      if (_bytesMemoryCache.containsKey(url)) return url;
-      final cachedFile = await _cachedFileFor(url);
-      if (await cachedFile.exists() && (await cachedFile.length()) > 0) {
-        final bytes = await cachedFile.readAsBytes();
-        _bytesMemoryCache[url] = bytes;
-        return cachedFile.path;
-      }
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
-        responseType: ResponseType.bytes,
-      ));
-      final response = await dio.get<Uint8List>(url);
-      if (response.statusCode != 200 || response.data == null) return null;
-      _bytesMemoryCache[url] = response.data!;
-      await cachedFile.writeAsBytes(response.data!);
-      return cachedFile.path;
+      if (_bytesCache.containsKey(url)) return url;
+      final cached = await MediaCacheService().getCachedBytes(url);
+      if (cached != null) return url;
+      final bytes = await MediaCacheService().downloadToBytesBackground(url);
+    SvgaPlayer._writeBytes(url, bytes);
+      return url;
     } catch (e) {
       print('SVGA prefetch error: $e');
       return null;
     }
   }
 
-  static Future<File> _cachedFileFor(String url) async {
-    final dir = await _getCacheDir();
-    final key = sha256.convert(utf8.encode(url)).toString();
-    return File('${dir.path}/$key.svga');
+  static Uint8List? _readBytes(String url) {
+    final bytes = _bytesCache.remove(url);
+    if (bytes == null) return null;
+    _bytesCache[url] = bytes; // تصبح الأحدث (LRU)
+    return bytes;
   }
 
-  static Future<Directory> _getCacheDir() async {
-    final appDir = await getApplicationDocumentsDirectory();
-    final dir = Directory('${appDir.path}/media_cache');
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
+  static void _writeBytes(String url, Uint8List bytes) {
+    if (_bytesCache.containsKey(url)) return;
+    _bytesCache[url] = bytes;
+    _bytesTotal += bytes.length;
+    while (_bytesTotal > _maxBytesTotal && _bytesCache.isNotEmpty) {
+      final first = _bytesCache.keys.first;
+      final removed = _bytesCache.remove(first);
+      if (removed != null) _bytesTotal -= removed.length;
     }
-    return dir;
+  }
+
+  static MovieEntity? _readDecoded(String url) {
+    final movie = _decodedCache.remove(url);
+    if (movie == null) return null;
+    _decodedCache[url] = movie; // تصبح الأحدث (LRU)
+    return movie;
+  }
+
+  static void _writeDecoded(String url, MovieEntity movie) {
+    if (_decodedCache.containsKey(url)) return;
+    _decodedCache[url] = movie;
+    while (_decodedCache.length > _maxDecoded) {
+      _decodedCache.remove(_decodedCache.keys.first);
+    }
+  }
+
+  /// يفرّغ طبقة الذاكرة لـ SVGA (يُستدعى عند الخروج من الغرفة).
+  static void trimMemoryCache({int keepBytes = 8 * 1024 * 1024}) {
+    while (_bytesTotal > keepBytes && _bytesCache.isNotEmpty) {
+      final first = _bytesCache.keys.first;
+      final removed = _bytesCache.remove(first);
+      if (removed != null) _bytesTotal -= removed.length;
+    }
+    _decodedCache.clear();
+  }
+
+  static void evictMemory(String url) {
+    final removed = _bytesCache.remove(url);
+    if (removed != null) _bytesTotal -= removed.length;
+    _decodedCache.remove(url);
   }
 
   @override
@@ -88,11 +203,37 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
   bool hasError = false;
   Timer? _loadTimeout;
   bool _finishedOnce = false;
+  String? _activeUrl;
+  Uint8List? _fallbackImageBytes;
+
+  static bool _isImageMagicBytes(Uint8List bytes) {
+    if (bytes.length < 4) return false;
+    // PNG: 89 50 4E 47
+    if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return true;
+    // JPEG: FF D8 FF
+    if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return true;
+    // GIF: 47 49 46
+    if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) return true;
+    // WEBP: 52 49 46 46 (RIFF)
+    if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46) return true;
+    return false;
+  }
+
+  static bool _isVideoMagicBytes(Uint8List bytes) {
+    if (bytes.length < 12) return false;
+    // ftyp (mp4 / m4v / mov)
+    if (bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) return true;
+    return false;
+  }
+
+  bool get _usesDynamicReplacement =>
+      widget.textReplacement != null || widget.imageReplacement != null;
 
   @override
   void initState() {
     super.initState();
     animationController = SVGAAnimationController(vsync: this);
+    _activeUrl = _networkUrlOrNull();
     // مهلة أمان: لو تعطل التحميل/الحقن الديناميكي لا تبقى الشاشة على الـ spinner
     // إلى الأبد (كانت المشكلة: تهنيج الشاشة عند إرسال هدية SVGA).
     _loadTimeout = Timer(const Duration(seconds: 8), () {
@@ -103,6 +244,10 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
     _loadAnimation();
   }
 
+  String? _networkUrlOrNull() => SvgaPlayer._isNetwork(widget.assetPath)
+      ? widget.assetPath
+      : null;
+
   @override
   void didUpdateWidget(SvgaPlayer old) {
     super.didUpdateWidget(old);
@@ -112,7 +257,12 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
     if (old.assetPath != widget.assetPath ||
         !mapEquals(old.textReplacement, widget.textReplacement) ||
         !mapEquals(old.imageReplacement, widget.imageReplacement)) {
-      setState(() { isLoading = true; hasError = false; });
+      _activeUrl = _networkUrlOrNull();
+      setState(() {
+        isLoading = true;
+        hasError = false;
+        _finishedOnce = false;
+      });
       _loadTimeout?.cancel();
       _loadTimeout = Timer(const Duration(seconds: 8), () {
         if (mounted && isLoading) {
@@ -156,13 +306,34 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
   }
 
   Future<void> _loadAnimation() async {
+    final perf = PerformanceMonitor.instance;
+    final token = perf.begin(PerformanceMonitor.catSvga, widget.assetPath);
     try {
-      final isNetwork = widget.assetPath.startsWith('http://') || widget.assetPath.startsWith('https://');
+      final isNetwork = _activeUrl != null;
       final videoItem = isNetwork
-          ? await _loadFromUrl(widget.assetPath)
-          : await SVGAParser.shared.decodeFromAssets(widget.assetPath);
+          ? await _loadFromUrl(_activeUrl!)
+          : await _loadFromAsset(widget.assetPath);
+      
+      if (videoItem == null) {
+        // تم معالجته كصورة بديلة (Image fallback)
+        if (mounted) {
+          _loadTimeout?.cancel();
+          setState(() {
+            isLoading = false;
+            hasError = false;
+          });
+          if (!widget.loops) {
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted) _finishOnce();
+            });
+          }
+        }
+        return;
+      }
+
       await _injectDynamicContent(videoItem);
       if (mounted) {
+        perf.ok(token, bytes: 0, source: 'cache');
         _loadTimeout?.cancel();
         setState(() {
           isLoading = false;
@@ -176,9 +347,24 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
           }
         });
       }
-    } catch (e, stack) {
-      print('SVGA error: $e\n$stack');
+    } catch (e) {
+      perf.err(token, e);
+      debugPrint('SVGA error for ${widget.assetPath}: $e');
       if (mounted) {
+        final bytes = SvgaPlayer._readBytes(widget.assetPath);
+        if (bytes != null && bytes.isNotEmpty) {
+          setState(() {
+            _fallbackImageBytes = bytes;
+            isLoading = false;
+            hasError = false;
+          });
+          if (!widget.loops) {
+            Future.delayed(const Duration(milliseconds: 1500), () {
+              if (mounted) _finishOnce();
+            });
+          }
+          return;
+        }
         setState(() {
           isLoading = false;
           hasError = true;
@@ -188,6 +374,50 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
         });
       }
     }
+  }
+
+  Future<MovieEntity?> _loadFromAsset(String path) async {
+    var cleanPath = path;
+    if (cleanPath.startsWith('file://')) {
+      final file = File(cleanPath.replaceFirst('file://', ''));
+      final bytes = await file.readAsBytes();
+      if (_isImageMagicBytes(bytes) || _isVideoMagicBytes(bytes) || cleanPath.toLowerCase().endsWith('.png') || cleanPath.toLowerCase().endsWith('.jpg') || cleanPath.toLowerCase().endsWith('.mp4')) {
+        _fallbackImageBytes = bytes;
+        return null;
+      }
+      return await SVGAParser.shared.decodeFromBuffer(bytes);
+    }
+    if (cleanPath.startsWith('/')) {
+      cleanPath = cleanPath.substring(1);
+    }
+    try {
+      return await SVGAParser.shared.decodeFromAssets(cleanPath);
+    } catch (e) {
+      debugPrint('[SvgaPlayer] decodeFromAssets failed ($e), trying rootBundle directly for $cleanPath');
+      final byteData = await rootBundle.load(cleanPath);
+      final bytes = byteData.buffer.asUint8List();
+      if (_isImageMagicBytes(bytes) || _isVideoMagicBytes(bytes) || cleanPath.toLowerCase().endsWith('.png') || cleanPath.toLowerCase().endsWith('.jpg') || cleanPath.toLowerCase().endsWith('.mp4')) {
+        _fallbackImageBytes = bytes;
+        return null;
+      }
+      return await SVGAParser.shared.decodeFromBuffer(bytes);
+    }
+  }
+
+  void _setSvgText(dynamic dynamicItem, TextPainter painter, String rawKey) {
+    final cleanKey = rawKey.replaceAll(RegExp(r'[\[\]\(\)]'), '').trim();
+    if (cleanKey.isEmpty) return;
+    dynamicItem.setText(painter, rawKey);
+    dynamicItem.setText(painter, cleanKey);
+    dynamicItem.setText(painter, '[$cleanKey]');
+  }
+
+  void _setSvgImage(dynamic dynamicItem, ui.Image image, String rawKey) {
+    final cleanKey = rawKey.replaceAll(RegExp(r'[\[\]\(\)]'), '').trim();
+    if (cleanKey.isEmpty) return;
+    dynamicItem.setImage(image, rawKey);
+    dynamicItem.setImage(image, cleanKey);
+    dynamicItem.setImage(image, '[$cleanKey]');
   }
 
   Future<void> _injectDynamicContent(MovieEntity videoItem) async {
@@ -210,97 +440,158 @@ class _SvgaPlayerState extends State<SvgaPlayer> with SingleTickerProviderStateM
                 ? TextDirection.rtl
                 : TextDirection.ltr,
           )..layout();
-          dynamicItem.setText(painter, entry.key);
+          _setSvgText(dynamicItem, painter, entry.key);
         }
       }
       if (widget.imageReplacement != null) {
         for (final entry in widget.imageReplacement!.entries) {
           if (entry.key.isEmpty || entry.value.isEmpty) continue;
           try {
-            await dynamicItem.setImageWithUrl(entry.value, entry.key);
+            Uint8List? cachedBytes;
+            if (entry.value.startsWith('assets/')) {
+              final bd = await rootBundle.load(entry.value);
+              cachedBytes = bd.buffer.asUint8List();
+            } else if (entry.value.startsWith('file://') || entry.value.startsWith('/')) {
+              cachedBytes = await File(entry.value.replaceFirst('file://', '')).readAsBytes();
+            } else {
+              cachedBytes = await MediaCacheService().getCachedBytes(entry.value);
+            }
+            if (cachedBytes != null && cachedBytes.isNotEmpty) {
+              final codec = await ui.instantiateImageCodec(cachedBytes, targetWidth: 120, targetHeight: 120);
+              final frame = await codec.getNextFrame();
+              _setSvgImage(dynamicItem, frame.image, entry.key);
+            } else {
+              try {
+                final dlBytes = await MediaCacheService().downloadToBytes(entry.value);
+                final codec = await ui.instantiateImageCodec(dlBytes, targetWidth: 120, targetHeight: 120);
+                final frame = await codec.getNextFrame();
+                _setSvgImage(dynamicItem, frame.image, entry.key);
+              } catch (_) {
+                await dynamicItem.setImageWithUrl(entry.value, entry.key)
+                    .timeout(const Duration(milliseconds: 600));
+              }
+            }
           } catch (e) {
             if (widget.defaultImageUrl != null && widget.defaultImageUrl!.isNotEmpty) {
               try {
-                await dynamicItem.setImageWithUrl(widget.defaultImageUrl!, entry.key);
+                final defBytes = await MediaCacheService().getCachedBytes(widget.defaultImageUrl!);
+                if (defBytes != null && defBytes.isNotEmpty) {
+                  final codec = await ui.instantiateImageCodec(defBytes, targetWidth: 120, targetHeight: 120);
+                  final frame = await codec.getNextFrame();
+                  _setSvgImage(dynamicItem, frame.image, entry.key);
+                } else {
+                  await dynamicItem.setImageWithUrl(widget.defaultImageUrl!, entry.key)
+                      .timeout(const Duration(milliseconds: 400));
+                }
               } catch (_) {}
             }
           }
         }
       }
     } catch (e) {
-      print('SVGA dynamic injection error (non-fatal): $e');
+      debugPrint('SVGA dynamic injection error (non-fatal): $e');
     }
   }
 
-  Future<MovieEntity> _loadFromUrl(String url) async {
-    if (SvgaPlayer._bytesMemoryCache.containsKey(url)) {
-      try {
-        final cachedBytes = SvgaPlayer._bytesMemoryCache[url]!;
-        return await SVGAParser.shared.decodeFromBuffer(cachedBytes);
-      } catch (e) {
-        print('SVGA memory cache decode error: $e');
+  /// تحميل + فك ترميز ملف الشبكة مع تقاسم كل الطبقات:
+  ///   1) متبثّت Decoded (نفس الملف غير الديناميكي).
+  ///   2) بايتات LRU المحدودة.
+  ///   3) قرص MediaCacheService.
+  ///   4) شبكة عبر Dio مشترك ثم فك في نفس الوقت.
+  Future<MovieEntity?> _loadFromUrl(String url) async {
+    if (!_usesDynamicReplacement) {
+      final decoded = SvgaPlayer._readDecoded(url);
+      if (decoded != null) {
+        return decoded;
       }
     }
 
-    final cachedFile = await SvgaPlayer._cachedFileFor(url);
+    var bytes = SvgaPlayer._readBytes(url);
+    if (bytes == null) {
+      bytes = await MediaCacheService().getCachedBytes(url);
+    }
+    if (bytes == null) {
+      bytes = await MediaCacheService().downloadToBytesBackground(url);
+    }
+    SvgaPlayer._writeBytes(url, bytes);
 
-    if (await cachedFile.exists()) {
-      try {
-        final bytes = await cachedFile.readAsBytes();
-        SvgaPlayer._bytesMemoryCache[url] = bytes;
-        print('SVGA loaded from cache: ${cachedFile.path} (${bytes.length} bytes)');
-        return await SVGAParser.shared.decodeFromBuffer(bytes);
-      } catch (e) {
-        print('SVGA cache read error: $e, re-downloading...');
-      }
+    if (_isImageMagicBytes(bytes) ||
+        _isVideoMagicBytes(bytes) ||
+        url.toLowerCase().contains('.png') ||
+        url.toLowerCase().contains('.jpg') ||
+        url.toLowerCase().contains('.webp') ||
+        url.toLowerCase().contains('.gif') ||
+        url.toLowerCase().contains('.mp4')) {
+      _fallbackImageBytes = bytes;
+      return null;
     }
 
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-      responseType: ResponseType.bytes,
-    ));
-    final response = await dio.get<Uint8List>(url);
-    if (response.statusCode != 200 || response.data == null) {
-      throw Exception('HTTP ${response.statusCode}');
-    }
-    print('SVGA downloaded: ${response.data!.length} bytes');
-    SvgaPlayer._bytesMemoryCache[url] = response.data!;
+    final t = PerformanceMonitor.instance.begin('svga_decode', url);
     try {
-      await cachedFile.writeAsBytes(response.data!);
-      print('SVGA cached to: ${cachedFile.path}');
+      final cacheKey = '${url}_template';
+      final cachedTemplate = SvgaPlayer._readDecoded(cacheKey);
+      MovieEntity movie;
+      if (!_usesDynamicReplacement && cachedTemplate != null) {
+        movie = cachedTemplate;
+      } else {
+        movie = await SVGAParser.shared.decodeFromBuffer(bytes);
+        if (!_usesDynamicReplacement) {
+          SvgaPlayer._writeDecoded(cacheKey, movie);
+          SvgaPlayer._writeDecoded(url, movie);
+        }
+      }
+      PerformanceMonitor.instance.ok(t, bytes: bytes.length, source: 'cache');
+      return movie;
     } catch (e) {
-      print('SVGA cache write error (non-fatal): $e');
+      PerformanceMonitor.instance.err(t, e);
+      if (bytes.isNotEmpty) {
+        _fallbackImageBytes = bytes;
+        return null;
+      }
+      rethrow;
     }
-    return SVGAParser.shared.decodeFromBuffer(response.data!);
   }
 
   @override
   Widget build(BuildContext context) {
     final w = widget.width ?? 200;
     final h = widget.height ?? 200;
-    return SizedBox(
-      width: w,
-      height: h,
-      child: isLoading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-              : hasError
-                  ? Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.red, width: 2),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Center(
-                        child: Icon(Icons.error_outline, color: Colors.red, size: 20),
-                      ),
-                    )
-              : animationController?.videoItem != null
-                  ? SVGAImage(
-                      animationController!,
-                      fit: widget.fit,
-                      preferredSize: Size(w, h),
-                    )
-                  : const SizedBox.shrink(),
+    if (_fallbackImageBytes != null) {
+      return RepaintBoundary(
+        child: SizedBox(
+          width: w,
+          height: h,
+          child: Image.memory(
+            _fallbackImageBytes!,
+            fit: widget.fit,
+            width: w,
+            height: h,
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+      );
+    }
+    return RepaintBoundary(
+      child: SizedBox(
+        width: w,
+        height: h,
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+            : hasError
+                ? (widget.defaultImageUrl != null && widget.defaultImageUrl!.isNotEmpty
+                    ? Image.network(widget.defaultImageUrl!, width: w, height: h, fit: widget.fit,
+                        errorBuilder: (_, __, ___) => const SizedBox.shrink())
+                    : const SizedBox.shrink())
+                : animationController?.videoItem != null
+                    ? RepaintBoundary(
+                        child: SVGAImage(
+                          animationController!,
+                          fit: widget.fit,
+                          preferredSize: Size(w, h),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+      ),
     );
   }
 }

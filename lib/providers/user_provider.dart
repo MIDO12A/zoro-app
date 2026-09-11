@@ -7,6 +7,7 @@ import '../models/store_item_model.dart';
 import '../models/gifted_item_model.dart';
 import '../services/api_service.dart';
 import '../services/supabase_service.dart';
+import '../core/utils/id_generator.dart';
 
 class UserProvider extends ChangeNotifier {
   UserModel? _currentUser;
@@ -107,13 +108,18 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
     _currentUser = await _supabaseService.getUser(uid);
     if (_currentUser != null && _currentUser!.customId.isEmpty) {
+      // FIX: Use secure ID generator with uniqueness check
       String customId;
       try {
+        // TODO: Use server-side generation first (preferred)
         final idResult = await ApiService().generateCustomId();
         customId = idResult['customId'] as String;
       } catch (_) {
-        final rng = Random();
-        customId = (1000000 + rng.nextInt(9000000)).toString();
+        // FIX: Fallback to local secure generator with uniqueness check
+        customId = await UserIdGenerator().generateUniqueId(
+          minDigits: 8,
+          maxDigits: 8,
+        );
       }
       await _supabaseService.updateUser(uid, {'custom_id': customId});
       _currentUser = await _supabaseService.getUser(uid);
@@ -162,6 +168,13 @@ class UserProvider extends ChangeNotifier {
   Future<void> updateUser(UserModel user) async {
     _currentUser = user;
     await _supabaseService.saveUser(user);
+    notifyListeners();
+  }
+
+  void deductCoinsLocally(int amount) {
+    if (_currentUser == null) return;
+    final newCoins = (_currentUser!.coins - amount).clamp(0, 999999999);
+    _currentUser = _currentUser!.copyWith(coins: newCoins);
     notifyListeners();
   }
 

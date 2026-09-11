@@ -31,13 +31,36 @@ export default function StorePage() {
 
   const handleSave = async () => {
     if (!editing) return;
-    await updateStoreItem(editing.itemId, { ...form, svgaAsset: form.svgaAsset || null, videoAsset: form.videoAsset || null, nameKey: form.nameKey || null, photoKey: form.photoKey || null, defaultImage: form.defaultImage || null, isHidden: form.isHidden });
+    await updateStoreItem(editing.itemId, {
+      ...form,
+      svgaAsset: form.svgaAsset || null,
+      videoAsset: form.videoAsset || null,
+      nameKey: form.nameKey || null,
+      name_key: form.nameKey || null,
+      photoKey: form.photoKey || null,
+      photo_key: form.photoKey || null,
+      defaultImage: form.defaultImage || null,
+      default_image: form.defaultImage || null,
+      isHidden: form.isHidden,
+    });
     setEditing(null); resetForm(); load();
   };
   const handleDelete = async (item: StoreItemModel) => { if (confirm(`Delete ${item.name}?`)) { await deleteStoreItem(item.itemId); load(); } };
   const handleAdd = async () => {
     const id = `store_${Date.now()}`;
-    await addStoreItem(id, { ...form, itemId: id, svgaAsset: form.svgaAsset || null, videoAsset: form.videoAsset || null, nameKey: form.nameKey || null, photoKey: form.photoKey || null, defaultImage: form.defaultImage || null, isHidden: form.isHidden });
+    await addStoreItem(id, {
+      ...form,
+      itemId: id,
+      svgaAsset: form.svgaAsset || null,
+      videoAsset: form.videoAsset || null,
+      nameKey: form.nameKey || null,
+      name_key: form.nameKey || null,
+      photoKey: form.photoKey || null,
+      photo_key: form.photoKey || null,
+      defaultImage: form.defaultImage || null,
+      default_image: form.defaultImage || null,
+      isHidden: form.isHidden,
+    });
     setShowAdd(false); resetForm(); load();
   };
   const updateField = (f: string, v: unknown) => setForm(p => ({ ...p, [f]: v }));

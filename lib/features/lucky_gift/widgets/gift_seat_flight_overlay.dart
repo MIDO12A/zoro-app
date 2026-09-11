@@ -53,17 +53,17 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
 
     _flightController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 450),
     );
 
     _flightProgress = CurvedAnimation(
       parent: _flightController,
-      curve: Curves.easeInOutCubic,
+      curve: Curves.easeOutCubic,
     );
 
     _burstController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
+      duration: const Duration(milliseconds: 250),
     );
 
     _burstScale = Tween<double>(begin: 0.6, end: 1.5).animate(
@@ -79,7 +79,7 @@ class _GiftSeatFlightOverlayState extends State<GiftSeatFlightOverlay>
         _hasArrived = true;
       });
       _burstController.forward().then((_) {
-        Future.delayed(const Duration(milliseconds: 100), _finishOnce);
+        _finishOnce();
       });
     });
   }

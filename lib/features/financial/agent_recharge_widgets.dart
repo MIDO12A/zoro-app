@@ -6,7 +6,7 @@ import '../../core/cache/encrypted_image_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// شريط عنوان بوابة وكيل الشحن مع رصيد محفظة الوكالة.
+/// شريط عنوان بوابة وكيل الشحن مع رصيد محفظة الوكالة متطابق 100% مع تطبيق الأصل.
 class AgentRechargeHeader extends StatelessWidget {
   const AgentRechargeHeader({
     super.key,
@@ -23,56 +23,137 @@ class AgentRechargeHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF1a0a2e), Color(0xFF2d1b69)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight),
+        color: Color(0xFF16151A),
+        image: DecorationImage(
+          image: AssetImage('assets/images/agency/mine_wallet_header_bg.webp'),
+          fit: BoxFit.cover,
+        ),
       ),
-      child: SafeArea(bottom: false, child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 4, 16, 12),
-        child: Row(children: [
-          IconButton(onPressed: onBack,
-            icon: const Icon(Icons.arrow_back_ios_rounded, color: Colors.white, size: 20)),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('بوابة الشحن',
-              style: GoogleFonts.tajawal(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
-            Row(children: [
-              Text('وكيل معتمد',
-                style: GoogleFonts.tajawal(fontSize: 11, color: const Color(0xFFFFB800))),
-              if (agentPublicId != null) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFB800).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFFFFB800).withValues(alpha: 0.5)),
-                  ),
-                  child: Text(
-                    'ID: $agentPublicId',
-                    style: GoogleFonts.tajawal(
-                      fontSize: 10, fontWeight: FontWeight.w800,
-                      color: const Color(0xFFFFB800),
-                    ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 16, 16),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: onBack,
+                icon: Image.asset(
+                  'assets/images/profile/back_white_2.webp',
+                  width: 24,
+                  height: 24,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.arrow_back_ios_rounded,
+                    color: Colors.white,
+                    size: 20,
                   ),
                 ),
-              ],
-            ]),
-          ])),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFB800).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFFFB800).withValues(alpha: 0.4)),
-            ),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('محفظة الوكالة', style: GoogleFonts.tajawal(fontSize: 9, color: Colors.white60)),
-              Text('🏅 ${_fmt(agencyGold)}',
-                style: GoogleFonts.tajawal(fontSize: 14, fontWeight: FontWeight.w900, color: const Color(0xFFFFB800))),
-            ]),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'وكالة الشحن',
+                      style: GoogleFonts.tajawal(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Text(
+                          'وكيل معتمد',
+                          style: GoogleFonts.tajawal(
+                            fontSize: 11,
+                            color: const Color(0xFFFFD770),
+                          ),
+                        ),
+                        if (agentPublicId != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFD770).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: const Color(0xFFFFD770).withValues(alpha: 0.5),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Image.asset(
+                                  'assets/images/agency/union_id_ic.webp',
+                                  width: 12,
+                                  height: 12,
+                                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'ID: $agentPublicId',
+                                  style: GoogleFonts.tajawal(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFFFFD770),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF25252B).withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFFFD770).withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Image.asset(
+                      'assets/images/agency/mine_wallet_coin_bag_ic.webp',
+                      width: 24,
+                      height: 24,
+                      errorBuilder: (_, __, ___) => const Text('🏅'),
+                    ),
+                    const SizedBox(width: 6),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'محفظة الوكالة',
+                          style: GoogleFonts.tajawal(
+                            fontSize: 9,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        Text(
+                          _fmt(agencyGold),
+                          style: GoogleFonts.tajawal(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFFFFD770),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ]),
-      )),
+        ),
+      ),
     );
   }
 

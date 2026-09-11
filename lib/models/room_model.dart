@@ -24,6 +24,7 @@ class RoomModel {
   final String bgImage;
   final int chatClearedAt;
   final bool isChatLocked;
+  final String announcement;
 
   RoomModel({
     required this.roomId,
@@ -49,6 +50,7 @@ class RoomModel {
     this.bgImage = '',
     this.chatClearedAt = 0,
     this.isChatLocked = false,
+    this.announcement = '',
   });
 
   RoomModel copyWith({
@@ -75,6 +77,7 @@ class RoomModel {
     String? bgImage,
     int? chatClearedAt,
     bool? isChatLocked,
+    String? announcement,
   }) {
     return RoomModel(
       roomId: roomId ?? this.roomId,
@@ -100,6 +103,7 @@ class RoomModel {
       bgImage: bgImage ?? this.bgImage,
       chatClearedAt: chatClearedAt ?? this.chatClearedAt,
       isChatLocked: isChatLocked ?? this.isChatLocked,
+      announcement: announcement ?? this.announcement,
     );
   }
 
@@ -141,6 +145,7 @@ class RoomModel {
       bgImage: map['bgImage']?.toString() ?? map['bg_image']?.toString() ?? '',
       chatClearedAt: (map['chat_cleared_at'] as num?)?.toInt() ?? 0,
       isChatLocked: map['is_chat_locked'] == true,
+      announcement: map['announcement']?.toString() ?? map['description']?.toString() ?? '',
     );
   }
 
@@ -170,5 +175,6 @@ class RoomModel {
         'bg_image': bgImage,
         'chat_cleared_at': chatClearedAt,
         'is_chat_locked': isChatLocked,
+        'announcement': announcement,
       };
 }

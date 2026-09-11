@@ -98,12 +98,17 @@ class _FlutterVapViewState extends State<FlutterVapView> {
   @override
   Widget build(BuildContext context) {
     if (Platform.isAndroid) {
+      const String viewType = 'flutter_vap_plugin';
+      final Map<String, dynamic> creationParams = <String, dynamic>{
+        'scaleType': widget.scaleType.name,
+      };
+
       return AndroidView(
-        viewType: "flutter_vap_plugin",
+        viewType: viewType,
         layoutDirection: TextDirection.ltr,
         creationParamsCodec: const StandardMessageCodec(),
+        creationParams: creationParams,
         onPlatformViewCreated: _onPlatformViewCreated,
-        creationParams: <String, dynamic>{'scaleType': widget.scaleType.name},
       );
     } else if (Platform.isIOS) {
       return UiKitView(

@@ -421,7 +421,9 @@ class _NormalSeat extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           avatarWidget,
-          SvgaFrame(svgaPath: frameAsset, size: borderSize),
+          IgnorePointer(
+            child: SvgaFrame(svgaPath: frameAsset, size: borderSize),
+          ),
         ],
       );
     }

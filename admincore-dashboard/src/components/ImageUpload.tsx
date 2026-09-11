@@ -59,6 +59,7 @@ interface ImageUploadProps {
   currentType?: AssetType;
   onUpload: (file: File, onProgress?: (pct: number) => void) => Promise<string>;
   onUrlChange?: (url: string, type: AssetType) => void;
+  onClear?: () => void;
   label?: string;
   accept?: string;
   className?: string;
@@ -66,7 +67,7 @@ interface ImageUploadProps {
 
 const ASSET_TYPE_OPTIONS: AssetType[] = ['webp', 'png', 'gif', 'jpg', 'svga', 'vap', 'mp4', 'zip', 'json'];
 
-export default function ImageUpload({ currentUrl, currentType, onUpload, onUrlChange, label = 'Upload Image', accept = 'image/*', className = '' }: ImageUploadProps) {
+export default function ImageUpload({ currentUrl, currentType, onUpload, onUrlChange, onClear, label = 'Upload Image', accept = 'image/*', className = '' }: ImageUploadProps) {
   const initialUrl = currentUrl || '';
   const [preview, setPreview] = useState<string | null>(initialUrl);
   const [uploading, setUploading] = useState(false);
@@ -81,6 +82,16 @@ export default function ImageUpload({ currentUrl, currentType, onUpload, onUrlCh
   });
   const inputRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
+
+  // Keep preview in sync when currentUrl prop changes from parent
+  useEffect(() => {
+    const nextUrl = currentUrl || '';
+    setPreview(nextUrl || null);
+    setUrlInput(nextUrl);
+    if (nextUrl) {
+      setAssetType(currentType || detectAssetType(nextUrl));
+    }
+  }, [currentUrl, currentType]);
 
   const setPreviewWithType = (url: string, type: AssetType) => {
     const encoded = encodeAssetType(url, type);
@@ -132,6 +143,7 @@ export default function ImageUpload({ currentUrl, currentType, onUpload, onUrlCh
     setPreview(null);
     setAssetType('other');
     onUrlChange?.('', 'other');
+    onClear?.();
   };
 
   const isImageType = (t: AssetType) => t === 'webp' || t === 'gif' || t === 'png' || t === 'jpg';

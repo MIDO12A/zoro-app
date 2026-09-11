@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../config/r.dart';
 import '../../screens/room/widgets/svga_frame.dart';
-import '../../services/dynamic_config_service.dart';
 import 'cp_service.dart';
 
 /// Relationship Ranking screen — matches act_relationship_ranking.xml

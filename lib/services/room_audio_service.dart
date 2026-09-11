@@ -23,6 +23,7 @@ class RoomAudioService {
 
   bool get isInitialized => _initialized;
   bool get isMicEnabled => _micEnabled;
+  bool get isPublishing => _isPublishing;
 
   int get effectiveAppId {
     final id = DynamicConfigService().zegoAppId;

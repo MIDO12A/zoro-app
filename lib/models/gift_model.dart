@@ -18,6 +18,9 @@ class GiftModel {
   final int sortOrder;
   final String? nameKey; // SVGA layer key for sender name
   final String? photoKey; // SVGA layer key for sender photo
+  final String? receiverNameKey; // SVGA layer key for receiver name
+  final String? receiverPhotoKey; // SVGA layer key for receiver photo
+  final String? countKey; // SVGA layer key for gift count
   final String? defaultImage; // fallback image URL
   final int wealthXp; // XP awarded to sender's wealth level
   final int gemsXp; // XP awarded to receiver's gems level
@@ -70,6 +73,9 @@ class GiftModel {
     this.sortOrder = 0,
     this.nameKey,
     this.photoKey,
+    this.receiverNameKey,
+    this.receiverPhotoKey,
+    this.countKey,
     this.defaultImage,
     this.wealthXp = 0,
     this.gemsXp = 0,
@@ -101,6 +107,9 @@ class GiftModel {
     int? sortOrder,
     String? nameKey,
     String? photoKey,
+    String? receiverNameKey,
+    String? receiverPhotoKey,
+    String? countKey,
     String? defaultImage,
     int? wealthXp,
     int? gemsXp,
@@ -131,6 +140,9 @@ class GiftModel {
       sortOrder: sortOrder ?? this.sortOrder,
       nameKey: nameKey ?? this.nameKey,
       photoKey: photoKey ?? this.photoKey,
+      receiverNameKey: receiverNameKey ?? this.receiverNameKey,
+      receiverPhotoKey: receiverPhotoKey ?? this.receiverPhotoKey,
+      countKey: countKey ?? this.countKey,
       defaultImage: defaultImage ?? this.defaultImage,
       wealthXp: wealthXp ?? this.wealthXp,
       gemsXp: gemsXp ?? this.gemsXp,
@@ -165,8 +177,17 @@ class GiftModel {
         'package_count': packageCount,
         'sort_order': sortOrder,
         if (nameKey != null) 'name_key': nameKey,
+        if (nameKey != null) 'nameKey': nameKey,
         if (photoKey != null) 'photo_key': photoKey,
+        if (photoKey != null) 'photoKey': photoKey,
+        if (receiverNameKey != null) 'receiver_name_key': receiverNameKey,
+        if (receiverNameKey != null) 'receiverNameKey': receiverNameKey,
+        if (receiverPhotoKey != null) 'receiver_photo_key': receiverPhotoKey,
+        if (receiverPhotoKey != null) 'receiverPhotoKey': receiverPhotoKey,
+        if (countKey != null) 'count_key': countKey,
+        if (countKey != null) 'countKey': countKey,
         if (defaultImage != null) 'default_image': defaultImage,
+        if (defaultImage != null) 'defaultImage': defaultImage,
         'wealth_xp': wealthXp,
         'gems_xp': gemsXp,
         if (categoryId != null) 'category_id': categoryId,
@@ -193,40 +214,43 @@ class GiftModel {
         0;
 
     final rawType = (map['type'] as num?)?.toInt() ?? 0;
-    final catId = map['category_id']?.toString();
-    final isLuckyVal = rawType == 3 || (map['is_lucky'] == true) || catId == 'lucky';
-    final isCpVal = rawType == 5 || (map['is_cp_gift'] == true) || catId == 'cp';
-    final isVipVal = rawType == 2 || (map['is_vap'] == true) || (map['big_effect'] == 1) || (map['bigEffect'] == true) || catId == 'vip' || catId == 'luxury';
+    final catId = map['category_id']?.toString() ?? map['categoryId']?.toString();
+    final isLuckyVal = rawType == 3 || (map['is_lucky'] == true) || (map['isLucky'] == true) || catId == 'lucky';
+    final isCpVal = rawType == 5 || (map['is_cp_gift'] == true) || (map['isCpGift'] == true) || catId == 'cp';
+    final isVipVal = rawType == 2 || (map['is_vap'] == true) || (map['isVap'] == true) || (map['big_effect'] == 1) || (map['bigEffect'] == true) || catId == 'vip' || catId == 'luxury';
 
     return GiftModel(
       id: map['id']?.toString() ?? map['gift_id']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
-      nameAr: map['name_ar']?.toString() ?? map['englist_name']?.toString() ?? '',
+      nameAr: map['name_ar']?.toString() ?? map['nameAr']?.toString() ?? map['englist_name']?.toString() ?? '',
       value: (map['value'] ?? map['price'] ?? 0).toInt(),
-      iconAsset: map['icon_asset']?.toString() ?? map['icon_url']?.toString() ?? map['thumb']?.toString() ?? map['photo']?.toString() ?? '',
-      animationAsset: map['animation_asset']?.toString() ?? map['svga_url']?.toString() ?? map['effect']?.toString() ?? map['mp4_url']?.toString(),
+      iconAsset: map['icon_asset']?.toString() ?? map['iconAsset']?.toString() ?? map['icon_url']?.toString() ?? map['thumb']?.toString() ?? map['photo']?.toString() ?? '',
+      animationAsset: map['animation_asset']?.toString() ?? map['animationAsset']?.toString() ?? map['svga_url']?.toString() ?? map['effect']?.toString() ?? map['mp4_url']?.toString(),
       type: rawType > 0 ? rawType : (isCpVal ? 5 : isLuckyVal ? 3 : isVipVal ? 2 : 1),
-      isVap: isVipVal || ((map['is_vap'] ?? false) as bool),
+      isVap: isVipVal || ((map['is_vap'] ?? map['isVap'] ?? false) as bool),
       isLucky: isLuckyVal,
-      isStar: (map['is_star'] ?? false) as bool,
-      isMusic: (map['is_music'] ?? false) as bool || (map['isMusic'] == 1),
+      isStar: (map['is_star'] ?? map['isStar'] ?? false) as bool,
+      isMusic: (map['is_music'] ?? map['isMusic'] ?? false) as bool || (map['isMusic'] == 1),
       bigEffect: (map['big_effect'] == 1) || (map['bigEffect'] == true),
-      packageCount: (map['package_count'] ?? map['gift_number'] ?? map['number'] ?? 0).toInt(),
-      sortOrder: (map['sort_order'] ?? map['sort'] ?? 0).toInt(),
-      nameKey: map['name_key']?.toString(),
-      photoKey: map['photo_key']?.toString(),
-      defaultImage: map['default_image']?.toString(),
-      wealthXp: (map['wealth_xp'] ?? 0).toInt(),
-      gemsXp: (map['gems_xp'] ?? map['diamond'] != null ? int.tryParse(map['diamond'].toString()) ?? 0 : 0).toInt(),
+      packageCount: (map['package_count'] ?? map['packageCount'] ?? map['gift_number'] ?? map['number'] ?? 0).toInt(),
+      sortOrder: (map['sort_order'] ?? map['sortOrder'] ?? map['sort'] ?? 0).toInt(),
+      nameKey: map['name_key']?.toString() ?? map['nameKey']?.toString() ?? map['name_keys']?.toString(),
+      photoKey: map['photo_key']?.toString() ?? map['photoKey']?.toString() ?? map['photo_keys']?.toString(),
+      receiverNameKey: map['receiver_name_key']?.toString() ?? map['receiverNameKey']?.toString(),
+      receiverPhotoKey: map['receiver_photo_key']?.toString() ?? map['receiverPhotoKey']?.toString(),
+      countKey: map['count_key']?.toString() ?? map['countKey']?.toString(),
+      defaultImage: map['default_image']?.toString() ?? map['defaultImage']?.toString(),
+      wealthXp: (map['wealth_xp'] ?? map['wealthXp'] ?? 0).toInt(),
+      gemsXp: (map['gems_xp'] ?? map['gemsXp'] ?? map['diamond'] != null ? int.tryParse(map['diamond'].toString()) ?? 0 : 0).toInt(),
       categoryId: catId,
       isCpGift: isCpVal,
-      cpGiftDurationHours: (map['cp_gift_duration_hours'] ?? (dType == 'days' ? dVal * 24 : dVal)).toInt(),
+      cpGiftDurationHours: (map['cp_gift_duration_hours'] ?? map['cpGiftDurationHours'] ?? (dType == 'days' ? dVal * 24 : dVal)).toInt(),
       durationType: dType,
       durationValue: dVal,
-      luckyRtp: (map['lucky_rtp'] ?? map['rtp'] ?? 85).toInt(),
-      luckyMaxMultiplier: (map['lucky_max_multiplier'] ?? map['max_multiplier'] ?? 100).toInt(),
-      luckyBurst: (map['lucky_burst'] ?? true) as bool,
-      luckyDisplayMode: map['lucky_display_mode']?.toString() ?? 'cards',
+      luckyRtp: (map['lucky_rtp'] ?? map['luckyRtp'] ?? map['rtp'] ?? 85).toInt(),
+      luckyMaxMultiplier: (map['lucky_max_multiplier'] ?? map['luckyMaxMultiplier'] ?? map['max_multiplier'] ?? 100).toInt(),
+      luckyBurst: (map['lucky_burst'] ?? map['luckyBurst'] ?? true) as bool,
+      luckyDisplayMode: map['lucky_display_mode']?.toString() ?? map['luckyDisplayMode']?.toString() ?? 'cards',
     );
   }
 }
@@ -236,6 +260,8 @@ class SentGiftModel {
   final String giftId;
   final String giftName;
   final String? animationAsset;
+  final String? iconAsset;
+  final String? defaultImage;
   final String senderId;
   final String senderName;
   final String? senderPhotoUrl;
@@ -251,6 +277,8 @@ class SentGiftModel {
     required this.giftId,
     this.giftName = '',
     this.animationAsset,
+    this.iconAsset,
+    this.defaultImage,
     required this.senderId,
     required this.senderName,
     this.senderPhotoUrl,
@@ -269,6 +297,8 @@ class SentGiftModel {
         'gift_id': giftId,
         'gift_name': giftName,
         'animation_asset': animationAsset,
+        'icon_asset': iconAsset,
+        'default_image': defaultImage,
         'sender_id': senderId,
         'sender_name': senderName,
         'sender_photo_url': senderPhotoUrl,
@@ -285,6 +315,8 @@ class SentGiftModel {
         giftId: map['gift_id'] as String,
         giftName: map['gift_name']?.toString() ?? '',
         animationAsset: map['animation_asset']?.toString(),
+        iconAsset: map['icon_asset']?.toString() ?? map['gift_icon']?.toString(),
+        defaultImage: map['default_image']?.toString() ?? map['image_url']?.toString(),
         senderId: map['sender_id'] as String,
         senderName: map['sender_name'] as String,
         senderPhotoUrl: map['sender_photo_url']?.toString(),

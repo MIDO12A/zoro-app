@@ -4,7 +4,7 @@ import {
   Building2, Crown, BarChart3, Award, Handshake,
   TrendingUp, Image, Palette, Bug,
   Bell, Settings, Shield, ChevronLeft, LogOut,   SlidersHorizontal, Grid, Gift as GiftIcon,
-  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket, Phone, CheckSquare, Volume2, Mic,
+  Tag, Sparkles, Eye, ImageIcon, Calendar, Rocket, Phone, CheckSquare, Volume2, Mic, User,
 } from 'lucide-react';
 import { logout } from '../lib/auth';
 import { useContext } from 'react';
@@ -44,7 +44,7 @@ const navItems = [
   { to: '/signin-features', icon: Calendar, label: 'nav.signin' },
   { to: '/app-updates', icon: Rocket, label: 'App Updates' },
   { to: '/bd', icon: TrendingUp, label: 'nav.bd' },
-  { to: '/profile-customize', icon: Shield, label: 'Profile Customize' },
+  { to: '/profile-customize', icon: User, label: 'nav.profileCustomize' },
   { to: '/error-analysis', icon: Bug, label: 'nav.errors' },
   { to: '/admins', icon: Shield, label: 'nav.admins' },
   { to: '/notifications', icon: Bell, label: 'nav.notifications' },

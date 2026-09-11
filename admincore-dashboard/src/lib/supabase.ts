@@ -177,19 +177,24 @@ class FbQuery {
 
   private async _runSelect(): Promise<FbResult> {
     const keyField = this.keyField()
-    const keyFilter = this.filters.find(f => f.field === keyField)
-    const otherFilters = this.filters.filter(f => f !== keyFilter)
-    const constraints: QueryConstraint[] = otherFilters.map(f => where(f.field, '==', f.value))
-
-    if (keyFilter) {
-      const snap = await getDoc(doc(db, this.table, String(keyFilter.value)))
-      if (!snap.exists()) return { data: [], count: 0, error: null }
-      const row = { ...snap.data(), id: snap.id }
-      return { data: [row], count: this.countOnly ? 1 : undefined, error: null }
+    // Look for keyField, 'id', or 'uid' filter
+    const directFilter = this.filters.find(f => f.field === keyField || f.field === 'id' || f.field === 'uid')
+    if (directFilter && this.filters.length === 1 && typeof directFilter.value === 'string' && directFilter.value) {
+      const snap = await getDoc(doc(db, this.table, String(directFilter.value)))
+      if (snap.exists()) {
+        const row = { ...snap.data(), id: snap.id, uid: snap.id }
+        return { data: [row], count: this.countOnly ? 1 : undefined, error: null }
+      }
     }
 
-    const snap = await getDocs(query(collection(db, this.table), ...constraints))
-    let rows = snap.docs.map(d => ({ ...d.data(), id: d.id }))
+    const constraints: QueryConstraint[] = this.filters.map(f => where(f.field, '==', f.value))
+    let snap
+    try {
+      snap = await getDocs(query(collection(db, this.table), ...constraints))
+    } catch {
+      snap = await getDocs(collection(db, this.table))
+    }
+    let rows = snap.docs.map(d => ({ ...d.data(), id: d.id, uid: d.id }))
 
     if (this.orExpr) {
       rows = rows.filter(r =>
@@ -227,37 +232,41 @@ class FbQuery {
       } else {
         await setDoc(doc(db, this.table, key), values)
       }
-      return { data: { ...values, id: key }, error: null }
+      return { data: { ...values, id: key, uid: key }, error: null }
     }
     const r = await addDoc(collection(db, this.table), values)
-    return { data: { ...values, id: r.id }, error: null }
+    return { data: { ...values, id: r.id, uid: r.id }, error: null }
   }
 
   private async _runUpdate(): Promise<FbResult> {
     const keyField = this.keyField()
-    const keyFilter = this.filters.find(f => f.field === keyField)
-    if (keyFilter) {
-      await updateDoc(doc(db, this.table, String(keyFilter.value)), this.mutationValues)
-      return { data: null, error: null }
+    const directFilter = this.filters.find(f => f.field === keyField || f.field === 'id' || f.field === 'uid')
+    if (directFilter && typeof directFilter.value === 'string' && directFilter.value) {
+      try {
+        await setDoc(doc(db, this.table, String(directFilter.value)), this.mutationValues, { merge: true })
+        return { data: null, error: null }
+      } catch (e) {
+        console.error(`_runUpdate on ${this.table}/${directFilter.value} failed:`, e)
+      }
     }
-    const otherFilters = this.filters.filter(f => f !== keyFilter)
     const snap = await getDocs(
-      query(collection(db, this.table), ...otherFilters.map(f => where(f.field, '==', f.value))),
+      query(collection(db, this.table), ...this.filters.map(f => where(f.field, '==', f.value))),
     )
-    for (const d of snap.docs) await updateDoc(d.ref, this.mutationValues)
+    for (const d of snap.docs) {
+      await setDoc(d.ref, this.mutationValues, { merge: true })
+    }
     return { data: null, error: null }
   }
 
   private async _runDelete(): Promise<FbResult> {
     const keyField = this.keyField()
-    const keyFilter = this.filters.find(f => f.field === keyField)
-    if (keyFilter) {
-      await deleteDoc(doc(db, this.table, String(keyFilter.value)))
+    const directFilter = this.filters.find(f => f.field === keyField || f.field === 'id' || f.field === 'uid')
+    if (directFilter && typeof directFilter.value === 'string' && directFilter.value) {
+      await deleteDoc(doc(db, this.table, String(directFilter.value)))
       return { data: null, error: null }
     }
-    const otherFilters = this.filters.filter(f => f !== keyFilter)
     const snap = await getDocs(
-      query(collection(db, this.table), ...otherFilters.map(f => where(f.field, '==', f.value))),
+      query(collection(db, this.table), ...this.filters.map(f => where(f.field, '==', f.value))),
     )
     for (const d of snap.docs) await deleteDoc(d.ref)
     return { data: null, error: null }
@@ -416,6 +425,21 @@ export const supabase = {
 }
 
 export const getAdminSupabase = () => supabase
+
+// ---- Realtime helper (onSnapshot) ----
+// للصفحات اللي تطلب تحديث لحظي لمجموعة (مثل مكافآت CP في CpFeatures).
+// ترجع دالة إلغاء الاشتراك.
+export function listenCollection(
+  table: string,
+  onRows: (rows: any[]) => void,
+): () => void {
+  const unsub = onSnapshot(
+    query(collection(db, table)),
+    snap => onRows(snap.docs.map(d => ({ ...d.data(), id: d.id }))),
+    err => console.warn(`listenCollection(${table}) error:`, err),
+  )
+  return () => unsub()
+}
 
 // ---- First-admin bootstrap ----
 // Firestore rules gate every admin write on `admin_users/{authUid}` existing

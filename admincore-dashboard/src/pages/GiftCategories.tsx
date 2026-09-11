@@ -44,6 +44,20 @@ export default function GiftCategoriesPage() {
     load();
   };
 
+  const handleSeedStandard = async () => {
+    const standards: GiftCategory[] = [
+      { id: 'normal', name: 'شائع (عادي)', sortOrder: 1 },
+      { id: 'luxury', name: '👑 فاخر (VIP)', sortOrder: 2 },
+      { id: 'lucky', name: '🍀 الحظ (Lucky)', sortOrder: 3 },
+      { id: 'cp', name: '💍 الارتباط (CP)', sortOrder: 4 },
+      { id: 'backpack', name: '🎒 الحقيبة (Backpack)', sortOrder: 5 },
+    ];
+    for (const sc of standards) {
+      await addGiftCategory(sc.id, sc);
+    }
+    await load();
+  };
+
   const updateField = (f: string, v: unknown) => setForm(p => ({ ...p, [f]: v }));
 
   return (
@@ -53,9 +67,14 @@ export default function GiftCategoriesPage() {
           <h2 className="text-white text-lg font-semibold">Gift Categories</h2>
           <p className="text-slate-500 text-xs mt-0.5">{cats.length} categories</p>
         </div>
-        <button onClick={() => { setShowAdd(!showAdd); setEditing(null); resetForm(); }} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-xs text-white font-semibold rounded-lg flex items-center gap-1">
-          <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Cancel' : 'Add Category'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleSeedStandard} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-xs text-white font-semibold rounded-lg flex items-center gap-1 shadow-md shadow-emerald-900/20">
+            🔄 إضافة الأقسام القياسية (5 أقسام)
+          </button>
+          <button onClick={() => { setShowAdd(!showAdd); setEditing(null); resetForm(); }} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-xs text-white font-semibold rounded-lg flex items-center gap-1">
+            <Plus className="w-3.5 h-3.5" /> {showAdd ? 'Cancel' : 'Add Category'}
+          </button>
+        </div>
       </div>
 
       {(editing || showAdd) && (

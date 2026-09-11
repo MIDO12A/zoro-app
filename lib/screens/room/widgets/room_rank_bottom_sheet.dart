@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../services/firebase_service.dart';
+import '../../../../services/dynamic_config_service.dart';
 import '../../../../config/r.dart';
 
 class RoomRankBottomSheet extends StatefulWidget {
@@ -11,8 +12,8 @@ class RoomRankBottomSheet extends StatefulWidget {
 }
 
 class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
-  int _mainTabIndex = 0; // 0 for Wealth, 1 for Magic
-  int _subTabIndex = 0; // 0 for Daily, 1 for Weekly, 2 for Monthly
+  int _mainTabIndex = 0; // 0 for Wealth (الثروة), 1 for Magic (السحر)
+  int _subTabIndex = 0; // 0 for Daily (يوميا), 1 for Weekly (أسبوعيًا), 2 for Monthly (شهريا)
 
   List<Map<String, dynamic>> _rankings = [];
   bool _isLoading = true;
@@ -72,53 +73,75 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
   Widget build(BuildContext context) {
     final double screenHeight = MediaQuery.of(context).size.height;
     final double screenWidth = MediaQuery.of(context).size.width;
+    final dc = DynamicConfigService();
+
+    final bgImage = dc.globalRankBg.isNotEmpty
+        ? dc.globalRankBg
+        : (_mainTabIndex == 0 ? 'assets/images/rank_room_bg.webp' : 'assets/images/rank_charm_bg.webp');
 
     return Container(
       width: screenWidth,
-      height: screenHeight * 0.85,
-      decoration: const BoxDecoration(
-        color: Colors.transparent,
+      height: screenHeight * 0.88,
+      decoration: BoxDecoration(
+        color: const Color(0xFF16151A),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         image: DecorationImage(
-          image: AssetImage('assets/mipmap-xxhdpi/room_rank_bg.png'),
-          fit: BoxFit.fill,
+          image: AssetImage(bgImage),
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
         ),
       ),
       child: Stack(
         children: [
+          // Background light glow (rank_room_light_ic.webp)
+          Positioned(
+            top: 60,
+            left: 0,
+            right: 0,
+            child: Opacity(
+              opacity: 0.85,
+              child: Image.asset(
+                'assets/images/rank_room_light_ic.webp',
+                fit: BoxFit.fitWidth,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+
           // Close button
           Positioned(
-            top: 30,
-            left: 20,
+            top: 16,
+            left: 16,
             child: GestureDetector(
               onTap: () => Navigator.pop(context),
               child: Container(
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withOpacity(0.4),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.close, color: Colors.white, size: 18),
               ),
             ),
           ),
-          
+
           Column(
             children: [
-              const SizedBox(height: 70),
-              // Main Tabs (الثروة، السحر)
+              const SizedBox(height: 16),
+              // Main Tabs (السحر، الثروة)
               _buildMainTabs(),
-              const SizedBox(height: 30),
-              // Sub Tabs (يوميا، أسبوعيا، شهريا)
+              const SizedBox(height: 14),
+              // Sub Tabs (يوميا، أسبوعيًا، شهريا)
               _buildSubTabs(),
-              const SizedBox(height: 20),
-              
+              const SizedBox(height: 10),
+
               Expanded(
-                child: _isLoading 
+                child: _isLoading
                     ? const Center(child: CircularProgressIndicator(color: Color(0xFFFFD54F)))
                     : _rankings.isEmpty
                         ? _buildEmptyState()
-                        : _buildRankList(),
+                        : _buildRankContent(),
               ),
             ],
           ),
@@ -131,110 +154,393 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Icon(Icons.emoji_events, color: Color(0xFFFFD54F), size: 80),
-        const SizedBox(height: 10),
+        Image.asset(
+          'assets/images/rank_yesterday_top_1.webp',
+          width: 90,
+          height: 90,
+          errorBuilder: (_, __, ___) => const Icon(Icons.emoji_events, color: Color(0xFFFFD54F), size: 70),
+        ),
+        const SizedBox(height: 12),
         const Text(
-          'لا توجد بيانات حالياً',
+          'لا توجد بيانات ترتيب حالياً',
           style: TextStyle(color: Colors.white54, fontSize: 14),
         ),
       ],
     );
   }
 
-  Widget _buildRankList() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      itemCount: _rankings.length,
-      itemBuilder: (context, index) {
-        final item = _rankings[index];
-        return _buildRankItem(item, index + 1);
-      },
-    );
-  }
+  Widget _buildRankContent() {
+    // Top 3 users for podium
+    final top1 = _rankings.isNotEmpty ? _rankings[0] : null;
+    final top2 = _rankings.length > 1 ? _rankings[1] : null;
+    final top3 = _rankings.length > 2 ? _rankings[2] : null;
+    final restList = _rankings.length > 3 ? _rankings.sublist(3) : <Map<String, dynamic>>[];
 
-  Widget _buildRankItem(Map<String, dynamic> item, int rank) {
-    String? frameAsset;
-    if (rank == 1) frameAsset = 'assets/mipmap-xxhdpi/rank_1_frame.png';
-    else if (rank == 2) frameAsset = 'assets/mipmap-xxhdpi/rank_2_frame.png';
-    else if (rank == 3) frameAsset = 'assets/mipmap-xxhdpi/rank_3_frame.png';
+    return CustomScrollView(
+      slivers: [
+        // Top 3 Podium View (rank_adapter_item_second.xml)
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: _buildPodium(top1: top1, top2: top2, top3: top3),
+          ),
+        ),
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.35),
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
-      ),
-      child: Row(
-        children: [
-          // Rank Number
-          SizedBox(
-            width: 25,
-            child: Text(
-              '$rank',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: rank <= 3 ? const Color(0xFFFFD54F) : Colors.white70,
-                fontSize: rank <= 3 ? 20 : 16,
-                fontWeight: FontWeight.bold,
+        // Rest of ranking list (rank_adapter_item.xml)
+        if (restList.isNotEmpty)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 20),
+            sliver: SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final item = restList[index];
+                  final rank = index + 4;
+                  return _buildRestItem(item, rank);
+                },
+                childCount: restList.length,
               ),
             ),
           ),
-          const SizedBox(width: 15),
-          
-          // Avatar with Frame
+      ],
+    );
+  }
+
+  // Authentic Top 3 Podium (rank_adapter_item_second.xml)
+  Widget _buildPodium({
+    Map<String, dynamic>? top1,
+    Map<String, dynamic>? top2,
+    Map<String, dynamic>? top3,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Rank 2 (Left - cl_third)
+        Expanded(
+          flex: 3,
+          child: _buildPodiumUser(
+            item: top2,
+            rank: 2,
+            avatarSize: 62,
+            frameSize: 104,
+            frameAsset: 'assets/images/rank_top_avatar_2.webp',
+            baseAsset: 'assets/images/rank_top_bg_2.webp',
+          ),
+        ),
+        const SizedBox(width: 4),
+
+        // Rank 1 (Center - cl_second, elevated)
+        Expanded(
+          flex: 4,
+          child: _buildPodiumUser(
+            item: top1,
+            rank: 1,
+            avatarSize: 76,
+            frameSize: 124,
+            frameAsset: 'assets/images/rank_top_avatar_1.webp',
+            baseAsset: 'assets/images/rank_top_bg_1.webp',
+            isCenter: true,
+          ),
+        ),
+        const SizedBox(width: 4),
+
+        // Rank 3 (Right - cl_four)
+        Expanded(
+          flex: 3,
+          child: _buildPodiumUser(
+            item: top3,
+            rank: 3,
+            avatarSize: 62,
+            frameSize: 104,
+            frameAsset: 'assets/images/rank_top_avatar_3.webp',
+            baseAsset: 'assets/images/rank_top_bg_3.webp',
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPodiumUser({
+    required Map<String, dynamic>? item,
+    required int rank,
+    required double avatarSize,
+    required double frameSize,
+    required String frameAsset,
+    required String baseAsset,
+    bool isCenter = false,
+  }) {
+    final photoUrl = item?['user_photo_url']?.toString() ?? '';
+    final name = item?['user_name']?.toString() ?? (item != null ? 'User' : 'شاغر');
+    final customId = item?['custom_id']?.toString() ?? item?['user_id']?.toString() ?? '';
+    final value = item?['total_value'] ?? 0;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Avatar + Authentic Frame (rank_top_avatar_1..3)
+        SizedBox(
+          width: frameSize,
+          height: frameSize,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Avatar circle
+              ClipOval(
+                child: SizedBox(
+                  width: avatarSize,
+                  height: avatarSize,
+                  child: photoUrl.isNotEmpty
+                      ? R.loadImage(photoUrl, width: avatarSize, height: avatarSize, fit: BoxFit.cover)
+                      : Container(
+                          color: Colors.white10,
+                          child: Icon(Icons.person, color: Colors.white38, size: avatarSize * 0.5),
+                        ),
+                ),
+              ),
+              // Authentic Crown/Ring Frame
+              Image.asset(
+                frameAsset,
+                width: frameSize,
+                height: frameSize,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ],
+          ),
+        ),
+
+        // Podium Base Image (rank_top_bg_1..3)
+        Transform.translate(
+          offset: const Offset(0, -12),
+          child: Stack(
+            alignment: Alignment.topCenter,
+            children: [
+              Image.asset(
+                baseAsset,
+                width: double.infinity,
+                fit: BoxFit.fitWidth,
+                errorBuilder: (_, __, ___) => const SizedBox(height: 20),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 14, left: 4, right: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Name
+                    Text(
+                      name,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: isCenter ? 13 : 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                    ),
+                    if (customId.isNotEmpty) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        'ID: $customId',
+                        style: const TextStyle(
+                          color: Color(0x99FFFFFF),
+                          fontSize: 9,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                    // Gold increase pill (rank_gold_shape_bg)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0x66000000),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0x33FFD54F), width: 0.8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Image.asset(
+                            'assets/images/common_gold_ic_8.webp',
+                            width: 12,
+                            height: 12,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 12, color: Color(0xFFFFD54F)),
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$value',
+                            style: const TextStyle(
+                              color: Color(0xFFFAE9B5),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 3),
+                          Image.asset(
+                            'assets/images/rank_gold_increase_ic.webp',
+                            width: 10,
+                            height: 10,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Authentic List Item (rank_adapter_item.xml)
+  Widget _buildRestItem(Map<String, dynamic> item, int rank) {
+    final photoUrl = item['user_photo_url']?.toString() ?? '';
+    final name = item['user_name']?.toString() ?? 'User';
+    final customId = item['custom_id']?.toString() ?? item['user_id']?.toString() ?? '';
+    final value = item['total_value'] ?? 0;
+    final level = item['level'] ?? 1;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF16151A).withOpacity(0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Row(
+        children: [
+          // Rank Number with rank_num_bg (32×38dp)
           SizedBox(
-            width: 70,
-            height: 70,
+            width: 32,
+            height: 38,
             child: Stack(
               alignment: Alignment.center,
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundImage: item['user_photo_url'] != null && item['user_photo_url'].toString().isNotEmpty
-                      ? NetworkImage(item['user_photo_url'])
-                      : const AssetImage('assets/mipmap-xxhdpi/avatar_default.png') as ImageProvider,
+                Image.asset(
+                  'assets/images/rank_num_bg.webp',
+                  width: 32,
+                  height: 38,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
-                if (frameAsset != null)
-                  Image.asset(frameAsset, width: 70, height: 70, fit: BoxFit.cover),
+                Text(
+                  '$rank',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ),
-          const SizedBox(width: 15),
-          
-          // Name and Value
+          const SizedBox(width: 12),
+
+          // User Avatar (44×44dp)
+          ClipOval(
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: photoUrl.isNotEmpty
+                  ? R.loadImage(photoUrl, width: 44, height: 44, fit: BoxFit.cover)
+                  : Container(
+                      color: Colors.white10,
+                      child: const Icon(Icons.person, color: Colors.white38, size: 24),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Name and ID column
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  item['user_name'],
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 6),
                 Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset(
-                      'assets/cp/ic_coin.webp',
-                      width: 14,
-                      height: 14,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 14, color: Color(0xFFFFD54F)),
-                    ),
-                    const SizedBox(width: 6),
                     Flexible(
                       child: Text(
-                        '${item['total_value']}',
-                        style: const TextStyle(color: Color(0xFFFFD54F), fontSize: 14, fontWeight: FontWeight.w600),
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 6),
+                    // Level badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFC525), Color(0xFFDE880F)],
+                        ),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Lv.$level',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'ID: ${customId.isNotEmpty ? customId : '------'}',
+                  style: const TextStyle(color: Colors.white38, fontSize: 10),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+
+          // Gold pill with rank_gold_increase_ic
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0x33FFD54F)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/images/common_gold_ic_8.webp',
+                  width: 13,
+                  height: 13,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.monetization_on, size: 13, color: Color(0xFFFFD54F)),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$value',
+                  style: const TextStyle(
+                    color: Color(0xFFFAE9B5),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Image.asset(
+                  'assets/images/rank_gold_increase_ic.webp',
+                  width: 11,
+                  height: 11,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ],
             ),
@@ -244,43 +550,42 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
     );
   }
 
+  // Tab Controls
   Widget _buildMainTabs() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _buildMainTabItem('السحر', 1),
-        const SizedBox(width: 40),
+        const SizedBox(width: 48),
         _buildMainTabItem('الثروة', 0),
       ],
     );
   }
 
   Widget _buildMainTabItem(String title, int index) {
-    bool isActive = _mainTabIndex == index;
+    final bool isActive = _mainTabIndex == index;
     return GestureDetector(
       onTap: () => _onMainTabChanged(index),
+      behavior: HitTestBehavior.opaque,
       child: Column(
         children: [
           Text(
             title,
             style: TextStyle(
-              color: isActive ? const Color(0xFFFFD54F) : Colors.white,
+              color: isActive ? const Color(0xFFFFD54F) : Colors.white70,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               fontSize: 16,
             ),
           ),
           const SizedBox(height: 6),
-          if (isActive)
-            Container(
-              width: 20,
-              height: 3,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFD54F),
-                borderRadius: BorderRadius.circular(1.5),
-              ),
-            )
-          else
-            const SizedBox(height: 3),
+          Container(
+            width: 24,
+            height: 3,
+            decoration: BoxDecoration(
+              color: isActive ? const Color(0xFFFFD54F) : Colors.transparent,
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
         ],
       ),
     );
@@ -289,11 +594,11 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
   Widget _buildSubTabs() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 40),
-      height: 40,
+      height: 34,
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFFFD54F).withOpacity(0.3), width: 1),
+        color: Colors.black.withOpacity(0.35),
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: const Color(0x33FFD54F), width: 1),
       ),
       child: Row(
         children: [
@@ -306,7 +611,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
   }
 
   Widget _buildSubTabItem(String title, int index) {
-    bool isActive = _subTabIndex == index;
+    final bool isActive = _subTabIndex == index;
     return Expanded(
       child: GestureDetector(
         onTap: () => _onSubTabChanged(index),
@@ -314,7 +619,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
           alignment: Alignment.center,
           decoration: isActive
               ? BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(17),
                   gradient: const LinearGradient(
                     colors: [Color(0xFFFFD54F), Color(0xFFF57F17)],
                     begin: Alignment.topCenter,
@@ -325,7 +630,7 @@ class _RoomRankBottomSheetState extends State<RoomRankBottomSheet> {
           child: Text(
             title,
             style: TextStyle(
-              color: isActive ? Colors.black : Colors.white,
+              color: isActive ? Colors.black : Colors.white70,
               fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
               fontSize: 12,
             ),

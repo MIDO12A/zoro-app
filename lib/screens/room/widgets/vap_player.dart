@@ -1,10 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_vap_plugin/flutter_vap_plugin.dart';
-import 'package:path_provider/path_provider.dart';
+
+import '../../../services/media_cache_service.dart';
 
 /// Rock-solid VAP Player supporting alpha transparency (Tencent VAP)
 /// and Injected Dynamic Parameters (VAP المحقون: dynamic text and avatar replacement).
@@ -37,11 +38,9 @@ class VapPlayer extends StatefulWidget {
   static Future<String?> prefetch(String url) async {
     if (!url.startsWith('http://') && !url.startsWith('https://')) return null;
     try {
-      final path = await _cachePathFor(url);
-      final file = File(path);
-      if (await file.exists() && (await file.length()) > 0) return path;
-      await Dio().download(url, path);
-      return path;
+      final cachedPath = await MediaCacheService().getCachedPath(url);
+      if (cachedPath != null) return cachedPath;
+      return await MediaCacheService().download(url);
     } catch (e) {
       debugPrint('VapPlayer prefetch error for $url: $e');
       return null;
@@ -49,20 +48,7 @@ class VapPlayer extends StatefulWidget {
   }
 
   static Future<String> _cachePathFor(String url) async {
-    Directory cacheDir;
-    try {
-      final appDir = await getApplicationDocumentsDirectory();
-      cacheDir = Directory('${appDir.path}/media_cache');
-    } catch (_) {
-      final tempDir = await getTemporaryDirectory();
-      cacheDir = Directory('${tempDir.path}/media_cache');
-    }
-    if (!await cacheDir.exists()) {
-      await cacheDir.create(recursive: true);
-    }
-    final cleanUrl = url.split('?')[0];
-    final ext = cleanUrl.contains('.') ? '.${cleanUrl.split('.').last}' : '.mp4';
-    return '${cacheDir.path}/vap_${url.hashCode}$ext';
+    return await MediaCacheService().pathFor(url);
   }
 
   @override
@@ -75,6 +61,8 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
   bool _ready = false;
   bool _hasError = false;
   bool _isViewCreated = false;
+  bool _finishedOnce = false;
+  Timer? _safetyTimer;
   late AnimationController _fadeController;
 
   @override
@@ -84,7 +72,30 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
       vsync: this,
       duration: const Duration(milliseconds: 300),
     )..forward();
+
+    // مهلة أمان قصوى لمنع تجميد الشاشة أو بقاء الهدية عالقة إذا تعطل محرك الـ VAP الأصلي
+    if (!widget.loops) {
+      _safetyTimer = Timer(const Duration(seconds: 10), () {
+        if (mounted && !_finishedOnce) {
+          _finishSafely(forceStop: true);
+        }
+      });
+    }
+
     _resolveSource();
+  }
+
+  void _finishSafely({bool forceStop = false}) {
+    if (_finishedOnce) return;
+    _finishedOnce = true;
+    _safetyTimer?.cancel();
+    _safetyTimer = null;
+    if (forceStop) {
+      try {
+        _controller.stop();
+      } catch (_) {}
+    }
+    widget.onFinished?.call();
   }
 
   @override
@@ -92,16 +103,32 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
     super.didUpdateWidget(old);
     if (old.url != widget.url) {
       _controller.stop();
+      _safetyTimer?.cancel();
+      _finishedOnce = false;
+      _isViewCreated = false;
       _localPath = null;
       _ready = false;
       _hasError = false;
+      if (!widget.loops) {
+        _safetyTimer = Timer(const Duration(seconds: 10), () {
+          if (mounted && !_finishedOnce) {
+            _finishSafely(forceStop: true);
+          }
+        });
+      }
       _resolveSource();
     }
   }
 
   @override
   void dispose() {
-    _controller.stop();
+    _safetyTimer?.cancel();
+    _safetyTimer = null;
+    if (!_finishedOnce) {
+      try {
+        _controller.stop();
+      } catch (_) {}
+    }
     _fadeController.dispose();
     super.dispose();
   }
@@ -110,12 +137,23 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
     try {
       final url = widget.url;
       if (url.startsWith('http://') || url.startsWith('https://')) {
-        final path = await VapPlayer._cachePathFor(url);
-        final file = File(path);
-        if (!await file.exists() || (await file.length()) == 0) {
-          await Dio().download(url, path);
+        final path = await MediaCacheService().getCachedPath(url);
+        if (path != null && await File(path).exists() && await File(path).length() > 0) {
+          _localPath = path;
+        } else {
+          _localPath = await MediaCacheService().download(url);
         }
-        _localPath = path;
+      } else if (url.startsWith('assets/')) {
+        final path = await MediaCacheService().pathFor(url);
+        final file = File(path);
+        if (!await file.exists() || await file.length() == 0) {
+          final byteData = await rootBundle.load(url);
+          await file.writeAsBytes(
+            byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
+            flush: true,
+          );
+        }
+        _localPath = file.path;
       } else {
         _localPath = url;
       }
@@ -129,7 +167,7 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
       debugPrint('*** VapPlayer download error for ${widget.url}: $e');
       if (mounted) {
         setState(() => _hasError = true);
-        widget.onFinished?.call();
+        _finishSafely();
       }
     }
   }
@@ -137,10 +175,12 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
   void _playCurrent() {
     if (_localPath == null) return;
     try {
+      // Tencent AnimPlayer: playLoop is remaining plays (1 = once).
+      // Values <= 0 after EOS stop immediately; -1 does NOT mean infinite.
       _controller.play(
         path: _localPath!,
         sourceType: VapSourceType.file,
-        repeatCount: widget.loops ? -1 : 0,
+        repeatCount: widget.loops ? -1 : 1,
         deleteOnEnd: false,
         textReplacement: widget.textReplacement,
         imageReplacement: widget.imageReplacement,
@@ -176,66 +216,48 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final screen = MediaQuery.of(context).size;
-        double w = widget.width ??
-            (constraints.maxWidth.isFinite && constraints.maxWidth > 0
-                ? constraints.maxWidth
-                : screen.width);
-        double h = widget.height ??
-            (constraints.maxHeight.isFinite && constraints.maxHeight > 0
-                ? constraints.maxHeight
-                : screen.height);
+    final w = widget.width;
+    final h = widget.height;
 
-        if (_hasError || (_ready && _localPath == null)) {
-          return _buildFallback(w, h);
-        }
+    if (_hasError || (_ready && _localPath == null)) {
+      return _buildFallback(w ?? 0, h ?? 0);
+    }
 
-        if (!_ready) {
-          if (widget.defaultImageUrl != null && widget.defaultImageUrl!.isNotEmpty) {
-            return _buildFallback(w, h);
-          }
-          return SizedBox(
-            width: w,
-            height: h,
-            child: const Center(
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFDE880F)),
-              ),
-            ),
-          );
-        }
+    if (!_ready) {
+      if (widget.defaultImageUrl != null && widget.defaultImageUrl!.isNotEmpty) {
+        return _buildFallback(w ?? 0, h ?? 0);
+      }
+      return const SizedBox.shrink();
+    }
 
-        return SizedBox(
-          width: w,
-          height: h,
-          child: FlutterVapView(
-            controller: _controller,
-            scaleType: _mapFit(),
-            onVideoFinish: () {
-              if (widget.loops) {
-                _playCurrent();
-              } else {
-                widget.onFinished?.call();
-              }
-            },
-            onFailed: (errCode, errMsg) {
-              debugPrint('FlutterVapView onFailed: code=$errCode, msg=$errMsg');
-              if (mounted) {
-                setState(() => _hasError = true);
-                widget.onFinished?.call();
-              }
-            },
-            onCreateView: () {
-              _isViewCreated = true;
-              _playCurrent();
-            },
-          ),
-        );
-      },
+    return SizedBox(
+      width: w,
+      height: h,
+      child: RepaintBoundary(
+        child: FlutterVapView(
+          key: const ValueKey<String>('global_vap_view'),
+          controller: _controller,
+          scaleType: _mapFit(),
+          onVideoFinish: () {
+            // Native player already loops when repeatCount < 0.
+            // Restarting here stop/flushes MediaCodec every cycle (MediaTek storm).
+            if (!widget.loops) {
+              _finishSafely();
+            }
+          },
+          onFailed: (errCode, errMsg) {
+            debugPrint('FlutterVapView onFailed: code=$errCode, msg=$errMsg');
+            if (mounted) {
+              setState(() => _hasError = true);
+              _finishSafely();
+            }
+          },
+          onCreateView: () {
+            _isViewCreated = true;
+            _playCurrent();
+          },
+        ),
+      ),
     );
   }
 }

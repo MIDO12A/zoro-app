@@ -57,7 +57,7 @@ class _CpWebViewScreenState extends State<CpWebViewScreen> {
           onPageFinished: (_) {
             if (mounted) setState(() => _loading = false);
           },
-          shouldOverrideUrlLoading: (request) {
+          onNavigationRequest: (request) {
             final url = request.url;
             final uri = Uri.tryParse(url);
             final schemeAllowed = uri?.scheme == 'https';

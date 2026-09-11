@@ -276,6 +276,10 @@ class AgencyTarget {
   final int? rewardBadgeId;
   final int? rewardMedalId;
   final int? rewardFrameId;
+  final String? rewardType;
+  final double rewardValue;
+  final String? rewardImageUrl;
+  final String? backgroundUrl;
   // حالة التقدم (مُحسَبة من الـ API)
   final int earnedThisMonth;
   final int remaining;
@@ -293,6 +297,10 @@ class AgencyTarget {
     this.rewardBadgeId,
     this.rewardMedalId,
     this.rewardFrameId,
+    this.rewardType,
+    this.rewardValue     = 0.0,
+    this.rewardImageUrl,
+    this.backgroundUrl,
     this.earnedThisMonth = 0,
     this.remaining       = 0,
     this.progressPct     = 0,
@@ -312,6 +320,10 @@ class AgencyTarget {
       rewardBadgeId:   (m['reward_badge_id'] as num?)?.toInt(),
       rewardMedalId:   (m['reward_medal_id'] as num?)?.toInt(),
       rewardFrameId:   (m['reward_frame_id'] as num?)?.toInt(),
+      rewardType:      m['reward_type'] as String?,
+      rewardValue:     (m['reward_value'] as num?)?.toDouble() ?? 0.0,
+      rewardImageUrl:  m['reward_image_url'] as String?,
+      backgroundUrl:   m['background_url'] as String?,
       earnedThisMonth: (m['earned_this_month'] as num?)?.toInt() ?? 0,
       remaining:       (m['remaining'] as num?)?.toInt()         ?? 0,
       progressPct:     (m['progress_pct'] as num?)?.toDouble()   ?? 0.0,

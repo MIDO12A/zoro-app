@@ -11,6 +11,7 @@ import '../config/app_config.dart';
 
 class DynamicConfigService extends ChangeNotifier {
   static final DynamicConfigService _instance = DynamicConfigService._();
+  static DynamicConfigService get instance => _instance;
   factory DynamicConfigService() => _instance;
   DynamicConfigService._();
 
@@ -284,6 +285,33 @@ class DynamicConfigService extends ChangeNotifier {
   Color get fullProfileFrameCardBorder => _screenColor('fullProfile', 'frameCardBorder', const Color(0x1AFFFFFF));
   String get fullProfileFrameIcon => _screenStr('fullProfile', 'frameIcon', _screenStr('userProfile', 'frameIcon', ''));
 
+  // ── Full Profile: Data Panel & Stats (الزوار، المعجبون، المتابعون، الهدايا، المرسلة) ──
+  String get fullProfileDataPanelBg => _screenStr('fullProfile', 'dataPanelBg', _screenStr('userProfile', 'dataPanelBg', ''));
+  String get fullProfileDataPanelDivider => _screenStr('fullProfile', 'dataPanelDivider', _screenStr('userProfile', 'dataPanelDivider', ''));
+  Color get fullProfileDataCountColor => _screenColor('fullProfile', 'dataCountColor', Colors.white);
+  Color get fullProfileDataLabelColor => _screenColor('fullProfile', 'dataLabelColor', const Color(0xFF6DE5FF));
+  String get fullProfileVisitorsImage => _screenStr('fullProfile', 'visitorsImage', '');
+  String get fullProfileFansImage => _screenStr('fullProfile', 'fansImage', '');
+  String get fullProfileFollowersImage => _screenStr('fullProfile', 'followersImage', '');
+  String get fullProfileGiftsImage => _screenStr('fullProfile', 'giftsImage', '');
+  String get fullProfileSentGiftsImage => _screenStr('fullProfile', 'sentGiftsImage', '');
+
+  // ── Full Profile: CP Card & Relationship (كرت الارتباط وخواتم الـ SVGA) ──
+  String get fullProfileCpCardBg => _screenStr('fullProfile', 'cpCardBg', _screenStr('userProfile', 'cpCardBg', ''));
+  Color get fullProfileCpCardBorder => _screenColor('fullProfile', 'cpCardBorder', const Color(0xFFDE880F));
+  String get fullProfileCpRingSvga => _screenStr('fullProfile', 'cpRingSvga', _screenStr('userProfile', 'cpRingSvga', ''));
+  String get fullProfileCpRing2Svga => _screenStr('fullProfile', 'cpRing2Svga', _screenStr('userProfile', 'cpRing2Svga', ''));
+  String get fullProfileCpRing3Svga => _screenStr('fullProfile', 'cpRing3Svga', _screenStr('userProfile', 'cpRing3Svga', ''));
+  String get fullProfileCpMidDecorImage => _screenStr('fullProfile', 'cpMidDecorImage', _screenStr('userProfile', 'cpMidDecorImage', ''));
+  String get fullProfileCpDaysBg => _screenStr('fullProfile', 'cpDaysBg', _screenStr('userProfile', 'cpDaysBg', ''));
+  String get fullProfileCpAddIcon => _screenStr('fullProfile', 'cpAddIcon', _screenStr('userProfile', 'cpAddIcon', ''));
+
+  // ── Full Profile: Medals & Tabs ──
+  String get fullProfileMedalsCardBg => _screenStr('fullProfile', 'medalsCardBg', _screenStr('userProfile', 'medalsCardBg', ''));
+  Color get fullProfileMedalsCardBorder => _screenColor('fullProfile', 'medalsCardBorder', const Color(0x26DE880F));
+  Color get fullProfileTabActiveColor => _screenColor('fullProfile', 'tabActiveColor', const Color(0xFF00E5C9));
+  Color get fullProfileTabInactiveColor => _screenColor('fullProfile', 'tabInactiveColor', Colors.white60);
+
   // Agency & Host SVGA Necklaces (Comprehensive multi-key fallback from control panel)
   String get agencyLeaderNecklaceSvga {
     final v = _screenStr('agency', 'leaderNecklaceSvga',
@@ -443,12 +471,29 @@ class DynamicConfigService extends ChangeNotifier {
   Map<String, String> get iconOverrides => _iconOverrides;
   String? getIconOverride(String iconKey) => _iconOverrides[iconKey];
 
-  // Helper: get a value from a specific screen in screenVisuals
+  // Helper: get a value from a specific screen in screenVisuals or rawConfig
   String _screenStr(String screen, String field, String fallback) {
     final s = _screenVisuals[screen];
     if (s is Map) {
       final v = s[field];
-      if (v != null) return v.toString();
+      if (v != null && v.toString().trim().isNotEmpty) return v.toString().trim();
+    }
+    // Also check root rawConfig if not in screenVisuals
+    final root = _rawConfig[field];
+    if (root != null && root.toString().trim().isNotEmpty) return root.toString().trim();
+    final screenMap = _rawConfig[screen];
+    if (screenMap is Map) {
+      final sv = screenMap[field];
+      if (sv != null && sv.toString().trim().isNotEmpty) return sv.toString().trim();
+    }
+    // Cross check screenVisuals fullProfile or userProfile
+    if (screen != 'fullProfile' && _screenVisuals['fullProfile'] is Map) {
+      final fp = _screenVisuals['fullProfile'][field];
+      if (fp != null && fp.toString().trim().isNotEmpty) return fp.toString().trim();
+    }
+    if (screen != 'userProfile' && _screenVisuals['userProfile'] is Map) {
+      final up = _screenVisuals['userProfile'][field];
+      if (up != null && up.toString().trim().isNotEmpty) return up.toString().trim();
     }
     return fallback;
   }
@@ -457,7 +502,22 @@ class DynamicConfigService extends ChangeNotifier {
     final s = _screenVisuals[screen];
     if (s is Map) {
       final v = s[field];
-      if (v != null) return _parseColor(v.toString(), fallback);
+      if (v != null && v.toString().trim().isNotEmpty) return _parseColor(v.toString().trim(), fallback);
+    }
+    final root = _rawConfig[field];
+    if (root != null && root.toString().trim().isNotEmpty) return _parseColor(root.toString().trim(), fallback);
+    final screenMap = _rawConfig[screen];
+    if (screenMap is Map) {
+      final sv = screenMap[field];
+      if (sv != null && sv.toString().trim().isNotEmpty) return _parseColor(sv.toString().trim(), fallback);
+    }
+    if (screen != 'fullProfile' && _screenVisuals['fullProfile'] is Map) {
+      final fp = _screenVisuals['fullProfile'][field];
+      if (fp != null && fp.toString().trim().isNotEmpty) return _parseColor(fp.toString().trim(), fallback);
+    }
+    if (screen != 'userProfile' && _screenVisuals['userProfile'] is Map) {
+      final up = _screenVisuals['userProfile'][field];
+      if (up != null && up.toString().trim().isNotEmpty) return _parseColor(up.toString().trim(), fallback);
     }
     return fallback;
   }

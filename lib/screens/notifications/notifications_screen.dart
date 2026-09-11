@@ -6,6 +6,7 @@ import '../../services/dynamic_config_service.dart';
 import '../../models/notification_model.dart';
 import '../../providers/user_provider.dart';
 import '../../core/widgets/cached_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../features/cp/cp_service.dart';
 import '../../features/cp/cp_detail_full_screen.dart';
 
@@ -172,6 +173,94 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (action == 'agency_invite')
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Row(
+                                children: [
+                                  _actionButton(
+                                    label: 'قبول فتح الوكالة ✅',
+                                    color: Colors.green,
+                                    onTap: () async {
+                                      final currentUid = Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
+                                      final agencyName = notif.data?['agency_name']?.toString() ?? 'وكالة جديدة';
+                                      final adminName = notif.data?['admin_name']?.toString() ?? 'إدارة التطبيق';
+                                      final agencyType = notif.data?['agency_type']?.toString() ?? 'host';
+
+                                      if (currentUid != null) {
+                                        if (agencyType == 'recharge') {
+                                          await FirebaseFirestore.instance.collection('users').doc(currentUid).set({
+                                            'is_recharge_agent': true,
+                                            'recharge_agency_name': agencyName,
+                                          }, SetOptions(merge: true));
+                                        } else {
+                                          final agDoc = FirebaseFirestore.instance.collection('host_agencies').doc();
+                                          await agDoc.set({
+                                            'name': agencyName,
+                                            'owner_id': currentUid,
+                                            'is_active': true,
+                                            'member_count': 1,
+                                            'created_at': DateTime.now().toUtc().toIso8601String(),
+                                          });
+                                          await FirebaseFirestore.instance.collection('host_agency_members').doc('${agDoc.id}_$currentUid').set({
+                                            'agency_id': agDoc.id,
+                                            'user_id': currentUid,
+                                            'role': 'owner',
+                                            'status': 'active',
+                                            'joined_at': DateTime.now().toUtc().toIso8601String(),
+                                          });
+                                          await FirebaseFirestore.instance.collection('users').doc(currentUid).set({
+                                            'agency_id': agDoc.id,
+                                          }, SetOptions(merge: true));
+                                        }
+
+                                        // Send congratulation follow-up notification
+                                        await FirebaseFirestore.instance.collection('notifications').add({
+                                          'user_id': currentUid,
+                                          'uid': currentUid,
+                                          'title': 'مبروك! تم فتح وكالتك بنجاح 🎉',
+                                          'body': 'مبروك! تم فتح وتفعيل وكالتك [$agencyName] بنجاح بواسطة المشرف [$adminName]. يمكنك الآن البدء بإدارتها.',
+                                          'type': 'system',
+                                          'sent_at': DateTime.now().toUtc().toIso8601String(),
+                                          'data': {'action': 'agency_created', 'admin_name': adminName},
+                                        });
+
+                                        if (notif.id.isNotEmpty) {
+                                          await FirebaseFirestore.instance.collection('notifications').doc(notif.id).delete();
+                                        }
+
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('مبروك! تم قبول وتفعيل وكالة $agencyName بنجاح! 🎉'),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _actionButton(
+                                    label: 'رفض ❌',
+                                    color: Colors.red,
+                                    onTap: () async {
+                                      if (notif.id.isNotEmpty) {
+                                        await FirebaseFirestore.instance.collection('notifications').doc(notif.id).delete();
+                                      }
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('تم رفض دعوة الوكالة'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      }
+                                    },
                                   ),
                                 ],
                               ),

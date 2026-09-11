@@ -179,9 +179,13 @@ export default function AdminManagement({ currentUser }: { currentUser: AppUser 
 
   const getAdminProfile = (): AdminUser | undefined => admins.find(a => a.uid === currentUser?.id);
 
-  const filteredAdmins = admins.filter(a =>
-    !searchQ || a.email.toLowerCase().includes(searchQ.toLowerCase()) || a.displayName.toLowerCase().includes(searchQ.toLowerCase())
-  );
+  const filteredAdmins = admins.filter(a => {
+    if (!searchQ) return true;
+    const q = searchQ.toLowerCase();
+    const email = (a.email || '').toLowerCase();
+    const name = (a.displayName || '').toLowerCase();
+    return email.includes(q) || name.includes(q);
+  });
 
   const filteredLogs = logs.filter(l =>
     !logFilter || l.adminName.toLowerCase().includes(logFilter.toLowerCase()) || l.action.toLowerCase().includes(logFilter.toLowerCase())
@@ -252,21 +256,24 @@ export default function AdminManagement({ currentUser }: { currentUser: AppUser 
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredAdmins.map(admin => (
-                        <tr key={admin.uid} className="border-b border-white/5 hover:bg-white/[0.02]">
-                          <td className="p-3">
-                            <div className={`flex items-center gap-2.5 ${isAr ? 'flex-row-reverse' : ''}`}>
-                              {admin.photoUrl ? (
-                                <img src={admin.photoUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white">
-                                  {(admin.displayName || admin.email)[0]?.toUpperCase() || 'A'}
-                                </div>
-                              )}
-                              <span className="text-white font-medium">{admin.displayName || admin.email}</span>
-                            </div>
-                          </td>
-                          <td className="p-3 text-slate-400">{admin.email}</td>
+                      {filteredAdmins.map(admin => {
+                        const nameOrEmail = admin.displayName || admin.email || admin.uid || 'Admin';
+                        const initialChar = nameOrEmail.trim().charAt(0).toUpperCase() || 'A';
+                        return (
+                          <tr key={admin.uid} className="border-b border-white/5 hover:bg-white/[0.02]">
+                            <td className="p-3">
+                              <div className={`flex items-center gap-2.5 ${isAr ? 'flex-row-reverse' : ''}`}>
+                                {admin.photoUrl ? (
+                                  <img src={admin.photoUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-600 to-rose-500 flex items-center justify-center text-[10px] font-bold text-white">
+                                    {initialChar}
+                                  </div>
+                                )}
+                                <span className="text-white font-medium">{nameOrEmail}</span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-slate-400">{admin.email || '—'}</td>
                           <td className="p-3">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                               admin.role === 'superadmin' ? 'bg-rose-500/10 text-rose-300' :
@@ -299,7 +306,8 @@ export default function AdminManagement({ currentUser }: { currentUser: AppUser 
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                       {filteredAdmins.length === 0 && (
                         <tr><td colSpan={5} className="p-8 text-center text-slate-500">{isAr ? 'لا يوجد مشرفين' : 'No admins found'}</td></tr>
                       )}

@@ -109,18 +109,7 @@ class _RoomBurstDialogState extends State<RoomBurstDialog>
   void _onComboFinished() {
     if (!mounted) return;
     Navigator.of(context).pop();
-
-    // فتح نافذة التسوية وحصر الأرباح (RoomBurstSettlementDialog)
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => RoomBurstSettlementDialog(
-        gift: widget.gift,
-        comboCount: _comboCount,
-        totalWonGold: _totalWonGold,
-        multipliers: _allMultipliers,
-      ),
-    );
+    // الاستلام تلقائي ومباشر بدون نافذة تسوية أرباح
   }
 
   @override

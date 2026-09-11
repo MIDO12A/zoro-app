@@ -96,6 +96,7 @@ class LuckyGiftService {
     String senderAvatar = '',
   }) {
     _roomWinOverlay?.remove();
+    if (!context.mounted) return; // FIX: لا تُنشئ overlay فوق context مفصول
     final overlay = Overlay.of(context, rootOverlay: true);
     _roomWinOverlay = OverlayEntry(
       builder: (ctx) => LuckyRoomWinSvgaOverlay(
@@ -117,6 +118,7 @@ class LuckyGiftService {
   OverlayEntry? _comboSvgaOverlay;
   void showComboSvgaOverlay(BuildContext context, int count) {
     _comboSvgaOverlay?.remove();
+    if (!context.mounted) return; // FIX: لا تُنشئ overlay فوق context مفصول
     final overlay = Overlay.of(context, rootOverlay: true);
     _comboSvgaOverlay = OverlayEntry(
       builder: (ctx) => LuckyComboSvgaOverlay(
@@ -132,6 +134,7 @@ class LuckyGiftService {
   }
 
   void _showCardFlipOverlay(BuildContext context, LuckyGiftBroadcastData data) {
+    if (!context.mounted) return; // FIX: لا تُنشئ overlay فوق context مفصول
     final overlay = Overlay.of(context, rootOverlay: true);
     _currentOverlay?.remove();
     _currentOverlay = OverlayEntry(
@@ -160,6 +163,7 @@ class LuckyGiftService {
   }) {
     if (multiplier < 100) return; // حصراً 100X فما فوق
     _bannerOverlay?.remove();
+    if (!context.mounted) return; // FIX: لا تُنشئ overlay فوق context مفصول
     final overlay = Overlay.of(context, rootOverlay: true);
     _bannerOverlay = OverlayEntry(
       builder: (ctx) => BigWinBanner(
@@ -210,6 +214,7 @@ class LuckyGiftService {
     VoidCallback? onFinished,
   }) {
     _flightOverlay?.remove();
+    if (!context.mounted) return; // FIX: لا تُنشئ overlay فوق context مفصول
     final overlay = Overlay.of(context);
     _flightOverlay = OverlayEntry(
       builder: (ctx) => GiftSeatFlightOverlay(
@@ -229,18 +234,31 @@ class LuckyGiftService {
     overlay.insert(_flightOverlay!);
   }
 
-  void dispose() {
+  /// FIX: تنظيف شامل لكل طبقات الحظ عند الخروج من الغرفة.
+  /// - يزيل جميع الـ overlays النشطة (كومبو/مكسب/بانر/كروت/طيران).
+  /// - يمسح طابور البث المعلّق بحيث لا تظهر مضاعفات الحظ في شاشات أخرى.
+  /// - يلغي مؤقّت الأمان ويعيد حالة التشغيل إلى الوضع الطبيعي.
+  void disposeAllOverlays() {
     _queueWatchdog?.cancel();
-    _globalSub?.cancel();
+    _broadcastQueue.clear();
+    _isPlayingAnim = false;
+
     _currentOverlay?.remove();
     _bannerOverlay?.remove();
     _comboSvgaOverlay?.remove();
     _roomWinOverlay?.remove();
     _flightOverlay?.remove();
+
     _currentOverlay = null;
     _bannerOverlay = null;
     _comboSvgaOverlay = null;
     _roomWinOverlay = null;
     _flightOverlay = null;
+    _globalSub?.cancel();
+    _globalSub = null;
+  }
+
+  void dispose() {
+    disposeAllOverlays();
   }
 }

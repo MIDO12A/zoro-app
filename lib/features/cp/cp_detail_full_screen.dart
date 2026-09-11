@@ -7,7 +7,6 @@ import '../../screens/room/widgets/svga_frame.dart';
 import 'cp_service.dart';
 import 'cp_rewards_screen.dart';
 import 'cp_space_screen.dart';
-import 'cp_tasks_screen.dart';
 import 'cp_settings_screen.dart';
 import 'cp_invitation_list_screen.dart';
 
@@ -127,7 +126,7 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
         body: Stack(
           children: [
             _buildDecoratedBackground(),
-            Center(child: CircularProgressIndicator(color: cfg.cpGold)),
+            Center(child: CircularProgressIndicator(color: cfg.goldColor)),
             _buildAppBar(context),
           ],
         ),
@@ -685,7 +684,7 @@ class _CPDetailFullScreenState extends State<CPDetailFullScreen> {
     final partner = couple?['partner'] as Map<String, dynamic>?;
     final partnerAvatar = hasCp ? (partner?['avatar'] as String? ?? '') : '';
     final partnerName = hasCp ? (partner?['name'] as String? ?? '---') : 'إضافة CP';
-    final cpDays = hasCp ? (couple?['days_together'] as int? ?? 0) : 0;
+    final cpDays = hasCp ? (couple['days_together'] as int? ?? 0) : 0;
 
     return Positioned(
       bottom: 0,

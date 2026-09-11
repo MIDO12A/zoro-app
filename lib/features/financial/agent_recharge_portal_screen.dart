@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../../providers/user_provider.dart';
 import '../../core/supabase_compat.dart';
 
 import '../../core/auth/auth_service.dart';
-import '../../core/auth/supabase_ready.dart';
 import '../../core/theme/brand_colors.dart';
 import 'agent_recharge/agent_recharge_models.dart';
 import 'agent_recharge/tabs/agent_dashboard_tab.dart';
@@ -43,8 +44,9 @@ class _AgentRechargePortalScreenState extends State<AgentRechargePortalScreen>
   }
 
   Future<void> _bootstrap() async {
-    final uid = AuthService.currentSession?.user.id;
-    if (!isSupabaseReady() || uid == null) {
+    final uid = AuthService.currentSession?.user.id ??
+        Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
+    if (uid == null) {
       if (mounted) setState(() => _loading = false);
       return;
     }

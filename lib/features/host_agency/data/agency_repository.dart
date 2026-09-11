@@ -135,6 +135,22 @@ abstract final class AgencyRepository {
     }
   }
 
+  // ─── انسحاب من الوكالة ──────────────────────────────────────────
+  static Future<void> leaveAgency(String agencyId) async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) throw Exception('يجب تسجيل الدخول أولاً');
+    try {
+      await _sb.rpc('agency_leave', params: {'p_agency_id': agencyId});
+    } catch (_) {
+      // Fallback: update status to 'left' or delete membership record
+      await _sb
+          .from('host_agency_members')
+          .update({'status': 'left'})
+          .eq('agency_id', agencyId)
+          .eq('user_id', uid);
+    }
+  }
+
   // ─── لوحة المضيف الموحدة (v2) ───────────────────────────────────
   /// المصدر الوحيد لبيانات المضيف: أرصدة + أهداف + محفظة + إعدادات المحرك
   static Future<HostAgencyStats?> getHostStats() async {
@@ -367,22 +383,28 @@ abstract final class AgencyRepository {
     String agencyId, {
     int limit = 50,
   }) async {
-    final resp = await _sb
-        .from('host_agency_members')
-        .select('''
-          id, user_id, role, status,
-          diamonds_earned_monthly, diamonds_earned_cumulative,
-          diamonds_balance, diamonds_pending_withdrawal,
-          trial_ends_at,
-          profile:profiles(display_name, avatar_url, kayan_id, level)
-        ''')
-        .eq('agency_id', agencyId)
-        .eq('status', 'active')
-        .order('diamonds_earned_monthly', ascending: false)
-        .limit(limit);
-    return (resp as List<dynamic>)
-        .map((e) => Map<String, dynamic>.from(e as Map))
-        .toList();
+    try {
+      final resp = await _sb
+          .from('host_agency_members')
+          .select('''
+            id, user_id, role, status,
+            diamonds_earned_monthly, diamonds_earned_cumulative,
+            diamonds_balance, diamonds_pending_withdrawal,
+            trial_ends_at,
+            profile:profiles(display_name, avatar_url, kayan_id, level)
+          ''')
+          .eq('agency_id', agencyId)
+          .eq('status', 'active');
+      final list = (resp as List<dynamic>)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      list.sort((a, b) => ((b['diamonds_earned_monthly'] as num?) ?? 0)
+          .compareTo((a['diamonds_earned_monthly'] as num?) ?? 0));
+      return list.take(limit).toList();
+    } catch (e) {
+      debugPrint('[AgencyRepository] getMembers error: $e');
+      return [];
+    }
   }
 
   // ─── لوحة المالك ─────────────────────────────────────────────────

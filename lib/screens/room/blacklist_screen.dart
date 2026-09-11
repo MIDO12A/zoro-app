@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../config/r.dart';
 import '../../config/app_colors.dart';
 import '../../services/supabase_service.dart';
+import '../../models/user_model.dart';
 
 class BlacklistScreen extends StatefulWidget {
   final String roomId;
@@ -16,17 +17,36 @@ class BlacklistScreen extends StatefulWidget {
 class _BlacklistScreenState extends State<BlacklistScreen> {
   final SupabaseService _firebaseService = SupabaseService();
   List<Map<String, dynamic>> _bannedUsers = [];
+  final Map<String, UserModel> _userProfiles = {};
+  bool _isLoading = true;
   StreamSubscription? _banSub;
 
   @override
   void initState() {
     super.initState();
-    _loadBannedUsers();
+    _listenToBannedUsers();
   }
 
-  void _loadBannedUsers() {
-    _firebaseService.getRoomBlockedUsers(widget.roomId).then((users) {
-      if (mounted) setState(() => _bannedUsers = users);
+  void _listenToBannedUsers() {
+    _banSub = _firebaseService.roomBlocksStream(widget.roomId).listen((users) async {
+      if (!mounted) return;
+      setState(() {
+        _bannedUsers = users;
+        _isLoading = false;
+      });
+
+      // Load user profiles
+      for (final ban in users) {
+        final uid = ban['blocked_uid']?.toString() ?? '';
+        if (uid.isNotEmpty && !_userProfiles.containsKey(uid)) {
+          final u = await _firebaseService.getUser(uid);
+          if (u != null && mounted) {
+            setState(() {
+              _userProfiles[uid] = u;
+            });
+          }
+        }
+      }
     });
   }
 
@@ -39,20 +59,22 @@ class _BlacklistScreenState extends State<BlacklistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A0F0F),
+      backgroundColor: const Color(0xFF16151A),
       body: SafeArea(
         child: Column(
           children: [
             _buildHeader(context),
             Expanded(
-              child: _bannedUsers.isEmpty
-                  ? _buildEmptyState()
-                  : ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      itemCount: _bannedUsers.length,
-                      separatorBuilder: (_, __) => Container(height: 0.5, color: const Color(0x1AFFFFFF)),
-                      itemBuilder: (_, i) => _buildBannedItem(context, _bannedUsers[i]),
-                    ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator(color: AppColors.goldLight))
+                  : _bannedUsers.isEmpty
+                      ? _buildEmptyState()
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          itemCount: _bannedUsers.length,
+                          separatorBuilder: (_, __) => Container(height: 0.5, color: const Color(0x1AFFFFFF)),
+                          itemBuilder: (_, i) => _buildBannedItem(context, _bannedUsers[i]),
+                        ),
             ),
           ],
         ),
@@ -62,7 +84,11 @@ class _BlacklistScreenState extends State<BlacklistScreen> {
 
   Widget _buildHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: const BoxDecoration(
+        color: Color(0xFF16151A),
+        border: Border(bottom: BorderSide(color: Color(0x1AFFFFFF), width: 0.5)),
+      ),
       child: Row(
         children: [
           GestureDetector(
@@ -73,7 +99,10 @@ class _BlacklistScreenState extends State<BlacklistScreen> {
             ),
           ),
           const Spacer(),
-          const Text('القائمة السوداء', style: TextStyle(fontSize: 17, color: Colors.white, fontWeight: FontWeight.w600)),
+          Text(
+            'القائمة السوداء (${_bannedUsers.length})',
+            style: const TextStyle(fontSize: 17, color: Colors.white, fontWeight: FontWeight.w600),
+          ),
           const Spacer(),
           const SizedBox(width: 32),
         ],
@@ -89,7 +118,7 @@ class _BlacklistScreenState extends State<BlacklistScreen> {
           Icon(Icons.shield_outlined, color: Colors.white.withValues(alpha: 0.2), size: 64),
           const SizedBox(height: 16),
           const Text(
-            'لا يوجد مستخدمين محظورين',
+            'لا يوجد مستخدمين محظورين في هذه الغرفة',
             style: TextStyle(fontSize: 15, color: Colors.white54),
           ),
         ],
@@ -99,18 +128,27 @@ class _BlacklistScreenState extends State<BlacklistScreen> {
 
   Widget _buildBannedItem(BuildContext context, Map<String, dynamic> ban) {
     final uid = ban['blocked_uid']?.toString() ?? '';
-    final reason = ban['reason']?.toString() ?? 'No reason';
-    final nickname = uid.isNotEmpty ? ((1000000 + uid.hashCode.abs() % 9000000).toString()) : 'Unknown';
+    final reason = ban['reason']?.toString() ?? 'مخالفة شروط الغرفة';
+    final profile = _userProfiles[uid];
+    final nickname = profile?.name ?? (uid.length >= 6 ? 'User_${uid.substring(0, 6)}' : uid);
+    final avatar = profile?.photoUrl ?? '';
+    final customId = profile?.customId ?? (uid.length >= 6 ? uid.substring(0, 6) : uid);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           ClipOval(
-            child: R.image(
-              R.avaBoy,
-              width: 44,
-              height: 44,
-              fit: BoxFit.cover,
+            child: SizedBox(
+              width: 46,
+              height: 46,
+              child: avatar.isNotEmpty
+                  ? Image(
+                      image: R.cachedImage(avatar),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => R.image(R.avaBoy, fit: BoxFit.cover),
+                    )
+                  : R.image(R.avaBoy, fit: BoxFit.cover),
             ),
           ),
           const SizedBox(width: 12),
@@ -120,29 +158,33 @@ class _BlacklistScreenState extends State<BlacklistScreen> {
               children: [
                 Text(nickname, style: const TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.w500)),
                 const SizedBox(height: 2),
+                Text('ID: $customId', style: const TextStyle(fontSize: 11, color: Colors.white38)),
+                const SizedBox(height: 2),
                 Text(
                   'السبب: $reason',
-                  style: const TextStyle(fontSize: 12, color: Colors.white54),
+                  style: const TextStyle(fontSize: 12, color: Colors.white60),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
           GestureDetector(
-            onTap: () {
-              _firebaseService.unblockUserFromRoom(widget.roomId, uid);
-              setState(() => _bannedUsers.removeWhere((b) => b['blocked_uid']?.toString() == uid));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('User unbanned'), duration: Duration(seconds: 2)),
-              );
+            onTap: () async {
+              await _firebaseService.unblockUserFromRoom(widget.roomId, uid);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('تم فك الحظر عن $nickname')),
+                );
+              }
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.goldLight.withValues(alpha: 0.15),
+                color: AppColors.goldLight.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.goldLight.withValues(alpha: 0.5), width: 0.8),
               ),
-              child: const Text('فك الحظر', style: TextStyle(fontSize: 12, color: AppColors.goldLight)),
+              child: const Text('فك الحظر', style: TextStyle(fontSize: 12, color: AppColors.goldLight, fontWeight: FontWeight.bold)),
             ),
           ),
         ],

@@ -211,9 +211,9 @@ class _BadgesScreenState extends State<BadgesScreen>
   Widget _buildDetailOverlay() {
     final config = DynamicConfigService();
     final item = _detailItem!;
-    return GestureDetector(
-      onTap: _closeDetail,
-      child: Positioned.fill(
+    return Positioned.fill(
+      child: GestureDetector(
+        onTap: _closeDetail,
         child: Stack(
           children: [
             BackdropFilter(

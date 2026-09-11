@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../../config/r.dart';
 import 'svga_player.dart';
@@ -5,10 +6,8 @@ import 'vap_player.dart';
 
 // ═══════════════════════════════════════════════════════════
 // SvgaFrame — يُشغّل ملف SVGA حقيقي
-// يستخدم في:
-//   - المقاعد (على صورة المستخدم)
-//   - بروفايل المستخدم
-//   - قائمة المتصلين
+// على Android: يستخدم SvgaNativePlayer (SVGAImageView Native) ✅
+// على غير Android: يستخدم SvgaPlayer (Flutter Canvas)
 // ═══════════════════════════════════════════════════════════
 
 class SvgaFrame extends StatelessWidget {
@@ -28,18 +27,23 @@ class SvgaFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!visible) return const SizedBox.shrink();
-    return Container(
-      width: size,
-      height: size,
-      child: isVideoType(svgaPath)
-          ? VapPlayer(url: svgaPath, width: size, height: size, loops: true, fit: fit)
-          : SvgaPlayer(
-              assetPath: svgaPath,
-              width: size,
-              height: size,
-              loops: true,
-              fit: fit,
-            ),
-    );
+
+    Widget player;
+    if (isVideoType(svgaPath)) {
+      player = VapPlayer(url: svgaPath, width: size, height: size, loops: true, fit: fit);
+    } else {
+      player = RepaintBoundary(
+        child: SvgaPlayer(
+          assetPath: svgaPath,
+          width: size,
+          height: size,
+          loops: true,
+          fit: fit,
+        ),
+      );
+    }
+
+    // الإطار عنصر جمالي ديكوري ولا يجب أن يعترض نقرات المستخدم على الصورة أو المقعد إطلاقاً
+    return IgnorePointer(child: player);
   }
 }

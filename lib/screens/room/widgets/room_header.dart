@@ -61,7 +61,7 @@ class RoomHeader extends StatelessWidget {
                   right: isAr ? 0 : null,
                   top: 0,
                   bottom: 0,
-                  width: sw * 0.70,
+                  width: sw * 0.45,
                   child: GestureDetector(
                     onTap: onInfoTap,
                     child: Padding(
@@ -294,11 +294,17 @@ class RoomHeader extends StatelessWidget {
   Widget _buildOnlineButton() {
     return GestureDetector(
       onTap: onOnlineTap,
+      behavior: HitTestBehavior.opaque,
       child: Image.asset(
-        'assets/mipmap-xxhdpi/room_online_icon.png',
+        'assets/images/room_online_robot_ic.webp',
         width: 32,
         height: 32,
         fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Icon(
+          Icons.people_alt_rounded,
+          color: Color(0xFFFFD54F),
+          size: 24,
+        ),
       ),
     );
   }

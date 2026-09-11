@@ -1,16 +1,20 @@
 import cron from 'node-cron';
+import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../config/database';
 
 interface RankReward {
-  id: number;
+  id: string | number;
   period: string;
   rank_position: number;
   slot_index: number;
+  reward_type: string;
   label_ar: string;
   label_en: string;
   svga_url: string;
   image_url: string;
+  coins?: number;
   sort_order: number;
+  isActive?: boolean;
 }
 
 interface PeriodConfig {
@@ -36,6 +40,7 @@ interface ActiveReward {
     svga_url: string;
     image_url: string;
     slot_index: number;
+    coins?: number;
     expires_at: string;
   }[];
   awarded_at: string;
@@ -102,6 +107,32 @@ async function saveActiveRewards(rewards: ActiveReward[]): Promise<void> {
 }
 
 async function getRankRewardsList(): Promise<RankReward[]> {
+  // FIX: تُقرأ قوالب المكافآت من مجموعة cp_rank_rewards مباشرة (نفس مصدر اللوحة
+  // والتطبيق). فقط المكافآت المفعلة (isActive !== false) تُوزع.
+  try {
+    const snap = await db.collection('cp_rank_rewards').get();
+    const rows: RankReward[] = snap.docs.map(d => {
+      const c = d.data() as any;
+      return {
+        id: c.id ?? d.id,
+        period: c.period ?? 'weekly',
+        rank_position: Number(c.rank_position ?? 1),
+        slot_index: Number(c.slot_index ?? 0),
+        reward_type: c.reward_type ?? 'frame_svga',
+        label_ar: c.label_ar ?? '',
+        label_en: c.label_en ?? '',
+        svga_url: c.svga_url ?? '',
+        image_url: c.image_url ?? '',
+        coins: Number(c.coins ?? 0),
+        sort_order: Number(c.sort_order ?? c.slot_index ?? 0),
+        isActive: c.isActive !== false,
+      };
+    }).filter(r => r.isActive);
+    if (rows.length > 0) return rows;
+  } catch (err) {
+    console.error('[CP Rewards] getRankRewardsList error:', err);
+  }
+  // Fallback قديم: JSON blob في cp_settings (في حال كانت المجموعة فارغة).
   const raw = await getSetting(SETTINGS_KEYS.RANK_REWARDS_DATA);
   return parseJson(raw, []);
 }
@@ -222,7 +253,8 @@ export async function distributeRewards(): Promise<{ success: boolean; message: 
       const slotRewards = rankRewards.filter(r => r.rank_position === rank);
 
       const entries: ActiveReward['rewards'] = slotRewards.map(sr => ({
-        type: sr.label_ar.includes('إطار') || sr.label_ar.includes('frame') || sr.label_ar.includes('ايطار') ? 'frame'
+        type: (sr.coins ?? 0) > 0 ? 'coins'
+          : sr.label_ar.includes('إطار') || sr.label_ar.includes('frame') || sr.label_ar.includes('ايطار') ? 'frame'
           : sr.label_ar.includes('وسام') || sr.label_ar.includes('badge') ? 'badge'
           : sr.label_ar.includes('قلادة') || sr.label_ar.includes('necklace') ? 'necklace'
           : 'frame',
@@ -231,6 +263,7 @@ export async function distributeRewards(): Promise<{ success: boolean; message: 
         svga_url: sr.svga_url,
         image_url: sr.image_url,
         slot_index: sr.slot_index,
+        coins: sr.coins ?? 0,
         expires_at: expiresAt,
       }));
 
@@ -309,6 +342,7 @@ async function assignRewardsToUser(userUid: string, rewards: ActiveReward['rewar
   let frames: any[] = user.owned_level_frames || [];
   let badges: any[] = user.owned_level_badges || [];
   let necklaces: any[] = user.owned_level_necklaces || [];
+  let totalCoins = 0;
 
   for (const r of rewards) {
     const entry = {
@@ -321,7 +355,9 @@ async function assignRewardsToUser(userUid: string, rewards: ActiveReward['rewar
       expires_at: r.expires_at,
     };
 
-    if (r.type === 'frame') {
+    if (r.type === 'coins') {
+      totalCoins += r.coins ?? 0;
+    } else if (r.type === 'frame') {
       frames.push({ ...entry, type: 'frame' });
     } else if (r.type === 'badge') {
       badges.push({ ...entry, type: 'badge' });
@@ -335,8 +371,33 @@ async function assignRewardsToUser(userUid: string, rewards: ActiveReward['rewar
   if (badges.length > 0) updates.owned_level_badges = badges;
   if (necklaces.length > 0) updates.owned_level_necklaces = necklaces;
 
+  // FIX: العملات تُضاف عبر FieldValue.increment (لا تتخطى تحديثات أخرى للرصيد).
+  if (totalCoins > 0) {
+    updates.coins = FieldValue.increment(totalCoins);
+  }
+
   if (Object.keys(updates).length > 0) {
     await userRef.set(updates, { merge: true });
+  }
+
+  // سجل منح لكل مستخدم (user_rewards) — مصدر موحّد بين اللوحة والتطبيق.
+  try {
+    for (const r of rewards) {
+      await db.collection('user_rewards').add({
+        user_uid: userUid,
+        reward_type: r.type,
+        label_ar: r.label_ar,
+        label_en: r.label_en,
+        svga_url: r.svga_url,
+        image_url: r.image_url,
+        coins: r.coins ?? 0,
+        source: 'cp_rank_reward',
+        expires_at: r.expires_at,
+        created_at: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error('[CP Rewards] user_rewards grant log error:', err);
   }
 }
 
@@ -415,6 +476,19 @@ async function removeExpiredFromUser(userUid: string): Promise<void> {
       }
     }
     await userRef.set(updates, { merge: true });
+  }
+
+  // حذف سجلات user_rewards المنتهية لهذا المستخدم.
+  try {
+    const snap = await db.collection('user_rewards').where('user_uid', '==', userUid).get();
+    for (const doc of snap.docs) {
+      const d = doc.data() as any;
+      if (!d.expires_at) continue;
+      const exp = new Date(d.expires_at);
+      if (exp <= now) await doc.ref.delete();
+    }
+  } catch (err) {
+    console.error('[CP Rewards] cleanup user_rewards error:', err);
   }
 }
 

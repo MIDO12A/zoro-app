@@ -16,6 +16,7 @@ import 'svga_frame.dart';
 import 'svga_player.dart';
 import 'vap_player.dart';
 import 'vip_cover_animator.dart';
+import '../../../widgets/user_id_widget.dart';
 
 class UserProfile extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -69,9 +70,13 @@ class UserProfile extends StatefulWidget {
     this.onToggleAdmin,
   });
 
+  static final Map<String, String> customIdCache = {};
+
   @override
   State<UserProfile> createState() => _UserProfileState();
 }
+
+final Map<String, String> customIdCache = UserProfile.customIdCache;
 
 class _UserProfileState extends State<UserProfile> {
   Map<String, dynamic> _extraUserData = {};
@@ -91,6 +96,14 @@ class _UserProfileState extends State<UserProfile> {
   void initState() {
     super.initState();
     _extraUserData = Map<String, dynamic>.from(widget.user);
+    final uid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
+    final cid = widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString();
+    if (cid != null && cid.isNotEmpty) {
+      customIdCache[uid] = cid;
+      _extraUserData['custom_id'] = cid;
+    } else if (customIdCache.containsKey(uid)) {
+      _extraUserData['custom_id'] = customIdCache[uid];
+    }
     _fetchData();
   }
 
@@ -100,8 +113,12 @@ class _UserProfileState extends State<UserProfile> {
     final oldUid = oldWidget.user['id']?.toString() ?? oldWidget.user['uid']?.toString();
     final newUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString();
     if (oldUid != newUid) {
+      final cid = widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? (newUid != null ? customIdCache[newUid] : null);
       setState(() {
         _extraUserData = Map<String, dynamic>.from(widget.user);
+        if (cid != null && cid.isNotEmpty) {
+          _extraUserData['custom_id'] = cid;
+        }
         _dataLoaded = false;
       });
       _fetchData();
@@ -117,6 +134,10 @@ class _UserProfileState extends State<UserProfile> {
       final userObj = await svc.getUser(uid);
       if (userObj != null) {
         _extraUserData.addAll(userObj.toMap());
+        if (userObj.customId.isNotEmpty) {
+          customIdCache[uid] = userObj.customId;
+          _extraUserData['custom_id'] = userObj.customId;
+        }
       }
       try {
         final userData = await Supabase.instance.client
@@ -126,6 +147,11 @@ class _UserProfileState extends State<UserProfile> {
             .maybeSingle();
         if (userData != null) {
           _extraUserData.addAll(userData);
+          final cId = userData['custom_id']?.toString();
+          if (cId != null && cId.isNotEmpty) {
+            customIdCache[uid] = cId;
+            _extraUserData['custom_id'] = cId;
+          }
         }
       } catch (_) {}
 
@@ -270,8 +296,11 @@ class _UserProfileState extends State<UserProfile> {
     final isHost = widget.user['is_host'] == true || widget.user['role'] == 'host' || widget.user['role'] == 'owner' || widget.isModerator;
 
     final fbUid = widget.user['id']?.toString() ?? widget.user['uid']?.toString() ?? '';
-    final generatedId = fbUid.isNotEmpty ? (1000000 + (fbUid.hashCode.abs() % 9000000)).toString() : '9000000';
-    final idText = _extraUserData['custom_id']?.toString() ?? widget.user['custom_id']?.toString() ?? widget.user['customId']?.toString() ?? generatedId;
+    final idText = _extraUserData['custom_id']?.toString() ??
+        widget.user['custom_id']?.toString() ??
+        widget.user['customId']?.toString() ??
+        customIdCache[fbUid] ??
+        '...';
 
     final cardBgColor = config.miniprofileBgColor;
     final cardBorderColor = config.miniprofileBorderColor;
@@ -417,39 +446,13 @@ class _UserProfileState extends State<UserProfile> {
               ),
               const SizedBox(height: 6),
 
-              // 2. ID & Copy & Flag
+              // 2. ID (مطابق تماماً للأصل مع المعرف المميز والعادي) & Flag
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: idText));
-                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                        const SnackBar(content: Text('تم نسخ المعرف بنجاح'), duration: Duration(seconds: 1)),
-                      );
-                    },
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.copy_rounded, color: Colors.white54, size: 13),
-                        const SizedBox(width: 4),
-                        Text(
-                          idText,
-                          style: TextStyle(fontSize: 12, color: subTextColor, fontWeight: FontWeight.w500),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
-                    child: Image.network(
-                      'https://flagcdn.com/w40/${country.toLowerCase()}.png',
-                      width: 18,
-                      height: 12,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Text('🇪🇬', style: TextStyle(fontSize: 12)),
-                    ),
+                  UserIdWidget(
+                    idText: idText,
+                    countryCode: country,
                   ),
                 ],
               ),

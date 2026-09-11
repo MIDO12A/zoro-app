@@ -22,8 +22,8 @@ class CpService {
   // My Data
   // ═══════════════════════════════════════════════════════
 
-  static Future<Map<String, dynamic>> getMyData() async {
-    final uid = _uid;
+  static Future<Map<String, dynamic>> getMyData([String? userUid]) async {
+    final uid = userUid ?? _uid;
     if (uid == null) return <String, dynamic>{'error': 'Not authenticated'};
 
     final couple = await _findActiveCoupleFor(uid);
@@ -67,6 +67,7 @@ class CpService {
           'name': partner?.name ?? '',
           'avatar': partner?.photoUrl ?? '',
         },
+        'gift_id': couple['gift_id']?.toString() ?? 'ring_1',
         'started_at': couple['started_at'],
         'countdown_end': couple['countdown_end'],
         'days_together': daysTogether,
@@ -96,14 +97,38 @@ class CpService {
 
     final snap = await _db.collection('cp_couples').orderBy(scoreField, descending: true).get();
     final rows = <Map<String, dynamic>>[];
+    final seenPairs = <String>{};
+    final seenUsers = <String>{};
+    final now = DateTime.now();
 
     for (final doc in snap.docs) {
       if (rows.length >= limit) break;
       final d = doc.data();
       if (d['ended_at'] != null) continue;
 
-      final u1 = await FirebaseService().getUser(d['user1_uid'] as String? ?? '');
-      final u2 = await FirebaseService().getUser(d['user2_uid'] as String? ?? '');
+      final exp = _parseDate(d['expires_at'] ?? d['countdown_end']);
+      if (exp != null && exp.isBefore(now)) {
+        doc.reference.update(<String, dynamic>{
+          'ended_at': _now(),
+          'updated_at': _now(),
+        }).catchError((_) {});
+        continue;
+      }
+
+      final u1Uid = d['user1_uid']?.toString() ?? '';
+      final u2Uid = d['user2_uid']?.toString() ?? '';
+      if (u1Uid.isEmpty || u2Uid.isEmpty) continue;
+
+      final pairKey = ([u1Uid, u2Uid]..sort()).join('_');
+      if (seenPairs.contains(pairKey) || seenUsers.contains(u1Uid) || seenUsers.contains(u2Uid)) {
+        continue;
+      }
+      seenPairs.add(pairKey);
+      seenUsers.add(u1Uid);
+      seenUsers.add(u2Uid);
+
+      final u1 = await FirebaseService().getUser(u1Uid);
+      final u2 = await FirebaseService().getUser(u2Uid);
 
       int days = 1;
       try {
@@ -124,8 +149,8 @@ class CpService {
         'avatar2': u2?.photoUrl ?? '',
         'name1': u1?.name ?? '',
         'name2': u2?.name ?? '',
-        'user1_uid': d['user1_uid'] ?? '',
-        'user2_uid': d['user2_uid'] ?? '',
+        'user1_uid': u1Uid,
+        'user2_uid': u2Uid,
         'score': (d[scoreField] as num?)?.toInt() ?? 0,
         'cp_days': days,
       });
@@ -316,8 +341,10 @@ class CpService {
         (int.tryParse(settings['cp_link_female_reward_days']?.toString() ?? '7') ?? 7);
 
     // Determine who gets male vs female reward
-    final u1IsFemale = (u1?.gender?.toLowerCase() == 'female' || u1?.gender == 'أنثى' || u1?.gender == '2');
-    final u2IsFemale = (u2?.gender?.toLowerCase() == 'female' || u2?.gender == 'أنثى' || u2?.gender == '2');
+    final u1Gender = u1?.gender;
+    final u2Gender = u2?.gender;
+    final u1IsFemale = (u1Gender?.toLowerCase() == 'female' || u1Gender == 'أنثى' || u1Gender == '2');
+    final u2IsFemale = (u2Gender?.toLowerCase() == 'female' || u2Gender == 'أنثى' || u2Gender == '2');
 
     final maleUid = u1IsFemale ? receiverUid : (u2IsFemale ? senderUid : senderUid);
     final femaleUid = maleUid == senderUid ? receiverUid : senderUid;
@@ -774,7 +801,7 @@ class CpService {
         final d = e.data();
         d['id'] = e.id;
         return d;
-      }).toList();
+      }).where((d) => d['isActive'] != false).toList();
       list.sort((a, b) {
         final rankCmp = ((a['rank_position'] as num?)?.toInt() ?? 0)
             .compareTo((b['rank_position'] as num?)?.toInt() ?? 0);
@@ -802,6 +829,28 @@ class CpService {
       } catch (_) {}
     }
     return <Map<String, dynamic>>[];
+  }
+
+  /// Realtime stream of rank rewards for a period (cp_rank_rewards collection).
+  /// يُحدَّث فورياً عند أي تعديل من لوحة التحكم (سيّدة على isActive والفرز).
+  static Stream<List<Map<String, dynamic>>> rewardsStream({
+    String period = 'weekly',
+  }) {
+    return _db.collection('cp_rank_rewards').snapshots().map((snap) {
+      final list = snap.docs.map((e) {
+        final d = e.data();
+        d['id'] = e.id;
+        return d;
+      }).where((d) => d['period'] == period && d['isActive'] != false).toList();
+      list.sort((a, b) {
+        final rankCmp = ((a['rank_position'] as num?)?.toInt() ?? 0)
+            .compareTo((b['rank_position'] as num?)?.toInt() ?? 0);
+        if (rankCmp != 0) return rankCmp;
+        return ((a['slot_index'] as num?)?.toInt() ?? 0)
+            .compareTo((b['slot_index'] as num?)?.toInt() ?? 0);
+      });
+      return list;
+    });
   }
 
   // ═══════════════════════════════════════════════════════

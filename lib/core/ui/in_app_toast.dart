@@ -15,6 +15,7 @@ abstract final class KayanInAppToast {
     ));
   }
 
+  static void success(String msg) => _show(msg, const Color(0xFF2E7D32));
   static void info(String msg) => _show(msg, const Color(0xFF1565C0));
   static void warning(String msg) => _show(msg, const Color(0xFFE65100));
   static void agency(String msg) => _show(msg, const Color(0xFF6A1B9A));
