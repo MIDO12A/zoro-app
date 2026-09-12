@@ -411,15 +411,75 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // سجل إشعارات الهدايا للغرفة
   final List<_RoomGiftNotice> _sentGifts = [];
 
-  // مشغل صوت الهدية والاهتزاز اللمسي
+  // مشغل صوت الهدية والدخوليات والاهتزاز اللمسي
   AudioPlayer? _giftAudioPlayer;
-  void _playGiftArrivalSound() {
+  AudioPlayer? _entranceAudioPlayer;
+
+  Future<void> _playGiftArrivalSound() async {
     try {
       HapticFeedback.lightImpact();
       _giftAudioPlayer ??= AudioPlayer();
-      _giftAudioPlayer!.setAsset('assets/sounds/key_music.mp3').then((_) {
-        _giftAudioPlayer?.play().catchError((_) {});
-      }).catchError((_) {});
+
+      final remoteUrl = DynamicConfigService().getAssetUrl('gift_sound') ??
+          DynamicConfigService().getAssetUrl('gift') ??
+          DynamicConfigService().getAssetOverride('assets/sounds/key_music.mp3');
+
+      if (remoteUrl != null && remoteUrl.isNotEmpty) {
+        await _giftAudioPlayer!.setUrl(remoteUrl);
+      } else {
+        await _giftAudioPlayer!.setAsset('assets/sounds/key_music.mp3');
+      }
+      await _giftAudioPlayer!.setVolume(1.0);
+      await _giftAudioPlayer!.seek(Duration.zero);
+      await _giftAudioPlayer!.play();
+    } catch (e) {
+      debugPrint('[RoomScreen] gift sound error: $e');
+      try {
+        final player = AudioPlayer();
+        await player.setAsset('assets/sounds/key_music.mp3');
+        await player.setVolume(1.0);
+        await player.play();
+        player.playerStateStream.listen((state) {
+          if (state.processingState == ProcessingState.completed) {
+            player.dispose();
+          }
+        });
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _playEntranceSound() async {
+    try {
+      _entranceAudioPlayer ??= AudioPlayer();
+
+      final remoteUrl = DynamicConfigService().getAssetUrl('entrance_sound') ??
+          DynamicConfigService().getAssetUrl('entrance') ??
+          DynamicConfigService().getAssetUrl('car_sound') ??
+          DynamicConfigService().getAssetOverride('assets/sounds/b_music.mp3');
+
+      if (remoteUrl != null && remoteUrl.isNotEmpty) {
+        await _entranceAudioPlayer!.setUrl(remoteUrl);
+      } else {
+        await _entranceAudioPlayer!.setAsset('assets/sounds/b_music.mp3');
+      }
+      await _entranceAudioPlayer!.setVolume(1.0);
+      await _entranceAudioPlayer!.seek(Duration.zero);
+      await _entranceAudioPlayer!.play();
+    } catch (e) {
+      debugPrint('[RoomScreen] entrance sound error: $e');
+      try {
+        final player = AudioPlayer();
+        await player.setAsset('assets/sounds/b_music.mp3');
+        await player.setVolume(1.0);
+        await player.play();
+        _entranceAudioPlayer = player;
+      } catch (_) {}
+    }
+  }
+
+  void _stopEntranceSound() {
+    try {
+      _entranceAudioPlayer?.stop();
     } catch (_) {}
   }
 
@@ -816,6 +876,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _loadRoomData() {
     _joinedAt = DateTime.now();
+    LuckyGiftService().disposeAllOverlays();
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.currentUser;
     if (currentUser != null) {
@@ -927,19 +988,33 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     final joinedMs = _joinedAt?.millisecondsSinceEpoch ?? 0;
     final seenMsgIds = <String>{};
+    bool _msgStreamInitial = true;
     _msgSub = _firebaseService.messagesStream(widget.roomId).listen((msgs) {
       if (mounted) {
         final clearedAt = _currentRoom?.chatClearedAt ?? 0;
-        final filterTime = clearedAt > 0 ? clearedAt : (joinedMs - 30000);
+        final filterTime = max(joinedMs - 5000, clearedAt);
+        final currentSessionMsgs = msgs.where((m) => m.timestamp >= filterTime).toList();
         setState(() {
           _chatMessages
             ..clear()
-            ..addAll(msgs.where((m) => m.timestamp >= filterTime));
+            ..addAll(currentSessionMsgs);
           _msgCount = _chatMessages.length;
         });
-        // عرض هدايا الحظ (lucky_gift) والهدايا العادية (gift) والمظاريف الحمراء (lucky_bag) لكافة أعضاء الغرفة لحظياً
-        for (final m in msgs) {
-          if (m.timestamp < filterTime) continue;
+
+        // إذا كانت هذه المرة الأولى عند دخول الغرفة، نعتبر كافة الرسائل السابقة شوهدت بالفعل
+        // لمنع تشغيل مضاعفات الحظ أو مؤثرات الهدايا القديمة إطلاقاً
+        if (_msgStreamInitial) {
+          for (final m in msgs) {
+            final mId = m.msgId.isNotEmpty ? m.msgId : '${m.timestamp}_${m.senderUid}';
+            seenMsgIds.add(mId);
+          }
+          _msgStreamInitial = false;
+          return;
+        }
+
+        // عرض هدايا الحظ (lucky_gift) والهدايا العادية (gift) والمظاريف الحمراء (lucky_bag) لكافة أعضاء الغرفة لحظياً للرسائل الجديدة فقط
+        for (final m in currentSessionMsgs) {
+          if (m.timestamp < joinedMs) continue;
           final mId = m.msgId.isNotEmpty ? m.msgId : '${m.timestamp}_${m.senderUid}';
           if (seenMsgIds.contains(mId)) continue;
           seenMsgIds.add(mId);
@@ -1280,7 +1355,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               });
             }
           }
-          if (playedAny) _hasPlayedEntryAnimations = true;
+          if (playedAny) {
+            _hasPlayedEntryAnimations = true;
+            _playEntranceSound();
+          }
         }
       }
       // Process any entrance animations that were buffered while store items were loading
@@ -1301,9 +1379,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     });
 
     // Listen for other users' entrance/car effects
+    bool _entranceStreamInitial = true;
     _entranceSub = _firebaseService.entrancesStream(widget.roomId).listen((entrances) {
       if (!mounted || entrances.isEmpty) return;
       final joinedMs = _joinedAt?.millisecondsSinceEpoch ?? 0;
+      if (_entranceStreamInitial) {
+        for (final entry in entrances) {
+          final uid = entry['uid']?.toString();
+          final entranceItemId = entry['entranceItem']?.toString() ?? '';
+          if (uid != null && entranceItemId.isNotEmpty) {
+            _seenEntranceIds.add('${uid}_$entranceItemId');
+          }
+        }
+        _entranceStreamInitial = false;
+        return;
+      }
       for (final entry in entrances) {
         final uid = entry['uid']?.toString();
         if (uid == null || uid == _currentUserId) continue;
@@ -1449,6 +1539,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _playEntranceEffectRaw(Map<String, dynamic> data, String url) {
     if (!mounted) return;
+    _playEntranceSound();
     final userName = data['name']?.toString() ?? '';
     final userPhoto = data['photoUrl']?.toString() ?? '';
     setState(() {
@@ -1462,6 +1553,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _playEntranceEffect(Map<String, dynamic> data, StoreItemModel storeItem, String? uid) {
     if (!mounted) return;
+    _playEntranceSound();
     final nameKey = storeItem.nameKey;
     final photoKey = storeItem.photoKey;
     final enteringUser = uid != null ? _cachedUsers[uid] : null;
@@ -1588,6 +1680,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _giftAnimWatchdog?.cancel();
     _giftAudioPlayer?.dispose();
     _giftAudioPlayer = null;
+    _stopEntranceSound();
+    _entranceAudioPlayer?.dispose();
+    _entranceAudioPlayer = null;
     _roomComboTimer?.cancel();
     _bannerHideTimer?.cancel();
     _roomSub?.cancel();
@@ -3079,6 +3174,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 imageReplacement: _entranceImageReplacement,
                 defaultImageUrl: _entranceDefaultImage,
                 onFinished: () => setState(() {
+                  _stopEntranceSound();
                   _showEntranceAnim = false;
                   _entranceAnimAsset = null;
                   _entranceTextReplacement = null;
@@ -3097,6 +3193,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 defaultImageUrl: _entranceItemDefaultImage,
                 showBackground: false,
                 onFinished: () => setState(() {
+                  _stopEntranceSound();
                   _showEntranceItemAnim = false;
                   _entranceItemAnimAsset = null;
                   _entranceItemTextReplacement = null;

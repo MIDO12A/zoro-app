@@ -409,6 +409,9 @@ class FirebaseService {
         msgs = msgs.where((m) => m.timestamp >= sinceMs).toList();
       }
       msgs.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+      if (msgs.length > 60) {
+        msgs = msgs.sublist(msgs.length - 60);
+      }
       return msgs;
     });
   }
