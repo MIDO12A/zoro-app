@@ -2870,6 +2870,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                 defaultImage: defImg,
                               );
                             }
+                            _playGiftArrivalSound();
 
                             _startRoomComboTimer(data);
                             _pendingBannerData = data;

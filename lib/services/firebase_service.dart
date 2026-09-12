@@ -448,8 +448,9 @@ class FirebaseService {
     final totalCost = value * count;
     final senderRef = _db.collection('users').doc(senderId);
 
-    // Look up agency membership outside transaction to prevent Firestore transaction query errors
+    // Look up agency membership and agency outside transaction to prevent Firestore transaction query errors & ordering violations
     DocumentReference? agencyMemberRef;
+    DocumentReference? agencyRef;
     try {
       final memberQs = await _db
           .collection('host_agency_members')
@@ -458,6 +459,10 @@ class FirebaseService {
           .get();
       if (memberQs.docs.isNotEmpty) {
         agencyMemberRef = memberQs.docs.first.reference;
+        final aid = memberQs.docs.first.data()['agency_id']?.toString();
+        if (aid != null && aid.isNotEmpty) {
+          agencyRef = _db.collection('host_agencies').doc(aid);
+        }
       }
     } catch (_) {}
 
@@ -481,6 +486,11 @@ class FirebaseService {
         DocumentSnapshot? agencyMemberSnap;
         if (agencyMemberRef != null) {
           agencyMemberSnap = await txn.get(agencyMemberRef);
+        }
+
+        DocumentSnapshot? agencySnap;
+        if (agencyRef != null) {
+          agencySnap = await txn.get(agencyRef);
         }
 
         // ── THEN ALL WRITES ──
@@ -583,23 +593,19 @@ class FirebaseService {
         if (agencyMemberSnap != null && agencyMemberSnap.exists) {
           final md = agencyMemberSnap.data() as Map<String, dynamic>? ?? {};
           txn.update(agencyMemberSnap.reference, {
+            'diamonds': _asInt(md['diamonds']) + totalCost,
             'diamonds_available': _asInt(md['diamonds_available']) + totalCost,
             'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
             'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
           });
+        }
 
-          final agencyId = md['agency_id']?.toString();
-          if (agencyId != null && agencyId.isNotEmpty) {
-            final agencyRef = _db.collection('host_agencies').doc(agencyId);
-            final aSnap = await txn.get(agencyRef);
-            if (aSnap.exists) {
-              final ad = aSnap.data() as Map<String, dynamic>? ?? {};
-              txn.update(agencyRef, {
-                'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
-                'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
-              });
-            }
-          }
+        if (agencySnap != null && agencySnap.exists) {
+          final ad = agencySnap.data() as Map<String, dynamic>? ?? {};
+          txn.update(agencySnap.reference, {
+            'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
+            'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
+          });
         }
       });
     } catch (e) {
@@ -733,6 +739,24 @@ class FirebaseService {
     final id = const Uuid().v4();
     final senderRef = _db.collection('users').doc(senderId);
 
+    // Look up agency membership and agency outside transaction to prevent Firestore transaction query errors & ordering violations
+    DocumentReference? agencyMemberRef;
+    DocumentReference? agencyRef;
+    try {
+      final memberQs = await _db
+          .collection('host_agency_members')
+          .where('user_id', isEqualTo: receiverId)
+          .limit(1)
+          .get();
+      if (memberQs.docs.isNotEmpty) {
+        agencyMemberRef = memberQs.docs.first.reference;
+        final aid = memberQs.docs.first.data()['agency_id']?.toString();
+        if (aid != null && aid.isNotEmpty) {
+          agencyRef = _db.collection('host_agencies').doc(aid);
+        }
+      }
+    } catch (_) {}
+
     try {
       await _db.runTransaction((txn) async {
         final senderSnap = await txn.get(senderRef);
@@ -748,6 +772,16 @@ class FirebaseService {
 
         final walletRef = _db.collection('user_wallets').doc(receiverId);
         final wSnap = await txn.get(walletRef);
+
+        DocumentSnapshot? agencyMemberSnap;
+        if (agencyMemberRef != null) {
+          agencyMemberSnap = await txn.get(agencyMemberRef);
+        }
+
+        DocumentSnapshot? agencySnap;
+        if (agencyRef != null) {
+          agencySnap = await txn.get(agencyRef);
+        }
 
         // تسجيل العملية في sent_lucky_gifts
         txn.set(_db.collection('sent_lucky_gifts').doc(id), {
@@ -862,7 +896,30 @@ class FirebaseService {
         } else {
           txn.set(walletRef, {'user_id': receiverId, 'diamond_balance': totalCost, 'gold_balance': 0});
         }
+
+        if (agencyMemberSnap != null && agencyMemberSnap.exists) {
+          final md = agencyMemberSnap.data() as Map<String, dynamic>? ?? {};
+          txn.update(agencyMemberSnap.reference, {
+            'diamonds': _asInt(md['diamonds']) + totalCost,
+            'diamonds_available': _asInt(md['diamonds_available']) + totalCost,
+            'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
+            'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
+          });
+        }
+
+        if (agencySnap != null && agencySnap.exists) {
+          final ad = agencySnap.data() as Map<String, dynamic>? ?? {};
+          txn.update(agencySnap.reference, {
+            'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
+            'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
+          });
+        }
       });
+
+      // Evaluate agency host targets and milestones for receiver
+      try {
+        AgencyTargetEvaluator.evaluateHostTargets(receiverId);
+      } catch (_) {}
 
       // بث الفوز الكبير عبر جميع الغرف في التطبيق (Global Big Win Broadcast)
       if (isBigWin || maxMultiplier >= 20) {
@@ -2718,7 +2775,8 @@ class FirebaseService {
       final uSnap = await _db.collection('users').doc(mUid).get();
       final uData = uSnap.exists ? ((uSnap.data() as Map<String, dynamic>?) ?? {}) : {};
 
-      final diamonds = _asInt(mData['diamonds'] ?? uData['diamonds'] ?? 0);
+      final mDiamonds = math.max(_asInt(mData['diamonds']), _asInt(mData['diamonds_earned_monthly']));
+      final diamonds = math.max(mDiamonds, _asInt(uData['diamonds']));
       totalDiamonds += diamonds;
 
       anchors.add({

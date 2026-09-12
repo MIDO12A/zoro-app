@@ -1489,11 +1489,11 @@ class _AnchorAgentScreenState extends State<AnchorAgentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatItem('الماسات المكتسبة', R.formatCoins(info?.transferMoney ?? 0)),
+              _buildStatItem('الماسات المكتسبة 💎', R.formatCoins(info?.transferMoney ?? 0)),
               Container(width: 1, height: 24, color: Colors.white12),
-              _buildStatItem('قيمة الأرباح', '\$${info?.transferDollar ?? 0}'),
+              _buildStatItem('قيمة الأرباح المستحقة', '\$${info?.transferDollar ?? 0} USD'),
               Container(width: 1, height: 24, color: Colors.white12),
-              _buildStatItem('رصيد الكوينز', R.formatCoins(info?.agentBean ?? 0)),
+              _buildStatItem('رصيد الكوينز 🪙', R.formatCoins(info?.agentBean ?? 0)),
             ],
           ),
         ],

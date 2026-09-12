@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_vap_plugin/flutter_vap_plugin.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../../../services/media_cache_service.dart';
 
@@ -64,10 +65,13 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
   bool _finishedOnce = false;
   Timer? _safetyTimer;
   late AnimationController _fadeController;
+  AudioPlayer? _audioPlayer;
+  late int _sessionKey;
 
   @override
   void initState() {
     super.initState();
+    _sessionKey = DateTime.now().millisecondsSinceEpoch;
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -75,7 +79,7 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
 
     // مهلة أمان قصوى لمنع تجميد الشاشة أو بقاء الهدية عالقة إذا تعطل محرك الـ VAP الأصلي
     if (!widget.loops) {
-      _safetyTimer = Timer(const Duration(seconds: 10), () {
+      _safetyTimer = Timer(const Duration(seconds: 12), () {
         if (mounted && !_finishedOnce) {
           _finishSafely(forceStop: true);
         }
@@ -90,6 +94,11 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
     _finishedOnce = true;
     _safetyTimer?.cancel();
     _safetyTimer = null;
+    try {
+      _audioPlayer?.stop();
+      _audioPlayer?.dispose();
+      _audioPlayer = null;
+    } catch (_) {}
     if (forceStop) {
       try {
         _controller.stop();
@@ -104,13 +113,19 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
     if (old.url != widget.url) {
       _controller.stop();
       _safetyTimer?.cancel();
+      try {
+        _audioPlayer?.stop();
+        _audioPlayer?.dispose();
+        _audioPlayer = null;
+      } catch (_) {}
       _finishedOnce = false;
       _isViewCreated = false;
       _localPath = null;
       _ready = false;
       _hasError = false;
+      _sessionKey = DateTime.now().millisecondsSinceEpoch;
       if (!widget.loops) {
-        _safetyTimer = Timer(const Duration(seconds: 10), () {
+        _safetyTimer = Timer(const Duration(seconds: 12), () {
           if (mounted && !_finishedOnce) {
             _finishSafely(forceStop: true);
           }
@@ -124,6 +139,11 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
   void dispose() {
     _safetyTimer?.cancel();
     _safetyTimer = null;
+    try {
+      _audioPlayer?.stop();
+      _audioPlayer?.dispose();
+      _audioPlayer = null;
+    } catch (_) {}
     if (!_finishedOnce) {
       try {
         _controller.stop();
@@ -175,8 +195,7 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
   void _playCurrent() {
     if (_localPath == null) return;
     try {
-      // Tencent AnimPlayer: playLoop is remaining plays (1 = once).
-      // Values <= 0 after EOS stop immediately; -1 does NOT mean infinite.
+      _playAudioTrackIfNeeded();
       _controller.play(
         path: _localPath!,
         sourceType: VapSourceType.file,
@@ -188,6 +207,26 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
     } catch (e) {
       debugPrint('*** VapPlayer play error: $e');
     }
+  }
+
+  void _playAudioTrackIfNeeded() {
+    if (_localPath == null) return;
+    try {
+      final file = File(_localPath!);
+      if (!file.existsSync()) return;
+      _audioPlayer ??= AudioPlayer();
+      _audioPlayer!.setFilePath(_localPath!).then((_) {
+        if (!mounted || _finishedOnce) return;
+        _audioPlayer!.setVolume(1.0);
+        if (widget.loops) {
+          _audioPlayer!.setLoopMode(LoopMode.one);
+        }
+        _audioPlayer!.play();
+      }).catchError((e) {
+        // Silently ignore if file has no audio stream
+        debugPrint('[VapPlayer] Audio track notice: $e');
+      });
+    } catch (_) {}
   }
 
   VapScaleType _mapFit() {
@@ -235,12 +274,10 @@ class _VapPlayerState extends State<VapPlayer> with SingleTickerProviderStateMix
       height: h,
       child: RepaintBoundary(
         child: FlutterVapView(
-          key: const ValueKey<String>('global_vap_view'),
+          key: ValueKey<String>('vap_${widget.url}_$_sessionKey'),
           controller: _controller,
           scaleType: _mapFit(),
           onVideoFinish: () {
-            // Native player already loops when repeatCount < 0.
-            // Restarting here stop/flushes MediaCodec every cycle (MediaTek storm).
             if (!widget.loops) {
               _finishSafely();
             }
