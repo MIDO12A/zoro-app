@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
 import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,7 +7,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
-import '../services/api_service.dart';
 import '../models/room_model.dart';
 import '../models/message_model.dart';
 import '../models/gift_model.dart' as gm;
@@ -447,25 +445,72 @@ class FirebaseService {
   }) async {
     final id = const Uuid().v4();
     final totalCost = value * count;
+    final bool isSelfSend = senderId == receiverId;
     final senderRef = _db.collection('users').doc(senderId);
 
     // Look up agency membership and agency outside transaction to prevent Firestore transaction query errors & ordering violations
     DocumentReference? agencyMemberRef;
     DocumentReference? agencyRef;
-    try {
-      final memberQs = await _db
-          .collection('host_agency_members')
-          .where('user_id', isEqualTo: receiverId)
-          .limit(1)
-          .get();
-      if (memberQs.docs.isNotEmpty) {
-        agencyMemberRef = memberQs.docs.first.reference;
-        final aid = memberQs.docs.first.data()['agency_id']?.toString();
-        if (aid != null && aid.isNotEmpty) {
-          agencyRef = _db.collection('host_agencies').doc(aid);
+    String? resolvedAgencyId;
+    if (!isSelfSend) {
+      try {
+        final memberQs = await _db
+            .collection('host_agency_members')
+            .where('user_id', isEqualTo: receiverId)
+            .get();
+
+        QueryDocumentSnapshot<Map<String, dynamic>>? activeDoc;
+        if (memberQs.docs.isNotEmpty) {
+          for (final d in memberQs.docs) {
+            final st = d.data()['status']?.toString();
+            if (st == 'active') {
+              activeDoc = d;
+              break;
+            }
+          }
+          activeDoc ??= memberQs.docs.firstWhere(
+            (d) {
+              final st = d.data()['status']?.toString();
+              return st != 'pending' && st != 'rejected' && st != 'left' && st != 'kicked';
+            },
+            orElse: () => memberQs.docs.first,
+          );
         }
-      }
-    } catch (_) {}
+
+        if (activeDoc != null) {
+          agencyMemberRef = activeDoc.reference;
+          resolvedAgencyId = activeDoc.data()['agency_id']?.toString();
+        }
+
+        if (agencyMemberRef == null || resolvedAgencyId == null || resolvedAgencyId.isEmpty) {
+          final uSnap = await _db.collection('users').doc(receiverId).get();
+          final aid = uSnap.data()?['agency_id']?.toString();
+          if (aid != null && aid.isNotEmpty) {
+            resolvedAgencyId = aid;
+            final mDocDirect = await _db.collection('host_agency_members').doc('${aid}_$receiverId').get();
+            if (mDocDirect.exists) {
+              agencyMemberRef = mDocDirect.reference;
+            } else {
+              final mByAid = await _db
+                  .collection('host_agency_members')
+                  .where('agency_id', isEqualTo: aid)
+                  .where('user_id', isEqualTo: receiverId)
+                  .limit(1)
+                  .get();
+              if (mByAid.docs.isNotEmpty) {
+                agencyMemberRef = mByAid.docs.first.reference;
+              } else {
+                agencyMemberRef = _db.collection('host_agency_members').doc('${aid}_$receiverId');
+              }
+            }
+          }
+        }
+
+        if (resolvedAgencyId != null && resolvedAgencyId.isNotEmpty) {
+          agencyRef = _db.collection('host_agencies').doc(resolvedAgencyId);
+        }
+      } catch (_) {}
+    }
 
     try {
       await _db.runTransaction((txn) async {
@@ -485,12 +530,12 @@ class FirebaseService {
         final wSnap = await txn.get(walletRef);
 
         DocumentSnapshot? agencyMemberSnap;
-        if (agencyMemberRef != null) {
+        if (!isSelfSend && agencyMemberRef != null) {
           agencyMemberSnap = await txn.get(agencyMemberRef);
         }
 
         DocumentSnapshot? agencySnap;
-        if (agencyRef != null) {
+        if (!isSelfSend && agencyRef != null) {
           agencySnap = await txn.get(agencyRef);
         }
 
@@ -591,22 +636,40 @@ class FirebaseService {
           txn.set(walletRef, {'user_id': receiverId, 'diamond_balance': totalCost, 'gold_balance': 0});
         }
 
-        if (agencyMemberSnap != null && agencyMemberSnap.exists) {
-          final md = agencyMemberSnap.data() as Map<String, dynamic>? ?? {};
-          txn.update(agencyMemberSnap.reference, {
-            'diamonds': _asInt(md['diamonds']) + totalCost,
-            'diamonds_available': _asInt(md['diamonds_available']) + totalCost,
-            'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
-            'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
-          });
-        }
+        // Only update agency earnings and host agency target if NOT self-sending
+        if (!isSelfSend) {
+          if (agencyMemberSnap != null && agencyMemberSnap.exists) {
+            final md = agencyMemberSnap.data() as Map<String, dynamic>? ?? {};
+            txn.update(agencyMemberSnap.reference, {
+              'diamonds': _asInt(md['diamonds']) + totalCost,
+              'diamonds_balance': _asInt(md['diamonds_balance']) + totalCost,
+              'diamonds_available': _asInt(md['diamonds_available']) + totalCost,
+              'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
+              'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
+            });
+          } else if (agencyMemberRef != null && (agencyMemberSnap == null || !agencyMemberSnap.exists) && resolvedAgencyId != null) {
+            txn.set(agencyMemberRef, {
+              'id': agencyMemberRef.id,
+              'agency_id': resolvedAgencyId,
+              'user_id': receiverId,
+              'status': 'active',
+              'role': 'host',
+              'diamonds': totalCost,
+              'diamonds_balance': totalCost,
+              'diamonds_available': totalCost,
+              'diamonds_earned_monthly': totalCost,
+              'diamonds_earned_cumulative': totalCost,
+              'joined_at': DateTime.now().toUtc().toIso8601String(),
+            }, SetOptions(merge: true));
+          }
 
-        if (agencySnap != null && agencySnap.exists) {
-          final ad = agencySnap.data() as Map<String, dynamic>? ?? {};
-          txn.update(agencySnap.reference, {
-            'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
-            'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
-          });
+          if (agencySnap != null && agencySnap.exists) {
+            final ad = agencySnap.data() as Map<String, dynamic>? ?? {};
+            txn.update(agencySnap.reference, {
+              'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
+              'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
+            });
+          }
         }
       });
     } catch (e) {
@@ -614,10 +677,31 @@ class FirebaseService {
       return false;
     }
 
-    // Host target evaluation and milestone awards (non-fatal, background)
-    try {
-      AgencyTargetEvaluator.evaluateHostTargets(receiverId);
-    } catch (_) {}
+    // Host target evaluation and ledger update (only for non-self send)
+    if (!isSelfSend && resolvedAgencyId != null && resolvedAgencyId.isNotEmpty) {
+      unawaited(Future(() async {
+        try {
+          await _db.collection('agency_diamond_ledger').add({
+            'agency_id': resolvedAgencyId,
+            'user_id': receiverId,
+            'sender_id': senderId,
+            'sender_name': senderName,
+            'gift_id': giftId,
+            'gift_name': giftName,
+            'amount': totalCost,
+            'direction': 1,
+            'txn_type': 'gift',
+            'created_at': DateTime.now().toUtc().toIso8601String(),
+          });
+        } catch (e) {
+          debugPrint('agency_diamond_ledger error: $e');
+        }
+
+        try {
+          await AgencyTargetEvaluator.evaluateHostTargets(receiverId);
+        } catch (_) {}
+      }));
+    }
 
     // Real-time notification for the receiver (non-fatal, background)
     unawaited(sendNotification(
@@ -734,6 +818,7 @@ class FirebaseService {
       totalWonCoins += (value * m);
     }
     final totalCost = value * count;
+    final bool isSelfSend = senderId == receiverId;
     final isBigWin = multipliers.any((m) => m >= 50);
     final maxMultiplier = multipliers.isEmpty ? 0 : multipliers.reduce((curr, next) => curr > next ? curr : next);
 
@@ -743,20 +828,66 @@ class FirebaseService {
     // Look up agency membership and agency outside transaction to prevent Firestore transaction query errors & ordering violations
     DocumentReference? agencyMemberRef;
     DocumentReference? agencyRef;
-    try {
-      final memberQs = await _db
-          .collection('host_agency_members')
-          .where('user_id', isEqualTo: receiverId)
-          .limit(1)
-          .get();
-      if (memberQs.docs.isNotEmpty) {
-        agencyMemberRef = memberQs.docs.first.reference;
-        final aid = memberQs.docs.first.data()['agency_id']?.toString();
-        if (aid != null && aid.isNotEmpty) {
-          agencyRef = _db.collection('host_agencies').doc(aid);
+    String? resolvedAgencyId;
+    if (!isSelfSend) {
+      try {
+        final memberQs = await _db
+            .collection('host_agency_members')
+            .where('user_id', isEqualTo: receiverId)
+            .get();
+
+        QueryDocumentSnapshot<Map<String, dynamic>>? activeDoc;
+        if (memberQs.docs.isNotEmpty) {
+          for (final d in memberQs.docs) {
+            final st = d.data()['status']?.toString();
+            if (st == 'active') {
+              activeDoc = d;
+              break;
+            }
+          }
+          activeDoc ??= memberQs.docs.firstWhere(
+            (d) {
+              final st = d.data()['status']?.toString();
+              return st != 'pending' && st != 'rejected' && st != 'left' && st != 'kicked';
+            },
+            orElse: () => memberQs.docs.first,
+          );
         }
-      }
-    } catch (_) {}
+
+        if (activeDoc != null) {
+          agencyMemberRef = activeDoc.reference;
+          resolvedAgencyId = activeDoc.data()['agency_id']?.toString();
+        }
+
+        if (agencyMemberRef == null || resolvedAgencyId == null || resolvedAgencyId.isEmpty) {
+          final uSnap = await _db.collection('users').doc(receiverId).get();
+          final aid = uSnap.data()?['agency_id']?.toString();
+          if (aid != null && aid.isNotEmpty) {
+            resolvedAgencyId = aid;
+            final mDocDirect = await _db.collection('host_agency_members').doc('${aid}_$receiverId').get();
+            if (mDocDirect.exists) {
+              agencyMemberRef = mDocDirect.reference;
+            } else {
+              final mByAid = await _db
+                  .collection('host_agency_members')
+                  .where('agency_id', isEqualTo: aid)
+                  .where('user_id', isEqualTo: receiverId)
+                  .limit(1)
+                  .get();
+              if (mByAid.docs.isNotEmpty) {
+                agencyMemberRef = mByAid.docs.first.reference;
+              } else {
+                agencyMemberRef = _db.collection('host_agency_members').doc('${aid}_$receiverId');
+              }
+            }
+          }
+        }
+
+        if (resolvedAgencyId != null && resolvedAgencyId.isNotEmpty) {
+          agencyRef = _db.collection('host_agencies').doc(resolvedAgencyId);
+        }
+      } catch (_) {}
+    }
 
     try {
       await _db.runTransaction((txn) async {
@@ -775,12 +906,12 @@ class FirebaseService {
         final wSnap = await txn.get(walletRef);
 
         DocumentSnapshot? agencyMemberSnap;
-        if (agencyMemberRef != null) {
+        if (!isSelfSend && agencyMemberRef != null) {
           agencyMemberSnap = await txn.get(agencyMemberRef);
         }
 
         DocumentSnapshot? agencySnap;
-        if (agencyRef != null) {
+        if (!isSelfSend && agencyRef != null) {
           agencySnap = await txn.get(agencyRef);
         }
 
@@ -898,29 +1029,68 @@ class FirebaseService {
           txn.set(walletRef, {'user_id': receiverId, 'diamond_balance': totalCost, 'gold_balance': 0});
         }
 
-        if (agencyMemberSnap != null && agencyMemberSnap.exists) {
-          final md = agencyMemberSnap.data() as Map<String, dynamic>? ?? {};
-          txn.update(agencyMemberSnap.reference, {
-            'diamonds': _asInt(md['diamonds']) + totalCost,
-            'diamonds_available': _asInt(md['diamonds_available']) + totalCost,
-            'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
-            'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
-          });
-        }
+        // Only update agency earnings and host agency target if NOT self-sending
+        if (!isSelfSend) {
+          if (agencyMemberSnap != null && agencyMemberSnap.exists) {
+            final md = agencyMemberSnap.data() as Map<String, dynamic>? ?? {};
+            txn.update(agencyMemberSnap.reference, {
+              'diamonds': _asInt(md['diamonds']) + totalCost,
+              'diamonds_balance': _asInt(md['diamonds_balance']) + totalCost,
+              'diamonds_available': _asInt(md['diamonds_available']) + totalCost,
+              'diamonds_earned_monthly': _asInt(md['diamonds_earned_monthly']) + totalCost,
+              'diamonds_earned_cumulative': _asInt(md['diamonds_earned_cumulative']) + totalCost,
+            });
+          } else if (agencyMemberRef != null && (agencyMemberSnap == null || !agencyMemberSnap.exists) && resolvedAgencyId != null) {
+            txn.set(agencyMemberRef, {
+              'id': agencyMemberRef.id,
+              'agency_id': resolvedAgencyId,
+              'user_id': receiverId,
+              'status': 'active',
+              'role': 'host',
+              'diamonds': totalCost,
+              'diamonds_balance': totalCost,
+              'diamonds_available': totalCost,
+              'diamonds_earned_monthly': totalCost,
+              'diamonds_earned_cumulative': totalCost,
+              'joined_at': DateTime.now().toUtc().toIso8601String(),
+            }, SetOptions(merge: true));
+          }
 
-        if (agencySnap != null && agencySnap.exists) {
-          final ad = agencySnap.data() as Map<String, dynamic>? ?? {};
-          txn.update(agencySnap.reference, {
-            'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
-            'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
-          });
+          if (agencySnap != null && agencySnap.exists) {
+            final ad = agencySnap.data() as Map<String, dynamic>? ?? {};
+            txn.update(agencySnap.reference, {
+              'total_diamonds_monthly': _asInt(ad['total_diamonds_monthly']) + totalCost,
+              'total_diamonds_cumulative': _asInt(ad['total_diamonds_cumulative']) + totalCost,
+            });
+          }
         }
       });
 
-      // Evaluate agency host targets and milestones for receiver
-      try {
-        AgencyTargetEvaluator.evaluateHostTargets(receiverId);
-      } catch (_) {}
+      // Host target evaluation and ledger update (only for non-self send)
+      if (!isSelfSend && resolvedAgencyId != null && resolvedAgencyId.isNotEmpty) {
+        unawaited(Future(() async {
+          try {
+            await _db.collection('agency_diamond_ledger').add({
+              'agency_id': resolvedAgencyId,
+              'user_id': receiverId,
+              'sender_id': senderId,
+              'sender_name': senderName,
+              'gift_id': giftId,
+              'gift_name': giftNameAr,
+              'amount': totalCost,
+              'direction': 1,
+              'txn_type': 'gift',
+              'created_at': DateTime.now().toUtc().toIso8601String(),
+            });
+          } catch (e) {
+            debugPrint('agency_diamond_ledger error: $e');
+          }
+
+          try {
+            await AgencyTargetEvaluator.evaluateHostTargets(receiverId);
+          } catch (_) {}
+        }));
+      }
 
       // بث الفوز الكبير عبر جميع الغرف في التطبيق (Global Big Win Broadcast)
       if (isBigWin || maxMultiplier >= 20) {
@@ -2764,7 +2934,6 @@ class FirebaseService {
     final membersSnap = await _db
         .collection('host_agency_members')
         .where('agency_id', isEqualTo: agencyDocId)
-        .where('status', isEqualTo: 'active')
         .get();
 
     final anchors = <Map<String, dynamic>>[];
@@ -2772,13 +2941,17 @@ class FirebaseService {
 
     for (final mDoc in membersSnap.docs) {
       final mData = mDoc.data() as Map<String, dynamic>? ?? {};
+      final st = mData['status']?.toString();
+      if (st == 'pending' || st == 'rejected' || st == 'kicked' || st == 'left') continue;
+
       final mUid = mData['user_id']?.toString() ?? mDoc.id;
       final uSnap = await _db.collection('users').doc(mUid).get();
       final uData = uSnap.exists ? ((uSnap.data() as Map<String, dynamic>?) ?? {}) : {};
 
       final d1 = _asInt(mData['diamonds']);
       final d2 = _asInt(mData['diamonds_earned_monthly']);
-      final mDiamonds = d1 > d2 ? d1 : d2;
+      final d3 = _asInt(mData['diamonds_balance']);
+      final mDiamonds = [d1, d2, d3].reduce((curr, next) => curr > next ? curr : next);
       final uDiamonds = _asInt(uData['diamonds']);
       final int diamonds = mDiamonds > uDiamonds ? mDiamonds : uDiamonds;
       totalDiamonds += diamonds;

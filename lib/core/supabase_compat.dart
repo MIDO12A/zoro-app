@@ -1427,14 +1427,37 @@ class SupabaseClient {
     final memberSnap = await _db
         .collection('host_agency_members')
         .where('user_id', isEqualTo: userId)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
         .get();
-    if (memberSnap.docs.isEmpty) return {'status': 'not_found'};
 
-    final memberDoc = memberSnap.docs.first;
-    final md = memberDoc.data();
-    final agencyId = md['agency_id']?.toString() ?? '';
+    DocumentSnapshot<Map<String, dynamic>>? memberDoc;
+    if (memberSnap.docs.isNotEmpty) {
+      for (final doc in memberSnap.docs) {
+        if (doc.data()['status']?.toString() == 'active') {
+          memberDoc = doc;
+          break;
+        }
+      }
+      memberDoc ??= memberSnap.docs.firstWhere(
+        (doc) {
+          final st = doc.data()['status']?.toString();
+          return st != 'pending' && st != 'rejected' && st != 'left' && st != 'kicked';
+        },
+        orElse: () => memberSnap.docs.first,
+      );
+    }
+
+    String agencyId = memberDoc?.data()?['agency_id']?.toString() ?? '';
+    if (agencyId.isEmpty) {
+      final uSnap = await _db.collection('users').doc(userId).get();
+      agencyId = uSnap.data()?['agency_id']?.toString() ?? '';
+      if (agencyId.isNotEmpty && memberDoc == null) {
+        final mDirect = await _db.collection('host_agency_members').doc('${agencyId}_$userId').get();
+        if (mDirect.exists) memberDoc = mDirect;
+      }
+    }
+
+    if (agencyId.isEmpty) return {'status': 'not_found'};
+    final md = memberDoc?.data() ?? {};
 
     String agencyName = '';
     double commissionRate = 0.05;
@@ -1526,7 +1549,7 @@ class SupabaseClient {
 
     return <String, dynamic>{
       'status': 'ok',
-      'member_id': memberDoc.id,
+      'member_id': memberDoc?.id ?? '${agencyId}_$userId',
       'agency_id': agencyId,
       'agency_name': agencyName,
       'role': md['role'] ?? 'host',
@@ -1557,14 +1580,37 @@ class SupabaseClient {
     final memberSnap = await _db
         .collection('host_agency_members')
         .where('user_id', isEqualTo: userId)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
         .get();
-    if (memberSnap.docs.isEmpty) return <String, dynamic>{};
 
-    final memberDoc = memberSnap.docs.first;
-    final md = memberDoc.data();
-    final agencyId = md['agency_id']?.toString() ?? '';
+    DocumentSnapshot<Map<String, dynamic>>? memberDoc;
+    if (memberSnap.docs.isNotEmpty) {
+      for (final doc in memberSnap.docs) {
+        if (doc.data()['status']?.toString() == 'active') {
+          memberDoc = doc;
+          break;
+        }
+      }
+      memberDoc ??= memberSnap.docs.firstWhere(
+        (doc) {
+          final st = doc.data()['status']?.toString();
+          return st != 'pending' && st != 'rejected' && st != 'left' && st != 'kicked';
+        },
+        orElse: () => memberSnap.docs.first,
+      );
+    }
+
+    String agencyId = memberDoc?.data()?['agency_id']?.toString() ?? '';
+    if (agencyId.isEmpty) {
+      final uSnap = await _db.collection('users').doc(userId).get();
+      agencyId = uSnap.data()?['agency_id']?.toString() ?? '';
+      if (agencyId.isNotEmpty && memberDoc == null) {
+        final mDirect = await _db.collection('host_agency_members').doc('${agencyId}_$userId').get();
+        if (mDirect.exists) memberDoc = mDirect;
+      }
+    }
+
+    if (agencyId.isEmpty) return <String, dynamic>{};
+    final md = memberDoc?.data() ?? {};
 
     String agencyName = '';
     try {
