@@ -406,6 +406,23 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
             expandedHeight: 180,
             backgroundColor: Colors.transparent,
             pinned: true,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.exit_to_app_rounded, color: Colors.white70),
+                tooltip: 'خروج من الوكالة',
+                onPressed: () async {
+                  final res = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AgencyExitScreen()),
+                  );
+                  if (res == true && mounted) {
+                    Navigator.pop(context);
+                  } else if (mounted) {
+                    _loadData();
+                  }
+                },
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: _buildHeader(profile, agency),
             ),
@@ -558,6 +575,41 @@ class _HostDashboardScreenState extends State<HostDashboardScreen>
                   ),
                   const SizedBox(height: 24),
                 ],
+
+                // ─ زر الخروج الدائم من الوكالة ─
+                Container(
+                  margin: const EdgeInsets.only(top: 8, bottom: 24),
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final res = await Navigator.push<bool>(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AgencyExitScreen()),
+                      );
+                      if (res == true && mounted) {
+                        Navigator.pop(context);
+                      } else if (mounted) {
+                        _loadData();
+                      }
+                    },
+                    icon: const Icon(Icons.exit_to_app_rounded, color: Color(0xFFFF5252), size: 20),
+                    label: const Text(
+                      'الخروج من الوكالة',
+                      style: TextStyle(
+                        color: Color(0xFFFF5252),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        fontFamily: 'IBM Plex Sans Arabic',
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFFF5252), width: 1.2),
+                      backgroundColor: const Color(0xFFFF5252).withOpacity(0.06),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
 
                 const SizedBox(height: 32),
               ]),

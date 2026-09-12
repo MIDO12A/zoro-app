@@ -5,6 +5,7 @@ import '../../../../providers/user_provider.dart';
 import '../../../../services/supabase_service.dart';
 import '../data/anchor_agent_model.dart';
 import 'agent_transfer_screen.dart';
+import 'agency_exit_screen.dart';
 
 /// شاشة وكيل المضيفين وإدارة الوكالة (AnchorAgentActivity)
 class AnchorAgentScreen extends StatefulWidget {
@@ -113,12 +114,85 @@ class _AnchorAgentScreenState extends State<AnchorAgentScreen> {
                     else
                       _buildSubAgentsTab(isAr),
 
+                    _buildExitAgencyCard(isAr),
+
                     const SliverToBoxAdapter(
                       child: SizedBox(height: 60),
                     ),
                   ],
                 ),
               ),
+      ),
+    );
+  }
+
+  void _openExitAgencyScreen(bool isAr) async {
+    final deleted = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AgencyExitScreen(agencyId: _agentInfo?.agencyId ?? widget.agencyId),
+      ),
+    );
+    if (deleted == true && mounted) {
+      Navigator.pop(context, true);
+    } else if (mounted) {
+      _loadAgencyData();
+    }
+  }
+
+  Widget _buildExitAgencyCard(bool isAr) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF5252).withOpacity(0.08),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFFF5252).withOpacity(0.35)),
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF5252), size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    isAr ? 'منطقة الخروج وإدارة الوكالة' : 'Agency Management & Exit',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isAr
+                    ? 'عند خروج الوكيل سيتم حذف الوكالة نهائياً وفك ارتباط جميع المضيفين وتصفير مراحلهم المسجلة بالوكالة.'
+                    : 'Leaving as agent will delete the agency, unlink all members, and clear their milestones.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.65), fontSize: 12),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _openExitAgencyScreen(isAr),
+                  icon: const Icon(Icons.exit_to_app_rounded, size: 20),
+                  label: Text(
+                    isAr ? 'الخروج من الوكالة وحذفها نهائياً' : 'Leave & Delete Agency',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF5252),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -191,6 +265,12 @@ class _AnchorAgentScreenState extends State<AnchorAgentScreen> {
                           ),
                         );
                       },
+                    ),
+                    // Exit / Delete Agency icon
+                    IconButton(
+                      icon: const Icon(Icons.exit_to_app_rounded, color: Color(0xFFFF5252), size: 26),
+                      tooltip: isAr ? 'الخروج وحذف الوكالة' : 'Exit / Delete Agency',
+                      onPressed: () => _openExitAgencyScreen(isAr),
                     ),
                   ],
                 ),

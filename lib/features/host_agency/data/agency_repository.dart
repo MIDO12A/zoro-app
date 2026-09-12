@@ -216,6 +216,36 @@ abstract final class AgencyRepository {
     await _sb.rpc('agency_pay_penalty_exit', params: {});
   }
 
+  // ─── خروج الوكيل وحذف الوكالة نهائياً ─────────────────────────────
+  static Future<bool> deleteAndExitAgencyByOwner({
+    required String agencyId,
+    required String ownerUid,
+  }) async {
+    try {
+      final resp = await _sb.rpc('agency_delete', params: {
+        'p_agency_id': agencyId,
+      });
+      return resp?['status'] == 'ok';
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ─── خروج العضو وتصفير مراحله ──────────────────────────────────────
+  static Future<bool> leaveAgencyAsMember({
+    required String agencyId,
+    required String userId,
+  }) async {
+    try {
+      final resp = await _sb.rpc('agency_pay_penalty_exit', params: {
+        'p_agency_id': agencyId,
+      });
+      return resp?['status'] == 'ok';
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ─── تبادل الألماس بكوينز (معدل من قاعدة البيانات) ──────────────
   // ✅ إصلاح: DB signature = (p_diamonds bigint, p_idempotency_key text)
   //    auth.uid() يُحدَّد داخل الدالة تلقائياً — لا حاجة لإرسال p_user_id

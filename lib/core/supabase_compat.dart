@@ -76,6 +76,9 @@ class SupabaseClient {
         return _rpcAgencyRequestExit(params);
       case 'agency_pay_penalty_exit':
         return _rpcAgencyPayPenaltyExit(params);
+      case 'agency_delete':
+      case 'agency_owner_delete':
+        return _rpcAgencyDelete(params);
       case 'agency_exchange_diamonds':
         return _rpcAgencyExchangeDiamonds(params);
       case 'agency_request_withdrawal':
@@ -656,6 +659,16 @@ class SupabaseClient {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return {'status': 'error'};
 
+    // فحص ما إذا كان المستخدم مالك الوكالة (الوكيل)
+    final isOwner = await _checkIfAgencyOwner(uid);
+    if (isOwner) {
+      final success = await FirebaseService().deleteAndExitAgencyByOwner(
+        agencyId: p?['p_agency_id']?.toString() ?? '',
+        ownerUid: uid,
+      );
+      return {'status': success ? 'ok' : 'error', 'is_owner_delete': true};
+    }
+
     final memberSnap = await _db
         .collection('host_agency_members')
         .where('user_id', isEqualTo: uid)
@@ -664,20 +677,10 @@ class SupabaseClient {
         .get();
     if (memberSnap.docs.isEmpty) return {'status': 'error', 'message': 'not_member'};
 
-    final memberId = memberSnap.docs.first.id;
+    final aid = memberSnap.docs.first.data()['agency_id']?.toString() ?? '';
+    await FirebaseService().exitAgencyAsMember(agencyId: aid, userId: uid);
+
     final freeUntil = DateTime.now().toUtc().add(const Duration(days: 7));
-
-    await _db.collection('host_agency_members').doc(memberId).update({
-      'status': 'pending_exit',
-    });
-
-    // Mark as free agent for 7 days
-    await _db.collection('agency_free_agents').doc(uid).set({
-      'user_id': uid,
-      'free_until': freeUntil.toIso8601String(),
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    });
-
     return {'status': 'ok', 'free_until': freeUntil.toIso8601String()};
   }
 
@@ -689,6 +692,15 @@ class SupabaseClient {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return {'status': 'error'};
 
+    final isOwner = await _checkIfAgencyOwner(uid);
+    if (isOwner) {
+      final success = await FirebaseService().deleteAndExitAgencyByOwner(
+        agencyId: p?['p_agency_id']?.toString() ?? '',
+        ownerUid: uid,
+      );
+      return {'status': success ? 'ok' : 'error', 'is_owner_delete': true};
+    }
+
     final memberSnap = await _db
         .collection('host_agency_members')
         .where('user_id', isEqualTo: uid)
@@ -697,17 +709,36 @@ class SupabaseClient {
         .get();
     if (memberSnap.docs.isEmpty) return {'status': 'error'};
 
-    final memberId = memberSnap.docs.first.id;
-    await _db.collection('host_agency_members').doc(memberId).update({
-      'status': 'left',
-    });
-    await _db.collection('agency_free_agents').doc(uid).set({
-      'user_id': uid,
-      'free_until': DateTime.now().toUtc().toIso8601String(),
-      'created_at': DateTime.now().toUtc().toIso8601String(),
-    });
+    final aid = memberSnap.docs.first.data()['agency_id']?.toString() ?? '';
+    await FirebaseService().exitAgencyAsMember(agencyId: aid, userId: uid);
 
     return {'status': 'ok'};
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  agency_delete (حذف الوكالة نهائياً وتصفير مراحل جميع الأعضاء)
+  // ═══════════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> _rpcAgencyDelete(
+      Map<String, dynamic>? p) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return {'status': 'error', 'message': 'unauthenticated'};
+
+    final agencyId = p?['p_agency_id']?.toString() ?? '';
+    final success = await FirebaseService().deleteAndExitAgencyByOwner(
+      agencyId: agencyId,
+      ownerUid: uid,
+    );
+
+    return {'status': success ? 'ok' : 'error'};
+  }
+
+  Future<bool> _checkIfAgencyOwner(String uid) async {
+    final agSnap = await _db.collection('host_agencies').where('owner_id', isEqualTo: uid).limit(1).get();
+    if (agSnap.docs.isNotEmpty) return true;
+    final mbSnap = await _db.collection('host_agency_members').where('user_id', isEqualTo: uid).where('role', isEqualTo: 'owner').limit(1).get();
+    if (mbSnap.docs.isNotEmpty) return true;
+    final uDoc = await _db.collection('users').doc(uid).get();
+    return uDoc.data()?['is_host_agent'] == true;
   }
 
   // ═══════════════════════════════════════════════════════════════

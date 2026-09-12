@@ -2838,7 +2838,21 @@ class FirebaseService {
       // Clear agency_id on user doc
       await _db.collection('users').doc(memberUid).update({
         'agency_id': FieldValue.delete(),
+        'agency_name': FieldValue.delete(),
+        'host_agency_id': FieldValue.delete(),
+        'host_agency_name': FieldValue.delete(),
+        'is_agency_member': false,
+        'agency_status': FieldValue.delete(),
+        'agency_role': FieldValue.delete(),
       });
+      // Delete achieved milestones/targets for this user in this agency
+      final achSnap = await _db.collection('agency_achieved_targets')
+          .where('agency_id', isEqualTo: agencyId)
+          .where('user_id', isEqualTo: memberUid)
+          .get();
+      for (final doc in achSnap.docs) {
+        await doc.reference.delete();
+      }
       // Decrement member count
       await _db.collection('host_agencies').doc(agencyId).update({
         'member_count': FieldValue.increment(-1),
@@ -2846,6 +2860,263 @@ class FirebaseService {
       return true;
     } catch (e) {
       debugPrint('removeAgencyMember error: $e');
+      return false;
+    }
+  }
+
+  /// خروج العضو (المضيف) من الوكالة وتصفير مراحله وإلغاء ارتباطه بالوكالة
+  Future<bool> exitAgencyAsMember({required String agencyId, required String userId}) async {
+    try {
+      String resolvedAgencyId = agencyId;
+      if (resolvedAgencyId.isEmpty) {
+        final userDoc = await _db.collection('users').doc(userId).get();
+        resolvedAgencyId = userDoc.data()?['agency_id']?.toString() ??
+            userDoc.data()?['host_agency_id']?.toString() ?? '';
+      }
+
+      // 1. حذف العضو من host_agency_members
+      final memberSnap = await _db.collection('host_agency_members')
+          .where('user_id', isEqualTo: userId)
+          .get();
+      for (final doc in memberSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      // 2. حذف مراحل وأهداف التارجت المحققة الخاصة بالعضو في الوكالة
+      final achSnap = await _db.collection('agency_achieved_targets')
+          .where('user_id', isEqualTo: userId)
+          .get();
+      for (final doc in achSnap.docs) {
+        await doc.reference.delete();
+      }
+
+      // 3. مسح بيانات الوكالة من وثيقة المستخدم في users
+      await _db.collection('users').doc(userId).update({
+        'agency_id': FieldValue.delete(),
+        'agency_name': FieldValue.delete(),
+        'host_agency_id': FieldValue.delete(),
+        'host_agency_name': FieldValue.delete(),
+        'is_agency_member': false,
+        'agency_status': FieldValue.delete(),
+        'agency_role': FieldValue.delete(),
+        'agency_joined_at': FieldValue.delete(),
+        'agency_agent_id': FieldValue.delete(),
+      });
+
+      // 4. تقليل عدد أعضاء الوكالة
+      if (resolvedAgencyId.isNotEmpty) {
+        try {
+          await _db.collection('host_agencies').doc(resolvedAgencyId).update({
+            'member_count': FieldValue.increment(-1),
+          });
+        } catch (_) {}
+      }
+
+      // 5. منح وضع وكيل حر لمدة 7 أيام
+      final freeUntil = DateTime.now().toUtc().add(const Duration(days: 7));
+      await _db.collection('agency_free_agents').doc(userId).set({
+        'user_id': userId,
+        'free_until': freeUntil.toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      });
+
+      return true;
+    } catch (e) {
+      debugPrint('exitAgencyAsMember error: $e');
+      return false;
+    }
+  }
+
+  /// خروج الوكيل وحذف الوكالة نهائياً وتصفير مراحل جميع المستخدمين وفك ارتباطهم
+  Future<bool> deleteAndExitAgencyByOwner({required String agencyId, required String ownerUid}) async {
+    try {
+      String resolvedAgencyId = agencyId;
+      if (resolvedAgencyId.isEmpty) {
+        final agSnap = await _db.collection('host_agencies').where('owner_id', isEqualTo: ownerUid).limit(1).get();
+        if (agSnap.docs.isNotEmpty) {
+          resolvedAgencyId = agSnap.docs.first.id;
+        } else {
+          final uDoc = await _db.collection('users').doc(ownerUid).get();
+          resolvedAgencyId = uDoc.data()?['agency_id']?.toString() ??
+              uDoc.data()?['host_agency_id']?.toString() ?? '';
+        }
+      }
+
+      // 1. حصر جميع معرفات الأعضاء التابعين للوكالة
+      final memberUids = <String>{ownerUid};
+
+      if (resolvedAgencyId.isNotEmpty) {
+        // أ) من host_agency_members
+        final mSnap = await _db.collection('host_agency_members')
+            .where('agency_id', isEqualTo: resolvedAgencyId)
+            .get();
+        for (final d in mSnap.docs) {
+          final u = d.data()['user_id']?.toString();
+          if (u != null && u.isNotEmpty) memberUids.add(u);
+        }
+
+        // ب) من users حيث agency_id
+        final uSnap1 = await _db.collection('users')
+            .where('agency_id', isEqualTo: resolvedAgencyId)
+            .get();
+        for (final d in uSnap1.docs) {
+          memberUids.add(d.id);
+        }
+
+        // ج) من users حيث host_agency_id
+        final uSnap2 = await _db.collection('users')
+            .where('host_agency_id', isEqualTo: resolvedAgencyId)
+            .get();
+        for (final d in uSnap2.docs) {
+          memberUids.add(d.id);
+        }
+      }
+
+      // 2. تحديث كل مستخدم: فك ارتباط الوكالة، وحذف مراحل التارجت، ومنحه وضع وكيل حر
+      for (final uid in memberUids) {
+        try {
+          await _db.collection('users').doc(uid).update({
+            'agency_id': FieldValue.delete(),
+            'agency_name': FieldValue.delete(),
+            'host_agency_id': FieldValue.delete(),
+            'host_agency_name': FieldValue.delete(),
+            'is_host_agent': false,
+            'is_agency_member': false,
+            'agency_status': FieldValue.delete(),
+            'agency_role': FieldValue.delete(),
+            'agency_joined_at': FieldValue.delete(),
+            'agency_agent_id': FieldValue.delete(),
+          });
+        } catch (e) {
+          debugPrint('Error updating user $uid on agency delete: $e');
+        }
+
+        // حذف مراحل وتارجت هذا العضو من agency_achieved_targets
+        try {
+          final achSnap = await _db.collection('agency_achieved_targets')
+              .where('user_id', isEqualTo: uid)
+              .get();
+          for (final doc in achSnap.docs) {
+            await doc.reference.delete();
+          }
+        } catch (e) {
+          debugPrint('Error deleting achieved targets for user $uid: $e');
+        }
+
+        // حذف عضويته من host_agency_members
+        try {
+          final mbSnap = await _db.collection('host_agency_members')
+              .where('user_id', isEqualTo: uid)
+              .get();
+          for (final doc in mbSnap.docs) {
+            await doc.reference.delete();
+          }
+        } catch (e) {
+          debugPrint('Error deleting membership doc for user $uid: $e');
+        }
+
+        // منح وضع وكيل حر
+        try {
+          final freeUntil = DateTime.now().toUtc().add(const Duration(days: 7));
+          await _db.collection('agency_free_agents').doc(uid).set({
+            'user_id': uid,
+            'free_until': freeUntil.toIso8601String(),
+            'created_at': DateTime.now().toUtc().toIso8601String(),
+          });
+        } catch (_) {}
+      }
+
+      // 3. حذف أهداف ومراحل الوكالة بالكامل من agency_achieved_targets
+      if (resolvedAgencyId.isNotEmpty) {
+        try {
+          final agAchSnap = await _db.collection('agency_achieved_targets')
+              .where('agency_id', isEqualTo: resolvedAgencyId)
+              .get();
+          for (final doc in agAchSnap.docs) {
+            await doc.reference.delete();
+          }
+        } catch (e) {
+          debugPrint('Error deleting agency achieved targets: $e');
+        }
+
+        // 4. حذف سجلات host_agency_members المتبقية للوكالة
+        try {
+          final allMb = await _db.collection('host_agency_members')
+              .where('agency_id', isEqualTo: resolvedAgencyId)
+              .get();
+          for (final doc in allMb.docs) {
+            await doc.reference.delete();
+          }
+        } catch (e) {
+          debugPrint('Error deleting all agency members: $e');
+        }
+
+        // 5. حذف وثيقة الوكالة من host_agencies
+        try {
+          await _db.collection('host_agencies').doc(resolvedAgencyId).delete();
+        } catch (e) {
+          debugPrint('Error deleting host_agencies doc: $e');
+        }
+
+        // 6. حذف محفظة الوكالة
+        try {
+          await _db.collection('agency_wallets').doc(resolvedAgencyId).delete();
+        } catch (_) {}
+
+        // 7. حذف طلبات الانضمام والدعوات
+        try {
+          final reqSnap = await _db.collection('agency_join_requests')
+              .where('agency_id', isEqualTo: resolvedAgencyId)
+              .get();
+          for (final doc in reqSnap.docs) {
+            await doc.reference.delete();
+          }
+        } catch (_) {}
+
+        // 8. حذف رسائل شات الوكالة
+        try {
+          final chatSnap = await _db.collection('agency_chat_messages')
+              .where('agency_id', isEqualTo: resolvedAgencyId)
+              .get();
+          for (final doc in chatSnap.docs) {
+            await doc.reference.delete();
+          }
+        } catch (_) {}
+
+        // 9. حذف طلبات إنشاء الوكالة التابعة لنفس الوكالة حتى لا تعيد إنشاءها
+        try {
+          final appSnap = await _db.collection('agency_applications')
+              .where('agency_id', isEqualTo: resolvedAgencyId)
+              .get();
+          for (final doc in appSnap.docs) {
+            await doc.reference.delete();
+          }
+        } catch (_) {}
+      }
+
+      // 10. حذف طلبات إنشاء الوكالة الخاصة بالوكيل (user_id == ownerUid)
+      try {
+        final appSnap2 = await _db.collection('agency_applications')
+            .where('user_id', isEqualTo: ownerUid)
+            .get();
+        for (final doc in appSnap2.docs) {
+          await doc.reference.delete();
+        }
+      } catch (_) {}
+
+      // 11. حذف أي وكالة متبقية بالـ owner_id
+      try {
+        final ownerAgencies = await _db.collection('host_agencies')
+            .where('owner_id', isEqualTo: ownerUid)
+            .get();
+        for (final doc in ownerAgencies.docs) {
+          await doc.reference.delete();
+        }
+      } catch (_) {}
+
+      return true;
+    } catch (e) {
+      debugPrint('deleteAndExitAgencyByOwner error: $e');
       return false;
     }
   }
