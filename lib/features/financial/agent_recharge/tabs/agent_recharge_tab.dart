@@ -3,10 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../../../services/firebase_service.dart';
 import '../../../../core/supabase_compat.dart';
 
-import '../../../../core/auth/supabase_ready.dart';
-import '../../../../core/financial/financial_service.dart';
 import '../../../../core/theme/brand_colors.dart';
 import '../../agent_recharge_widgets.dart';
 import 'agent_history_tab.dart' show AgentEditQuickAmountsSheet;
@@ -402,6 +403,7 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
   List<Map<String, dynamic>> _results = const [];
   Map<String, dynamic>? _selected;
   bool _busy = false;
+  bool _isWithdrawMode = false; // false = شحن, true = سحب
 
   @override
   void dispose() {
@@ -414,7 +416,8 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
 
   void _onSearchChanged(String val) {
     _debounce?.cancel();
-    if (val.trim().length < 2) {
+    final trimmed = val.trim().replaceFirst('#', '').trim();
+    if (trimmed.isEmpty) {
       setState(() {
         _results = const [];
         _searching = false;
@@ -422,24 +425,145 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
       return;
     }
     setState(() => _searching = true);
-    _debounce =
-        Timer(const Duration(milliseconds: 600), () => _doSearch(val.trim()));
+    _debounce = Timer(const Duration(milliseconds: 350), () => _doSearch(trimmed));
   }
 
-  Future<void> _doSearch(String q) async {
-    if (!isSupabaseReady()) {
+  Future<void> _doSearch(String rawQ) async {
+    final q = rawQ.trim().replaceFirst('#', '').trim();
+    if (q.isEmpty) {
       setState(() => _searching = false);
       return;
     }
     try {
-      final rows = await Supabase.instance.client
-          .from('profiles')
-          .select('id, display_name, avatar_url, kayan_id')
-          .or('display_name.ilike.%$q%,kayan_id.ilike.%$q%')
-          .limit(10);
+      final db = FirebaseFirestore.instance;
+      final intId = int.tryParse(q);
+      final List<Map<String, dynamic>> results = [];
+      final Set<String> seenUids = {};
+
+      void addDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+        if (!doc.exists || doc.data() == null) return;
+        final uid = doc.id;
+        if (seenUids.contains(uid)) return;
+        seenUids.add(uid);
+        final d = doc.data()!;
+        results.add({
+          'id': uid,
+          'uid': uid,
+          'display_name': d['name'] ?? d['nickname'] ?? d['display_name'] ?? 'مستخدم',
+          'avatar_url': d['avatar'] ?? d['avatar_url'] ?? d['photo_url'] ?? d['photoUrl'] ?? '',
+          'kayan_id': d['custom_id']?.toString() ??
+              d['customId']?.toString() ??
+              d['display_id']?.toString() ??
+              (uid.length > 8 ? uid.substring(0, 8) : uid),
+          'coins': (d['coins'] as num?)?.toInt() ?? 0,
+          'diamonds': (d['diamonds'] as num?)?.toInt() ?? 0,
+        });
+      }
+
+      // 1. Check exact custom_id (string)
+      try {
+        final snap1 = await db.collection('users').where('custom_id', isEqualTo: q).limit(5).get();
+        for (final doc in snap1.docs) {
+          addDoc(doc);
+        }
+      } catch (_) {}
+
+      // 2. Check exact custom_id (int)
+      if (intId != null && results.isEmpty) {
+        try {
+          final snap1Int = await db.collection('users').where('custom_id', isEqualTo: intId).limit(5).get();
+          for (final doc in snap1Int.docs) {
+            addDoc(doc);
+          }
+        } catch (_) {}
+      }
+
+      // 3. Check customId (camelCase)
+      if (results.isEmpty) {
+        try {
+          final snap2 = await db.collection('users').where('customId', isEqualTo: q).limit(5).get();
+          for (final doc in snap2.docs) {
+            addDoc(doc);
+          }
+        } catch (_) {}
+      }
+      if (intId != null && results.isEmpty) {
+        try {
+          final snap2Int = await db.collection('users').where('customId', isEqualTo: intId).limit(5).get();
+          for (final doc in snap2Int.docs) {
+            addDoc(doc);
+          }
+        } catch (_) {}
+      }
+
+      // 4. Check display_id
+      if (results.isEmpty) {
+        try {
+          final snap3 = await db.collection('users').where('display_id', isEqualTo: q).limit(5).get();
+          for (final doc in snap3.docs) {
+            addDoc(doc);
+          }
+        } catch (_) {}
+      }
+
+      // 5. Direct doc lookup by UID
+      if (results.isEmpty) {
+        try {
+          final doc = await db.collection('users').doc(q).get();
+          if (doc.exists) {
+            addDoc(doc);
+          }
+        } catch (_) {}
+      }
+
+      // 6. Name / Nickname search prefix
+      if (results.isEmpty && q.length >= 2) {
+        try {
+          final nameSnap = await db.collection('users')
+              .where('name', isGreaterThanOrEqualTo: q)
+              .where('name', isLessThanOrEqualTo: '$q\uf8ff')
+              .limit(5)
+              .get();
+          for (final doc in nameSnap.docs) {
+            addDoc(doc);
+          }
+        } catch (_) {}
+
+        if (results.isEmpty) {
+          try {
+            final nickSnap = await db.collection('users')
+                .where('nickname', isGreaterThanOrEqualTo: q)
+                .where('nickname', isLessThanOrEqualTo: '$q\uf8ff')
+                .limit(5)
+                .get();
+            for (final doc in nickSnap.docs) {
+              addDoc(doc);
+            }
+          } catch (_) {}
+        }
+      }
+
+      // 7. General search fallback: scan recent users in memory
+      if (results.isEmpty) {
+        try {
+          final allSnap = await db.collection('users').limit(60).get();
+          final lowerQ = q.toLowerCase();
+          for (final doc in allSnap.docs) {
+            final d = doc.data();
+            final cid = (d['custom_id'] ?? d['customId'] ?? d['display_id'] ?? '').toString().toLowerCase();
+            final uid = doc.id.toLowerCase();
+            final name = (d['name'] ?? d['nickname'] ?? d['display_name'] ?? '').toString().toLowerCase();
+            if (cid.contains(lowerQ) || uid.contains(lowerQ) || name.contains(lowerQ)) {
+              addDoc(doc);
+              if (results.length >= 5) break;
+            }
+          }
+        } catch (_) {}
+      }
+
       if (!mounted) return;
       setState(() {
-        _results = List<Map<String, dynamic>>.from(rows as List);
+        _results = results;
         _searching = false;
       });
     } catch (e) {
@@ -475,59 +599,202 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
 
   Future<void> _confirmAndSend() async {
     final user = _selected;
-    final amount = int.tryParse(_amountCtrl.text.trim());
     if (user == null) return;
+    final amount = int.tryParse(_amountCtrl.text.trim());
     if (amount == null || amount < 1) {
       _showSnack('أدخل عدد الكوينز');
       return;
     }
-    if (amount > 1000000) {
-      _showSnack('الحد الأقصى 1,000,000 كوين');
+    if (amount > 10000000) {
+      _showSnack('الحد الأقصى 10,000,000 كوين');
       return;
     }
-    if (amount > widget.dailyRemaining) {
-      _showSnack(
-          'يتجاوز الحد اليومي المتبقي (${widget.dailyRemaining} كوين)');
-      return;
+
+    if (!_isWithdrawMode) {
+      // وضع الشحن: التحقق من رصيد الوكيل والحد اليومي
+      if (amount > widget.agencyGold) {
+        _showSnack('رصيد الوكالة غير كافٍ للشحن (رصيدك الحالي: ${widget.agencyGold} كوين)');
+        return;
+      }
+      if (amount > widget.dailyRemaining) {
+        _showSnack('يتجاوز الحد اليومي المتبقي (${widget.dailyRemaining} كوين)');
+        return;
+      }
+    } else {
+      // وضع السحب: التحقق من رصيد المستخدم
+      final userCoins = (user['coins'] as num?)?.toInt() ?? 0;
+      if (amount > userCoins) {
+        _showSnack('رصيد المستخدم غير كافٍ للسحب (رصيده الحالي: $userCoins كوين)');
+        return;
+      }
     }
-    if (amount > widget.agencyGold) {
-      _showSnack('رصيد الوكالة غير كافٍ');
-      return;
-    }
+
     final pinOk = await _showPinDialog();
     if (!pinOk) return;
+    if (!mounted) return;
+
     final confirmed = await showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) =>
-                AgentRechargeConfirmDialog(user: user, amount: amount)) ??
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AgentRechargeConfirmDialog(
+            user: user,
+            amount: amount,
+            isWithdraw: _isWithdrawMode,
+          ),
+        ) ??
         false;
+
     if (!confirmed) return;
-    final kayanId =
-        int.tryParse(user['kayan_id']?.toString() ?? '') ?? 0;
-    if (kayanId == 0) {
-      _showSnack('خطأ: معرّف المستخدم غير صالح');
-      return;
+
+    if (_isWithdrawMode) {
+      await _executeWithdraw(user, amount);
+    } else {
+      await _executeRecharge(user, amount);
     }
-    await _sendRecharge(kayanId, amount);
   }
 
-  Future<void> _sendRecharge(int recipientKayanId, int amount) async {
+  Future<void> _executeRecharge(Map<String, dynamic> user, int amount) async {
     setState(() => _busy = true);
-    final err = await FinancialService.agentRechargeUser(
-      recipientKayanId: recipientKayanId,
-      goldAmount: amount,
-      idempotencyKey: FinancialService.newIdempotencyKey(),
-    );
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (err != null) {
-      _showSnack('خطأ: $err');
+    final targetUid = user['id']?.toString() ?? user['uid']?.toString() ?? '';
+    final agentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (agentUid == null || targetUid.isEmpty) {
+      setState(() => _busy = false);
+      _showSnack('خطأ: تعذر التعرف على بيانات الحساب');
       return;
     }
-    _showSnack('✅ تم شحن $amount كوين بنجاح');
-    _clearSelected();
-    widget.onSuccess();
+
+    try {
+      final db = FirebaseFirestore.instance;
+      final agentRef = db.collection('users').doc(agentUid);
+      final targetRef = db.collection('users').doc(targetUid);
+
+      final success = await db.runTransaction<bool>((txn) async {
+        final agentSnap = await txn.get(agentRef);
+        final targetSnap = await txn.get(targetRef);
+        if (!agentSnap.exists || !targetSnap.exists) return false;
+
+        final agentCoins = (agentSnap.data()?['coins'] as num?)?.toInt() ?? 0;
+        if (agentCoins < amount) return false;
+
+        final targetCoins = (targetSnap.data()?['coins'] as num?)?.toInt() ?? 0;
+
+        txn.update(agentRef, {'coins': agentCoins - amount});
+        txn.update(targetRef, {'coins': targetCoins + amount});
+
+        final txRef = db.collection('agent_recharge_transactions').doc();
+        txn.set(txRef, {
+          'agent_id': agentUid,
+          'type': 'recharge',
+          'recipient_uid': targetUid,
+          'recipient_display_name': user['display_name'] ?? 'مستخدم',
+          'recipient_avatar_url': user['avatar_url'] ?? '',
+          'recipient_kayan_id': user['kayan_id'] ?? '',
+          'gold_amount': amount,
+          'status': 'completed',
+          'created_at': DateTime.now().toIso8601String(),
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        return true;
+      });
+
+      if (!mounted) return;
+      setState(() => _busy = false);
+
+      if (success) {
+        FirebaseService().sendNotification(
+          uid: targetUid,
+          type: 'recharge',
+          title: 'شحن رصيد كوينز 🪙',
+          body: 'تم شحن $amount كوين لحسابك بنجاح من وكيل الشحن.',
+          data: {'amount': amount, 'agent_id': agentUid},
+        );
+
+        _showSnack('✅ تم شحن $amount كوين للمستخدم بنجاح');
+        _clearSelected();
+        widget.onSuccess();
+      } else {
+        _showSnack('فشلت العملية: رصيد الوكيل غير كافٍ');
+      }
+    } catch (e) {
+      debugPrint('[recharge] error: $e');
+      if (mounted) {
+        setState(() => _busy = false);
+        _showSnack('حدث خطأ أثناء الشحن: $e');
+      }
+    }
+  }
+
+  Future<void> _executeWithdraw(Map<String, dynamic> user, int amount) async {
+    setState(() => _busy = true);
+    final targetUid = user['id']?.toString() ?? user['uid']?.toString() ?? '';
+    final agentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (agentUid == null || targetUid.isEmpty) {
+      setState(() => _busy = false);
+      _showSnack('خطأ: تعذر التعرف على بيانات الحساب');
+      return;
+    }
+
+    try {
+      final db = FirebaseFirestore.instance;
+      final agentRef = db.collection('users').doc(agentUid);
+      final targetRef = db.collection('users').doc(targetUid);
+
+      final success = await db.runTransaction<bool>((txn) async {
+        final agentSnap = await txn.get(agentRef);
+        final targetSnap = await txn.get(targetRef);
+        if (!agentSnap.exists || !targetSnap.exists) return false;
+
+        final targetCoins = (targetSnap.data()?['coins'] as num?)?.toInt() ?? 0;
+        if (targetCoins < amount) return false;
+
+        final agentCoins = (agentSnap.data()?['coins'] as num?)?.toInt() ?? 0;
+
+        txn.update(targetRef, {'coins': targetCoins - amount});
+        txn.update(agentRef, {'coins': agentCoins + amount});
+
+        final txRef = db.collection('agent_recharge_transactions').doc();
+        txn.set(txRef, {
+          'agent_id': agentUid,
+          'type': 'withdraw',
+          'recipient_uid': targetUid,
+          'recipient_display_name': user['display_name'] ?? 'مستخدم',
+          'recipient_avatar_url': user['avatar_url'] ?? '',
+          'recipient_kayan_id': user['kayan_id'] ?? '',
+          'gold_amount': amount,
+          'status': 'completed',
+          'created_at': DateTime.now().toIso8601String(),
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+        return true;
+      });
+
+      if (!mounted) return;
+      setState(() => _busy = false);
+
+      if (success) {
+        FirebaseService().sendNotification(
+          uid: targetUid,
+          type: 'withdraw',
+          title: 'سحب كوينز 🪙',
+          body: 'قام وكيل الشحن بسحب $amount كوين من رصيدك.',
+          data: {'amount': amount, 'agent_id': agentUid},
+        );
+
+        _showSnack('✅ تم سحب $amount كوين من المستخدم بنجاح');
+        _clearSelected();
+        widget.onSuccess();
+      } else {
+        _showSnack('فشلت العملية: رصيد المستخدم غير كافٍ');
+      }
+    } catch (e) {
+      debugPrint('[withdraw] error: $e');
+      if (mounted) {
+        setState(() => _busy = false);
+        _showSnack('حدث خطأ أثناء السحب: $e');
+      }
+    }
   }
 
   void _showSnack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
@@ -557,6 +824,7 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
           if (!_searching && _results.isNotEmpty) _buildResultsList(),
           if (_selected != null) ...[
             const SizedBox(height: 20),
+            _buildModeSelector(),
             _buildSelectedCard(),
             const SizedBox(height: 20),
             _buildQuickAmounts(),
@@ -574,6 +842,92 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
       ),
     );
   }
+
+  Widget _buildModeSelector() => Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 3)),
+          ],
+        ),
+        child: Row(children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _isWithdrawMode = false),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: !_isWithdrawMode
+                      ? const LinearGradient(colors: [Color(0xFF2E7D32), Color(0xFF4CAF50)])
+                      : null,
+                  color: !_isWithdrawMode ? null : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: !_isWithdrawMode
+                      ? [
+                          BoxShadow(
+                              color: Colors.green.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3)),
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Text(
+                    '🟢 شحن رصيد للمستخدم',
+                    style: GoogleFonts.tajawal(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: !_isWithdrawMode ? Colors.white : Colors.black54,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() => _isWithdrawMode = true),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: _isWithdrawMode
+                      ? const LinearGradient(colors: [Color(0xFFC62828), Color(0xFFEF5350)])
+                      : null,
+                  color: _isWithdrawMode ? null : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: _isWithdrawMode
+                      ? [
+                          BoxShadow(
+                              color: Colors.red.withValues(alpha: 0.3),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3)),
+                        ]
+                      : null,
+                ),
+                child: Center(
+                  child: Text(
+                    '🔴 سحب كوينز من المستخدم',
+                    style: GoogleFonts.tajawal(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: _isWithdrawMode ? Colors.white : Colors.black54,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ]),
+      );
 
   Widget _buildSearchField() => Container(
         decoration: BoxDecoration(
@@ -594,7 +948,7 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
           style: GoogleFonts.tajawal(
               fontSize: 15, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            hintText: 'ابحث بالاسم أو Kayan ID...',
+            hintText: 'ابحث بالمعرف ID أو الاسم أو رقم الحساب...',
             hintStyle:
                 GoogleFonts.tajawal(fontSize: 14, color: Colors.black38),
             prefixIcon: _searching
@@ -675,6 +1029,22 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
                                     fontWeight: FontWeight.w700)),
                         ]),
                   ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFB800).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '🪙 ${_fmtAmt(user['coins'] ?? 0)}',
+                      style: GoogleFonts.tajawal(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFFB78103),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   const Icon(Icons.chevron_left_rounded,
                       color: Colors.black26, size: 20),
                 ]),
@@ -686,55 +1056,118 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
 
   Widget _buildSelectedCard() {
     final user = _selected!;
+    final coins = (user['coins'] as num?)?.toInt() ?? 0;
+    final diamonds = (user['diamonds'] as num?)?.toInt() ?? 0;
+    final primaryColor = _isWithdrawMode ? Colors.redAccent : KayanBrandColors.logoPrimary;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [
-          KayanBrandColors.logoPrimary.withValues(alpha: 0.08),
-          KayanBrandColors.royalGold.withValues(alpha: 0.05),
-        ]),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-            color: KayanBrandColors.logoPrimary.withValues(alpha: 0.25)),
-      ),
-      child: Row(children: [
-        AgentAvatar(url: user['avatar_url']?.toString(), size: 58),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('المستخدم المختار',
-                    style: GoogleFonts.tajawal(
-                        fontSize: 11,
-                        color: KayanBrandColors.logoPrimary,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 3),
-                Text(user['display_name']?.toString() ?? 'مستخدم',
-                    style: GoogleFonts.tajawal(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                        color: const Color(0xFF1a1a2e))),
-                if (user['kayan_id'] != null)
-                  Text('# ${user['kayan_id']}',
-                      style: GoogleFonts.tajawal(
-                          fontSize: 12,
-                          color: KayanBrandColors.logoPrimary,
-                          fontWeight: FontWeight.w700)),
-              ]),
-        ),
-        GestureDetector(
-          onTap: _clearSelected,
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.close_rounded,
-                size: 18, color: Colors.red),
+        border: Border.all(color: primaryColor.withValues(alpha: 0.35), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: primaryColor.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
-        ),
-      ]),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(children: [
+            AgentAvatar(url: user['avatar_url']?.toString(), size: 56),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_isWithdrawMode ? 'المستخدم المطلوب سحب الكوينز منه' : 'المستخدم المطلوب شحن رصيده',
+                        style: GoogleFonts.tajawal(
+                            fontSize: 11,
+                            color: primaryColor,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 3),
+                    Text(user['display_name']?.toString() ?? 'مستخدم',
+                        style: GoogleFonts.tajawal(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: const Color(0xFF1a1a2e))),
+                    if (user['kayan_id'] != null)
+                      Text('# ${user['kayan_id']}',
+                          style: GoogleFonts.tajawal(
+                              fontSize: 12,
+                              color: primaryColor,
+                              fontWeight: FontWeight.w700)),
+                  ]),
+            ),
+            GestureDetector(
+              onTap: _clearSelected,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.close_rounded,
+                    size: 18, color: Colors.red),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Colors.black12),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFB800).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    const Text('🪙', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('رصيد الكوينز', style: GoogleFonts.tajawal(fontSize: 10, color: Colors.black45)),
+                          Text(_fmtAmt(coins), style: GoogleFonts.tajawal(fontSize: 13, fontWeight: FontWeight.w900, color: const Color(0xFFB78103))),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    const Text('💎', style: TextStyle(fontSize: 16)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('رصيد الماس', style: GoogleFonts.tajawal(fontSize: 10, color: Colors.black45)),
+                          Text(_fmtAmt(diamonds), style: GoogleFonts.tajawal(fontSize: 13, fontWeight: FontWeight.w900, color: Colors.blue.shade800)),
+                        ],
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -870,7 +1303,7 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
               fontSize: 18, fontWeight: FontWeight.w800),
           onChanged: (_) => setState(() {}),
           decoration: InputDecoration(
-            hintText: 'أو أدخل عدد الكوينز',
+            hintText: _isWithdrawMode ? 'أدخل عدد الكوينز المراد سحبها' : 'أدخل عدد الكوينز المراد شحنها',
             hintStyle:
                 GoogleFonts.tajawal(fontSize: 15, color: Colors.black38),
             prefixIcon: const Padding(
@@ -900,14 +1333,16 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
             gradient: LinearGradient(
               colors: _busy
                   ? [Colors.grey.shade300, Colors.grey.shade300]
-                  : [KayanBrandColors.logoPrimary, const Color(0xFFFF6B00)],
+                  : _isWithdrawMode
+                      ? [const Color(0xFFC62828), const Color(0xFFEF5350)]
+                      : [KayanBrandColors.logoPrimary, const Color(0xFFFF6B00)],
             ),
             borderRadius: BorderRadius.circular(16),
             boxShadow: _busy
                 ? []
                 : [
                     BoxShadow(
-                        color: KayanBrandColors.logoPrimary
+                        color: (_isWithdrawMode ? Colors.red : KayanBrandColors.logoPrimary)
                             .withValues(alpha: 0.4),
                         blurRadius: 16,
                         offset: const Offset(0, 6)),
@@ -924,7 +1359,8 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
                     height: 22,
                     child: CircularProgressIndicator(
                         color: Colors.white, strokeWidth: 2.5))
-                : Text('شحن الآن 🚀',
+                : Text(
+                    _isWithdrawMode ? 'سحب الكوينز الآن 📤' : 'شحن الكوينز الآن 🚀',
                     style: GoogleFonts.tajawal(
                         fontSize: 16,
                         fontWeight: FontWeight.w900,
@@ -938,13 +1374,13 @@ class _AgentRechargeTabState extends State<AgentRechargeTab> {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           const Text('🔍', style: TextStyle(fontSize: 52)),
           const SizedBox(height: 16),
-          Text('ابحث عن مستخدم',
+          Text('ابحث عن مستخدم بالـ ID أو الاسم',
               style: GoogleFonts.tajawal(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
                   color: Colors.black54)),
           const SizedBox(height: 6),
-          Text('اكتب الاسم أو Kayan ID وستظهر النتائج تلقائياً',
+          Text('يمكنك البحث برقم المعرف أو الاسم لشحن أو سحب الكوينز فورياً',
               textAlign: TextAlign.center,
               style: GoogleFonts.tajawal(
                   fontSize: 13, color: Colors.black38)),

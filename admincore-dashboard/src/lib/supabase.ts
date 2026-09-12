@@ -232,10 +232,12 @@ class FbQuery {
       } else {
         await setDoc(doc(db, this.table, key), values)
       }
-      return { data: { ...values, id: key, uid: key }, error: null }
+      const item = { ...values, id: key, uid: key }
+      return { data: [item], error: null }
     }
     const r = await addDoc(collection(db, this.table), values)
-    return { data: { ...values, id: r.id, uid: r.id }, error: null }
+    const item = { ...values, id: r.id, uid: r.id }
+    return { data: [item], error: null }
   }
 
   private async _runUpdate(): Promise<FbResult> {
@@ -244,7 +246,7 @@ class FbQuery {
     if (directFilter && typeof directFilter.value === 'string' && directFilter.value) {
       try {
         await setDoc(doc(db, this.table, String(directFilter.value)), this.mutationValues, { merge: true })
-        return { data: null, error: null }
+        return { data: [], error: null }
       } catch (e) {
         console.error(`_runUpdate on ${this.table}/${directFilter.value} failed:`, e)
       }
@@ -255,7 +257,7 @@ class FbQuery {
     for (const d of snap.docs) {
       await setDoc(d.ref, this.mutationValues, { merge: true })
     }
-    return { data: null, error: null }
+    return { data: [], error: null }
   }
 
   private async _runDelete(): Promise<FbResult> {
@@ -263,25 +265,27 @@ class FbQuery {
     const directFilter = this.filters.find(f => f.field === keyField || f.field === 'id' || f.field === 'uid')
     if (directFilter && typeof directFilter.value === 'string' && directFilter.value) {
       await deleteDoc(doc(db, this.table, String(directFilter.value)))
-      return { data: null, error: null }
+      return { data: [], error: null }
     }
     const snap = await getDocs(
       query(collection(db, this.table), ...this.filters.map(f => where(f.field, '==', f.value))),
     )
     for (const d of snap.docs) await deleteDoc(d.ref)
-    return { data: null, error: null }
+    return { data: [], error: null }
   }
 
   async maybeSingle() {
     const r = await this._execute()
-    return { data: r.data?.[0] ?? null, error: r.error }
+    const item = Array.isArray(r.data) ? (r.data[0] ?? null) : (r.data ?? null)
+    return { data: item, error: r.error }
   }
 
   async single() {
     const r = await this._execute()
+    const item = Array.isArray(r.data) ? (r.data[0] ?? null) : (r.data ?? null)
     return {
-      data: r.data?.[0] ?? null,
-      error: r.error || (r.data && r.data.length > 0 ? null : new Error('No rows found')),
+      data: item,
+      error: r.error || (item ? null : new Error('No rows found')),
     }
   }
 

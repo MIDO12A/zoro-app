@@ -1,4 +1,4 @@
-import { useState, useRef, ChangeEvent } from 'react';
+import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { Upload, X, Loader2, Camera, Film, Image, FileJson, FileArchive } from 'lucide-react';
 
 type AssetType = 'svga' | 'vap' | 'mp4' | 'webp' | 'gif' | 'png' | 'jpg' | 'zip' | 'json' | 'other';

@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 /// نموذج بيانات وكيل المضيفين (AgentInfoBean)
 class AgentInfoModel {
   final int userId;
@@ -15,6 +13,17 @@ class AgentInfoModel {
   final String avatarUrl;
   final String countryFlagUrl;
 
+  final String agencyId;
+  final double commissionRate;
+  final String tier;
+  final String notice;
+  final int targetDiamonds;
+  final double salaryUsd;
+  final String rewardType;
+  final double rewardValue;
+  final String periodType;
+  final List<Map<String, dynamic>> milestones;
+
   const AgentInfoModel({
     this.userId = 0,
     this.agentBean = 0,
@@ -28,6 +37,16 @@ class AgentInfoModel {
     this.agencyName = '',
     this.avatarUrl = '',
     this.countryFlagUrl = '',
+    this.agencyId = '',
+    this.commissionRate = 0.10,
+    this.tier = 'bronze',
+    this.notice = 'أهلاً بكم في الوكالة الرسمية!',
+    this.targetDiamonds = 1000000,
+    this.salaryUsd = 0.0,
+    this.rewardType = 'salary_usd',
+    this.rewardValue = 0.0,
+    this.periodType = 'monthly',
+    this.milestones = const [],
   });
 
   factory AgentInfoModel.fromJson(Map<String, dynamic> json) {
@@ -44,6 +63,16 @@ class AgentInfoModel {
       agencyName: json['agency_name']?.toString() ?? json['nickname']?.toString() ?? '',
       avatarUrl: json['avatar_url']?.toString() ?? json['headImage']?.toString() ?? '',
       countryFlagUrl: json['country_flag_url']?.toString() ?? '',
+      agencyId: json['agency_id']?.toString() ?? '',
+      commissionRate: (json['commission_rate'] as num?)?.toDouble() ?? 0.10,
+      tier: json['tier']?.toString() ?? 'bronze',
+      notice: json['notice']?.toString() ?? json['description']?.toString() ?? 'أهلاً بكم في الوكالة الرسمية!',
+      targetDiamonds: (json['target_diamonds'] as num?)?.toInt() ?? 1000000,
+      salaryUsd: (json['salary_usd'] as num?)?.toDouble() ?? 0.0,
+      rewardType: json['reward_type']?.toString() ?? 'salary_usd',
+      rewardValue: (json['reward_value'] as num?)?.toDouble() ?? 0.0,
+      periodType: json['period_type']?.toString() ?? 'monthly',
+      milestones: (json['milestones'] as List<dynamic>?)?.map((e) => Map<String, dynamic>.from(e as Map)).toList() ?? const [],
     );
   }
 
@@ -60,6 +89,16 @@ class AgentInfoModel {
         'agency_name': agencyName,
         'avatar_url': avatarUrl,
         'country_flag_url': countryFlagUrl,
+        'agency_id': agencyId,
+        'commission_rate': commissionRate,
+        'tier': tier,
+        'notice': notice,
+        'target_diamonds': targetDiamonds,
+        'salary_usd': salaryUsd,
+        'reward_type': rewardType,
+        'reward_value': rewardValue,
+        'period_type': periodType,
+        'milestones': milestones,
       };
 }
 
@@ -67,6 +106,8 @@ class AgentInfoModel {
 class AnchorAgentUserInfoDataModel {
   final int userId;
   final int userNo;
+  final String uid;
+  final String role;
   final String nickname;
   final String headImage;
   final int country;
@@ -85,6 +126,8 @@ class AnchorAgentUserInfoDataModel {
   const AnchorAgentUserInfoDataModel({
     this.userId = 0,
     this.userNo = 0,
+    this.uid = '',
+    this.role = 'host',
     this.nickname = '',
     this.headImage = '',
     this.country = 0,
@@ -119,6 +162,8 @@ class AnchorAgentUserInfoDataModel {
     return AnchorAgentUserInfoDataModel(
       userId: (json['user_id'] as num?)?.toInt() ?? (json['uid'] != null ? int.tryParse(json['uid'].toString()) ?? 0 : 0),
       userNo: (json['user_no'] as num?)?.toInt() ?? (json['custom_id'] != null ? int.tryParse(json['custom_id'].toString()) ?? 0 : 0),
+      uid: json['uid']?.toString() ?? '',
+      role: json['role']?.toString() ?? 'host',
       nickname: json['nickname']?.toString() ?? json['name']?.toString() ?? '',
       headImage: json['headImage']?.toString() ?? json['photo_url']?.toString() ?? json['avatar']?.toString() ?? '',
       country: (json['country'] as num?)?.toInt() ?? 0,

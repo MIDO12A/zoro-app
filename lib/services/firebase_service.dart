@@ -2628,7 +2628,63 @@ class FirebaseService {
         return await _buildAgencyDataPayload(doc.id, data, agentUid);
       }
 
-      // إذا لم يكن لديه وكالة مسجلة، ننشئ له أو نعيد ملف فارغ افتراضي
+      // 2. البحث عن طريق users/{agentUid}.agency_id
+      final userSnap = await _db.collection('users').doc(agentUid).get();
+      final userAgencyId = userSnap.data()?['agency_id'] as String?;
+      if (userAgencyId != null && userAgencyId.isNotEmpty) {
+        final doc = await _db.collection('host_agencies').doc(userAgencyId).get();
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>? ?? {};
+          data['id'] = doc.id;
+          return await _buildAgencyDataPayload(doc.id, data, agentUid);
+        }
+      }
+
+      // 3. البحث في host_agency_members
+      final memberSnap = await _db.collection('host_agency_members').where('user_id', isEqualTo: agentUid).limit(1).get();
+      if (memberSnap.docs.isNotEmpty) {
+        final aid = memberSnap.docs.first.data()['agency_id'] as String?;
+        if (aid != null && aid.isNotEmpty) {
+          final doc = await _db.collection('host_agencies').doc(aid).get();
+          if (doc.exists) {
+            final data = doc.data() as Map<String, dynamic>? ?? {};
+            data['id'] = doc.id;
+            return await _buildAgencyDataPayload(doc.id, data, agentUid);
+          }
+        }
+      }
+
+      // 4. البحث في agency_applications وإنشاء الوكالة تلقائياً إن وجدت
+      final appSnap = await _db.collection('agency_applications').where('user_id', isEqualTo: agentUid).limit(1).get();
+      if (appSnap.docs.isNotEmpty) {
+        final appData = appSnap.docs.first.data();
+        final aid = 'agency_$agentUid';
+        final newAgency = {
+          'id': aid,
+          'name': appData['agency_name'] ?? 'وكالة المضيفين',
+          'owner_id': agentUid,
+          'description': appData['description'] ?? 'وكالة معتمدة',
+          'country': appData['country'] ?? 'عالمي',
+          'commission_rate': 0.10,
+          'tier': 'bronze',
+          'is_active': true,
+          'member_count': 1,
+          'total_diamonds_monthly': 0,
+          'created_at': DateTime.now().toIso8601String(),
+        };
+        await _db.collection('host_agencies').doc(aid).set(newAgency);
+        await _db.collection('host_agency_members').doc('${aid}_$agentUid').set({
+          'agency_id': aid,
+          'user_id': agentUid,
+          'role': 'owner',
+          'status': 'active',
+          'joined_at': DateTime.now().toIso8601String(),
+        });
+        await _db.collection('users').doc(agentUid).update({'agency_id': aid, 'is_host_agent': true});
+        return await _buildAgencyDataPayload(aid, newAgency, agentUid);
+      }
+
+      // إذا لم يكن لديه وكالة مسجلة
       return {
         'info': null,
         'anchors': <Map<String, dynamic>>[],
@@ -2665,6 +2721,8 @@ class FirebaseService {
       anchors.add({
         'user_id': _asInt(uData['custom_id'] ?? mData['user_id'] ?? 0),
         'user_no': _asInt(uData['custom_id'] ?? 0),
+        'uid': mUid,
+        'role': mData['role']?.toString() ?? 'host',
         'nickname': uData['name'] ?? mData['user_name'] ?? 'مضيف',
         'headImage': uData['photo_url'] ?? uData['avatar'] ?? '',
         'country': _asInt(uData['country'] ?? 0),
@@ -2685,9 +2743,51 @@ class FirebaseService {
     final agentUserSnap = await _db.collection('users').doc(agentUid).get();
     final agentUserData = agentUserSnap.exists ? ((agentUserSnap.data() as Map<String, dynamic>?) ?? {}) : {};
 
+    // جلب مراحل وتارجت الوكالة من host_milestones
+    final milestonesSnap = await _db.collection('host_milestones')
+        .where('is_active', isEqualTo: true)
+        .get();
+
+    final milestonesList = <Map<String, dynamic>>[];
+    for (final mDoc in milestonesSnap.docs) {
+      final md = mDoc.data();
+      md['id'] = mDoc.id;
+      milestonesList.add(md);
+    }
+    // Sort milestones by target_diamonds ascending
+    milestonesList.sort((a, b) {
+      final ta = (a['target_diamonds'] as num?)?.toInt() ?? 0;
+      final tb = (b['target_diamonds'] as num?)?.toInt() ?? 0;
+      return ta.compareTo(tb);
+    });
+
+    // Find current or next milestone
+    Map<String, dynamic>? activeMilestone;
+    for (final m in milestonesList) {
+      final td = (m['target_diamonds'] as num?)?.toInt() ?? 0;
+      if (totalDiamonds < td) {
+        activeMilestone = m;
+        break;
+      }
+    }
+    if (activeMilestone == null && milestonesList.isNotEmpty) {
+      activeMilestone = milestonesList.last;
+    }
+
+    final targetDiamonds = (activeMilestone?['target_diamonds'] as num?)?.toInt() ?? 1000000;
+    final commissionRate = (agencyData['commission_rate'] as num?)?.toDouble() ??
+        (activeMilestone?['agent_commission_rate'] as num?)?.toDouble() ?? 0.10;
+    final salaryUsd = (activeMilestone?['reward_value'] as num?)?.toDouble() ?? 0.0;
+    final rewardType = activeMilestone?['reward_type']?.toString() ?? 'salary_usd';
+    final rewardValue = (activeMilestone?['reward_value'] as num?)?.toDouble() ?? 0.0;
+    final periodType = activeMilestone?['period_type']?.toString() ?? 'monthly';
+    final notice = agencyData['notice']?.toString() ?? agencyData['description']?.toString() ?? 'أهلاً بكم في الوكالة الرسمية!';
+    final tier = agencyData['tier']?.toString() ?? 'bronze';
+
     return {
       'info': {
         'user_id': _asInt(agentUserData['custom_id'] ?? 0),
+        'agency_id': agencyDocId,
         'agency_name': agencyData['name'] ?? 'وكالة النجوم المعتمدة',
         'avatar_url': agentUserData['photo_url'] ?? '',
         'country_flag_url': agentUserData['country_flag_url'] ?? '',
@@ -2695,9 +2795,76 @@ class FirebaseService {
         'transfer_money': totalDiamonds,
         'transfer_dollar': (totalDiamonds / 1000).toInt(),
         'transfer_number': membersSnap.docs.length,
+        'commission_rate': commissionRate,
+        'tier': tier,
+        'notice': notice,
+        'target_diamonds': targetDiamonds,
+        'salary_usd': salaryUsd,
+        'reward_type': rewardType,
+        'reward_value': rewardValue,
+        'period_type': periodType,
+        'milestones': milestonesList,
       },
       'anchors': anchors,
     };
+  }
+
+  /// تحديث إعلان الوكالة
+  Future<bool> updateAgencyNotice({required String agencyId, required String notice}) async {
+    try {
+      await _db.collection('host_agencies').doc(agencyId).update({
+        'notice': notice,
+        'description': notice,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('updateAgencyNotice error: $e');
+      return false;
+    }
+  }
+
+  /// إزالة عضو من الوكالة
+  Future<bool> removeAgencyMember({required String agencyId, required String memberUid}) async {
+    try {
+      // Find member doc in host_agency_members
+      final snap = await _db.collection('host_agency_members')
+          .where('agency_id', isEqualTo: agencyId)
+          .where('user_id', isEqualTo: memberUid)
+          .get();
+      for (final d in snap.docs) {
+        await d.reference.delete();
+      }
+      // Clear agency_id on user doc
+      await _db.collection('users').doc(memberUid).update({
+        'agency_id': FieldValue.delete(),
+      });
+      // Decrement member count
+      await _db.collection('host_agencies').doc(agencyId).update({
+        'member_count': FieldValue.increment(-1),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('removeAgencyMember error: $e');
+      return false;
+    }
+  }
+
+  /// ترقية أو تنزيل رتبة العضو في الوكالة (مشرف / مضيف)
+  Future<bool> updateAgencyMemberRole({required String agencyId, required String memberUid, required String newRole}) async {
+    try {
+      final snap = await _db.collection('host_agency_members')
+          .where('agency_id', isEqualTo: agencyId)
+          .where('user_id', isEqualTo: memberUid)
+          .get();
+      for (final d in snap.docs) {
+        await d.reference.update({'role': newRole});
+      }
+      return true;
+    } catch (e) {
+      debugPrint('updateAgencyMemberRole error: $e');
+      return false;
+    }
   }
 
   /// تحويل كوينز من الوكيل إلى أحد مضيفي الوكالة (Agent Coin Transfer)

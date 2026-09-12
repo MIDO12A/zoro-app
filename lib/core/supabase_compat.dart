@@ -1211,9 +1211,46 @@ class SupabaseClient {
     final customId = userData['custom_id']?.toString() ?? '';
     final userAvatar = userData['photo_url']?.toString() ?? userData['avatar']?.toString() ?? '';
 
-    // 2. Add to agency_applications
+    // 2. Generate agency ID
+    final agencyId = 'agency_${now.millisecondsSinceEpoch}_$uid';
+
+    // 3. Create host agency in host_agencies collection
+    final agencyData = {
+      'id': agencyId,
+      'name': name,
+      'owner_id': uid,
+      'description': p?['p_description'] ?? 'وكالة مضيفين معتمدة',
+      'whatsapp': p?['p_phone'],
+      'country': p?['p_country'] ?? 'عالمي',
+      'photo_url': userAvatar,
+      'tier': 'bronze',
+      'commission_rate': 0.10,
+      'is_active': true,
+      'member_count': 1,
+      'total_diamonds_monthly': 0,
+      'created_at': now.toIso8601String(),
+    };
+    await _db.collection('host_agencies').doc(agencyId).set(agencyData);
+
+    // 4. Add owner to host_agency_members
+    await _db.collection('host_agency_members').doc('${agencyId}_$uid').set({
+      'agency_id': agencyId,
+      'user_id': uid,
+      'role': 'owner',
+      'status': 'active',
+      'joined_at': now.toIso8601String(),
+    });
+
+    // 5. Update user document
+    await _db.collection('users').doc(uid).update({
+      'agency_id': agencyId,
+      'is_host_agent': true,
+    });
+
+    // 6. Record application in agency_applications (approved)
     await _db.collection('agency_applications').doc(appId).set({
       'id': appId,
+      'agency_id': agencyId,
       'user_id': uid,
       'user_name': userName,
       'custom_id': customId,
@@ -1223,13 +1260,14 @@ class SupabaseClient {
       'description': p?['p_description'],
       'whatsapp': p?['p_phone'],
       'country': p?['p_country'],
-      'status': 'pending',
+      'status': 'approved',
       'created_at': now.toIso8601String(),
     });
 
     return {
       'status': 'ok',
-      'message': 'تم إرسال طلب فتح الوكالة بنجاح وهو قيد المراجعة والموافقة من الإدارة',
+      'agency_id': agencyId,
+      'message': 'تم إنشاء الوكالة بنجاح! 🎉',
     };
   }
 
@@ -1457,19 +1495,68 @@ class SupabaseClient {
     final pin = data['agent_pin']?.toString();
     final customId = data['custom_id']?.toString() ?? data['customId']?.toString() ?? uid;
 
+    int todayTotal = 0;
+    int todayCount = 0;
+    int weekTotal = 0;
+    int weekCount = 0;
+    int monthTotal = 0;
+    int monthCount = 0;
+    int allTotal = 0;
+    int allCount = 0;
+    List<Map<String, dynamic>> recentTxns = [];
+
+    try {
+      final snap = await _db.collection('agent_recharge_transactions')
+          .where('agent_id', isEqualTo: uid)
+          .limit(100)
+          .get();
+      final now = DateTime.now();
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final weekStart = todayStart.subtract(Duration(days: now.weekday % 7));
+      final monthStart = DateTime(now.year, now.month, 1);
+
+      for (final doc in snap.docs) {
+        final d = Map<String, dynamic>.from(doc.data());
+        d['id'] = doc.id;
+        final amt = (d['gold_amount'] as num?)?.toInt() ?? 0;
+        final dDate = d['created_at'] != null ? DateTime.tryParse(d['created_at'].toString()) : null;
+        allTotal += amt;
+        allCount++;
+        if (dDate != null) {
+          if (dDate.isAfter(todayStart)) {
+            todayTotal += amt;
+            todayCount++;
+          }
+          if (dDate.isAfter(weekStart)) {
+            weekTotal += amt;
+            weekCount++;
+          }
+          if (dDate.isAfter(monthStart)) {
+            monthTotal += amt;
+            monthCount++;
+          }
+        }
+        recentTxns.add(d);
+      }
+      recentTxns.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
+    } catch (_) {}
+
+    const dailyLimit = 10000000;
+    final remaining = (dailyLimit - todayTotal) > 0 ? (dailyLimit - todayTotal) : 0;
+
     return {
       'ok': true,
       'enabled': true,
       'pin_set': pin != null && pin.isNotEmpty,
-      'daily_limit': 10000000,
+      'daily_limit': dailyLimit,
       'agency_gold': coins,
       'agent_public_id': customId,
-      'today': {'total': 0, 'count': 0, 'remaining': 10000000},
-      'week': {'total': 0, 'count': 0},
-      'month': {'total': 0, 'count': 0},
-      'all': {'total': 0, 'count': 0},
+      'today': {'total': todayTotal, 'count': todayCount, 'remaining': remaining},
+      'week': {'total': weekTotal, 'count': weekCount},
+      'month': {'total': monthTotal, 'count': monthCount},
+      'all': {'total': allTotal, 'count': allCount},
       'week_chart': <Map<String, dynamic>>[],
-      'recent_txns': <Map<String, dynamic>>[],
+      'recent_txns': recentTxns.take(10).toList(),
       'quick_amounts': [1000, 5000, 10000, 50000, 100000],
       'usd_balance': 0.0,
     };
@@ -1515,7 +1602,24 @@ class SupabaseClient {
   }
 
   Future<List<Map<String, dynamic>>> _rpcAgentRechargeHistory(Map<String, dynamic>? p) async {
-    return <Map<String, dynamic>>[];
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return <Map<String, dynamic>>[];
+    try {
+      final snap = await _db.collection('agent_recharge_transactions')
+          .where('agent_id', isEqualTo: uid)
+          .limit((p?['p_limit'] as num?)?.toInt() ?? 100)
+          .get();
+      final list = snap.docs.map((d) {
+        final data = Map<String, dynamic>.from(d.data());
+        data['id'] = d.id;
+        return data;
+      }).toList();
+      list.sort((a, b) => (b['created_at'] ?? '').toString().compareTo((a['created_at'] ?? '').toString()));
+      return list;
+    } catch (e) {
+      debugPrint('[_rpcAgentRechargeHistory] $e');
+      return <Map<String, dynamic>>[];
+    }
   }
 
   Future<Map<String, dynamic>> _rpcAgentSetQuickAmounts(Map<String, dynamic>? p) async {

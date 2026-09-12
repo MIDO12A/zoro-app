@@ -205,36 +205,42 @@ class AgentQuickActionBtn extends StatelessWidget {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// نافذة تأكيد شحن الكوينز.
+/// نافذة تأكيد شحن أو سحب الكوينز.
 class AgentRechargeConfirmDialog extends StatelessWidget {
   const AgentRechargeConfirmDialog({
     super.key,
     required this.user,
     required this.amount,
+    this.isWithdraw = false,
   });
 
   final Map<String, dynamic> user;
   final int                  amount;
+  final bool                 isWithdraw;
 
   @override
   Widget build(BuildContext context) {
     final name = user['display_name']?.toString() ?? 'مستخدم';
     final kid  = user['kayan_id']?.toString();
     final url  = user['avatar_url']?.toString();
+    final primaryColor = isWithdraw ? Colors.redAccent : KayanBrandColors.logoPrimary;
+    final secColor = isWithdraw ? Colors.deepOrange : const Color(0xFFFF6B00);
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(width: 60, height: 60,
           decoration: BoxDecoration(
-            color: KayanBrandColors.logoPrimary.withValues(alpha: 0.1),
+            color: primaryColor.withValues(alpha: 0.1),
             shape: BoxShape.circle),
-          child: const Center(child: Text('🪙', style: TextStyle(fontSize: 30)))),
+          child: Center(child: Text(isWithdraw ? '📤' : '🪙', style: const TextStyle(fontSize: 30)))),
         const SizedBox(height: 14),
-        Text('تأكيد الشحن',
+        Text(isWithdraw ? 'تأكيد السحب من المستخدم' : 'تأكيد شحن كوينز',
           style: GoogleFonts.tajawal(fontSize: 18, fontWeight: FontWeight.w900,
             color: const Color(0xFF1a1a2e))),
         const SizedBox(height: 4),
-        Text('هل أنت متأكد؟',
+        Text(isWithdraw ? 'سيتم خصم الكوينز من رصيد المستخدم وإضافتها لرصيدك' : 'هل أنت متأكد من إرسال الكوينز للمستخدم؟',
+          textAlign: TextAlign.center,
           style: GoogleFonts.tajawal(fontSize: 13, color: Colors.black54)),
         const SizedBox(height: 20),
         Container(padding: const EdgeInsets.all(14),
@@ -251,7 +257,7 @@ class AgentRechargeConfirmDialog extends StatelessWidget {
                 color: const Color(0xFF1a1a2e))),
               if (kid != null) Text('# $kid',
                 style: GoogleFonts.tajawal(fontSize: 12,
-                  color: KayanBrandColors.logoPrimary,
+                  color: primaryColor,
                   fontWeight: FontWeight.w700)),
             ])),
           ])),
@@ -259,11 +265,11 @@ class AgentRechargeConfirmDialog extends StatelessWidget {
         Container(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [KayanBrandColors.logoPrimary, const Color(0xFFFF6B00)]),
+              colors: [primaryColor, secColor]),
             borderRadius: BorderRadius.circular(40)),
-          child: Text('🪙  $amount كوين',
+          child: Text('🪙  $amount كوين ${isWithdraw ? "(سحب)" : "(شحن)"}',
             style: GoogleFonts.tajawal(
-              fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white))),
+              fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white))),
         const SizedBox(height: 24),
         Row(children: [
           Expanded(child: OutlinedButton(
@@ -279,17 +285,17 @@ class AgentRechargeConfirmDialog extends StatelessWidget {
           Expanded(child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [KayanBrandColors.logoPrimary, const Color(0xFFFF6B00)]),
+                colors: [primaryColor, secColor]),
               borderRadius: BorderRadius.circular(14),
               boxShadow: [BoxShadow(
-                color: KayanBrandColors.logoPrimary.withValues(alpha: 0.4),
+                color: primaryColor.withValues(alpha: 0.4),
                 blurRadius: 12, offset: const Offset(0, 4))]),
             child: TextButton(
               onPressed: () => Navigator.of(context).pop(true),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              child: Text('تأكيد ✅',
+              child: Text(isWithdraw ? 'تأكيد السحب ✅' : 'تأكيد الشحن ✅',
                 style: GoogleFonts.tajawal(
                   fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white))))),
         ]),

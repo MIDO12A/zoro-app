@@ -93,6 +93,9 @@ class _AgentHistoryTabState extends State<AgentHistoryTab> {
           final kid = r['recipient_kayan_id']?.toString();
           final ts = r['created_at'];
           final status = r['status']?.toString() ?? 'completed';
+          final isWithdraw = r['type'] == 'withdraw';
+          final badgeColor = isWithdraw ? Colors.redAccent : KayanBrandColors.logoPrimary;
+
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
@@ -112,16 +115,36 @@ class _AgentHistoryTabState extends State<AgentHistoryTab> {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name,
-                          style: GoogleFonts.tajawal(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF1a1a2e))),
-                      if (kid != null)
+                      Row(
+                        children: [
+                          Text(name,
+                              style: GoogleFonts.tajawal(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF1a1a2e))),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: badgeColor.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              isWithdraw ? 'سحب 📤' : 'شحن 🚀',
+                              style: GoogleFonts.tajawal(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: badgeColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (kid != null && kid.isNotEmpty)
                         Text('# $kid',
                             style: GoogleFonts.tajawal(
                                 fontSize: 11,
-                                color: KayanBrandColors.logoPrimary,
+                                color: badgeColor,
                                 fontWeight: FontWeight.w700)),
                       const SizedBox(height: 3),
                       Text(_fmtDate(ts),
@@ -134,17 +157,16 @@ class _AgentHistoryTabState extends State<AgentHistoryTab> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: KayanBrandColors.logoPrimary.withValues(alpha: 0.1),
+                    color: badgeColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: KayanBrandColors.logoPrimary
-                            .withValues(alpha: 0.3)),
+                        color: badgeColor.withValues(alpha: 0.3)),
                   ),
-                  child: Text('🪙 $gold',
+                  child: Text('${isWithdraw ? "-" : "+"} 🪙 $gold',
                       style: GoogleFonts.tajawal(
                           fontSize: 14,
                           fontWeight: FontWeight.w900,
-                          color: KayanBrandColors.logoPrimary)),
+                          color: badgeColor)),
                 ),
                 const SizedBox(height: 4),
                 Container(
@@ -158,7 +180,7 @@ class _AgentHistoryTabState extends State<AgentHistoryTab> {
                   ),
                   child: Text(
                     status == 'completed'
-                        ? '✓ مكتمل'
+                        ? (isWithdraw ? '✓ تم السحب' : '✓ تم الشحن')
                         : status == 'refunded'
                             ? '↩ مُسترد'
                             : status,

@@ -677,8 +677,127 @@ export function subscribeAgencies(cb: (agencies: AgencyModel[]) => void) {
 
 export async function getHostAgencies(): Promise<HostAgencyModel[]> {
   try {
-    const { data: agenciesData } = await supabase.from('host_agencies').select('*').order('name');
-    const agencies = agenciesData ?? [];
+    const { data: agenciesData } = await supabase.from('host_agencies').select('*');
+    const agencies: any[] = agenciesData ? [...agenciesData] : [];
+
+    const existingOwnerIds = new Set(agencies.map(a => a.owner_id).filter(Boolean));
+    const existingNames = new Set(agencies.map(a => a.name).filter(Boolean));
+    const existingIds = new Set(agencies.map(a => a.id).filter(Boolean));
+
+    // 1. Sync from agency_applications (host agencies requested in app)
+    try {
+      const { data: appData } = await supabase.from('agency_applications').select('*');
+      for (const app of appData ?? []) {
+        if (app.agency_type === 'host' || !app.agency_type) {
+          const appOwner = app.user_id;
+          const appName = app.agency_name || app.name;
+          if (appName && (!existingOwnerIds.has(appOwner) && !existingNames.has(appName))) {
+            const newAg = {
+              id: app.id || `agency_${appOwner}`,
+              name: appName,
+              owner_id: appOwner,
+              description: app.description || 'وكالة مضيفين معتمدة',
+              country: app.country || null,
+              whatsapp: app.whatsapp || null,
+              photo_url: app.agency_logo || app.user_avatar || null,
+              tier: 'bronze',
+              commission_rate: 0.10,
+              is_active: true,
+              member_count: 1,
+              total_diamonds_monthly: 0,
+              created_at: app.created_at || new Date().toISOString(),
+            };
+            agencies.push(newAg);
+            existingOwnerIds.add(appOwner);
+            existingNames.add(appName);
+            existingIds.add(newAg.id);
+            // Save to host_agencies so it persists
+            supabase.from('host_agencies').insert(newAg).catch(() => {});
+            supabase.from('host_agency_members').upsert({
+              agency_id: newAg.id,
+              user_id: appOwner,
+              role: 'owner',
+              status: 'active',
+              joined_at: new Date().toISOString(),
+            }).catch(() => {});
+            supabase.from('users').update({ agency_id: newAg.id, is_host_agent: true }).eq('id', appOwner).catch(() => {});
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Sync from unions collection (legacy / older agencies)
+    try {
+      const { data: unionsData } = await supabase.from('unions').select('*');
+      for (const u of unionsData ?? []) {
+        const uId = u.id || u.union_id;
+        const uName = u.name || u.union_name;
+        const uOwner = u.owner_id || u.creator_id || u.uid;
+        if (uName && !existingNames.has(uName) && (!uId || !existingIds.has(uId))) {
+          const newAg = {
+            id: uId || `agency_${Date.now()}`,
+            name: uName,
+            owner_id: uOwner || '',
+            description: u.description || u.notice || 'وكالة معتمدة',
+            country: u.country || null,
+            photo_url: u.photo_url || u.avatar || null,
+            tier: u.tier || 'bronze',
+            commission_rate: ((u.commission_rate ?? 10) > 1 ? (u.commission_rate ?? 10) / 100 : (u.commission_rate ?? 0.1)),
+            is_active: u.is_active !== false,
+            member_count: u.member_count ?? 1,
+            total_diamonds_monthly: u.total_diamonds_monthly ?? 0,
+            created_at: u.created_at || new Date().toISOString(),
+          };
+          agencies.push(newAg);
+          existingNames.add(uName);
+          existingIds.add(newAg.id);
+          supabase.from('host_agencies').insert(newAg).catch(() => {});
+        }
+      }
+    } catch {}
+
+    // 3. Sync from users where is_host_agent == true or agency_id is set
+    try {
+      const { data: hostUsers } = await supabase.from('users').select('*');
+      for (const u of hostUsers ?? []) {
+        if ((u.is_host_agent || u.is_agent || u.role === 'agent') && !existingOwnerIds.has(u.id)) {
+          const agName = u.agency_name || `وكالة ${u.name || u.displayName || u.custom_id || 'المعتمدة'}`;
+          if (!existingNames.has(agName)) {
+            const newAgId = u.agency_id || `agency_${u.id}`;
+            const newAg = {
+              id: newAgId,
+              name: agName,
+              owner_id: u.id,
+              description: 'وكالة مضيفين',
+              country: u.country || null,
+              photo_url: u.photo_url || u.avatar || null,
+              tier: 'bronze',
+              commission_rate: 0.10,
+              is_active: true,
+              member_count: 1,
+              total_diamonds_monthly: 0,
+              created_at: new Date().toISOString(),
+            };
+            agencies.push(newAg);
+            existingOwnerIds.add(u.id);
+            existingNames.add(agName);
+            existingIds.add(newAg.id);
+            supabase.from('host_agencies').insert(newAg).catch(() => {});
+            supabase.from('host_agency_members').upsert({
+              agency_id: newAg.id,
+              user_id: u.id,
+              role: 'owner',
+              status: 'active',
+              joined_at: new Date().toISOString(),
+            }).catch(() => {});
+            if (!u.agency_id) {
+              supabase.from('users').update({ agency_id: newAg.id, is_host_agent: true }).eq('id', u.id).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch {}
+
     if (agencies.length === 0) return [];
 
     // Fetch members to compute real active member counts
@@ -705,10 +824,10 @@ export async function getHostAgencies(): Promise<HostAgencyModel[]> {
 
     return mapList<HostAgencyModel>(agencies.map((a: any) => {
       const owner = ownersMap[a.owner_id];
-      const realCount = memberCounts[a.id] ?? a.member_count ?? 0;
+      const realCount = memberCounts[a.id] ?? a.member_count ?? 1;
       return {
         ...a,
-        member_count: realCount,
+        member_count: Math.max(1, realCount),
         owner_name: owner?.name || owner?.displayName || a.owner_id?.slice(0, 8),
         owner_avatar: owner?.photo_url || owner?.avatar || '',
       };
@@ -742,7 +861,7 @@ export async function createHostAgency(name: string, ownerId: string, commission
         joined_at: new Date().toISOString(),
       });
       // Set agency_id on user
-      await supabase.from('users').update({ agency_id: (data as any).id }).eq('id', ownerId);
+      await supabase.from('users').update({ agency_id: (data as any).id, is_host_agent: true }).eq('id', ownerId);
 
       // Send congratulations notification to owner
       const adminLabel = extra?.adminName || 'إدارة التطبيق';
@@ -998,7 +1117,7 @@ export async function approveAgencyApplication(app: AgencyApplicationModel, admi
         });
 
         // 3. Set user's agency_id
-        await supabase.from('users').update({ agency_id: agencyId }).eq('id', app.user_id);
+        await supabase.from('users').update({ agency_id: agencyId, is_host_agent: true }).eq('id', app.user_id);
       }
 
       await sendSystemNotification({
