@@ -771,7 +771,7 @@ class FirebaseService {
     ];
 
     final totalWeight = odds.fold<int>(0, (tot, item) => tot + (item['weight'] as int));
-    final random = Random.secure();
+    final random = math.Random.secure();
     final results = <int>[];
 
     for (int i = 0; i < count; i++) {
