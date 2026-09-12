@@ -448,32 +448,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _playEntranceSound() async {
-    try {
-      _entranceAudioPlayer ??= AudioPlayer();
+  Future<void> _playEntranceSound({String? animAsset}) async {
+    // إذا كان أنيميشن الدخول أو السيارة عبارة عن فيديو VAP / MP4، فإن VapPlayer يقوم بتشغيل الصوت المدمج في الفيديو نفسه
+    // ولا نقوم بتشغيل أي صوت خارجي إطلاقاً حتى لا يتداخل صوت غريب لا ينتمي إلى الفيديو
+    final checkAsset = animAsset ?? _entranceAnimAsset ?? _entranceItemAnimAsset;
+    if (checkAsset != null && isVideoType(checkAsset)) {
+      return;
+    }
 
+    try {
       final remoteUrl = DynamicConfigService().getAssetUrl('entrance_sound') ??
           DynamicConfigService().getAssetUrl('entrance') ??
-          DynamicConfigService().getAssetUrl('car_sound') ??
-          DynamicConfigService().getAssetOverride('assets/sounds/b_music.mp3');
+          DynamicConfigService().getAssetUrl('car_sound');
 
-      if (remoteUrl != null && remoteUrl.isNotEmpty) {
-        await _entranceAudioPlayer!.setUrl(remoteUrl);
-      } else {
-        await _entranceAudioPlayer!.setAsset('assets/sounds/b_music.mp3');
+      // إذا لم يكن هناك صوت مخصص محدد بشكل صريح، لا نشغل موسيقى عشوائية
+      if (remoteUrl == null || remoteUrl.isEmpty) {
+        return;
       }
+
+      _entranceAudioPlayer ??= AudioPlayer();
+      await _entranceAudioPlayer!.setUrl(remoteUrl);
       await _entranceAudioPlayer!.setVolume(1.0);
       await _entranceAudioPlayer!.seek(Duration.zero);
       await _entranceAudioPlayer!.play();
     } catch (e) {
       debugPrint('[RoomScreen] entrance sound error: $e');
-      try {
-        final player = AudioPlayer();
-        await player.setAsset('assets/sounds/b_music.mp3');
-        await player.setVolume(1.0);
-        await player.play();
-        _entranceAudioPlayer = player;
-      } catch (_) {}
     }
   }
 
@@ -1357,7 +1356,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           }
           if (playedAny) {
             _hasPlayedEntryAnimations = true;
-            _playEntranceSound();
+            final isVap = (_entranceAnimAsset != null && isVideoType(_entranceAnimAsset!)) ||
+                          (_entranceItemAnimAsset != null && isVideoType(_entranceItemAnimAsset!));
+            if (!isVap) {
+              _playEntranceSound();
+            }
           }
         }
       }
@@ -1539,7 +1542,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _playEntranceEffectRaw(Map<String, dynamic> data, String url) {
     if (!mounted) return;
-    _playEntranceSound();
+    if (!isVideoType(url)) {
+      _playEntranceSound(animAsset: url);
+    }
     final userName = data['name']?.toString() ?? '';
     final userPhoto = data['photoUrl']?.toString() ?? '';
     setState(() {
@@ -1553,7 +1558,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _playEntranceEffect(Map<String, dynamic> data, StoreItemModel storeItem, String? uid) {
     if (!mounted) return;
-    _playEntranceSound();
+    final animUrl = storeItem.animationUrl ?? '';
+    if (!isVideoType(animUrl)) {
+      _playEntranceSound(animAsset: animUrl);
+    }
     final nameKey = storeItem.nameKey;
     final photoKey = storeItem.photoKey;
     final enteringUser = uid != null ? _cachedUsers[uid] : null;
