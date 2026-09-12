@@ -73,6 +73,7 @@ class SupabaseClient {
         return _rpcAgencyGetOwnerDashboard(params);
       case 'agency_request_join':
         return _rpcAgencyRequestJoin(params);
+      case 'agency_leave':
       case 'agency_request_exit':
         return _rpcAgencyRequestExit(params);
       case 'agency_pay_penalty_exit':
@@ -540,6 +541,86 @@ class SupabaseClient {
     final snap = await _db.collection('host_agencies').doc(agencyId).get();
     if (!snap.exists) return <String, dynamic>{};
     final d = snap.data()!;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    bool isMember = false;
+    bool canJoin = true;
+    bool hasPendingRequest = false;
+
+    if (uid != null) {
+      // 1. فحص ما إذا كان المستخدم هو مالك هذه الوكالة
+      if (d['owner_id'] == uid) {
+        isMember = true;
+        canJoin = false;
+      } else {
+        // 2. فحص العضوية في host_agency_members لهذه الوكالة
+        final memSnap = await _db
+            .collection('host_agency_members')
+            .where('agency_id', isEqualTo: agencyId)
+            .where('user_id', isEqualTo: uid)
+            .limit(1)
+            .get();
+
+        if (memSnap.docs.isNotEmpty) {
+          final st = memSnap.docs.first.data()['status']?.toString() ?? '';
+          if (st == 'active') {
+            isMember = true;
+            canJoin = false;
+          } else if (st == 'pending' || st == 'invited') {
+            hasPendingRequest = true;
+            canJoin = false;
+          } else {
+            canJoin = true;
+          }
+        }
+
+        // 3. فحص طلبات الانضمام المعلقة
+        if (!isMember && !hasPendingRequest) {
+          final reqSnap = await _db
+              .collection('host_agency_join_requests')
+              .where('agency_id', isEqualTo: agencyId)
+              .where('user_id', isEqualTo: uid)
+              .where('status', isEqualTo: 'pending')
+              .limit(1)
+              .get();
+          if (reqSnap.docs.isNotEmpty) {
+            hasPendingRequest = true;
+            canJoin = false;
+          }
+        }
+
+        // 4. فحص ما إذا كان المستخدم مرتبطاً بوكالة أخرى حالياً
+        if (!isMember && !hasPendingRequest) {
+          final uDoc = await _db.collection('users').doc(uid).get();
+          final uData = uDoc.data() ?? {};
+          final currentAid = uData['agency_id']?.toString() ??
+              uData['host_agency_id']?.toString();
+          if (currentAid != null && currentAid.isNotEmpty) {
+            if (currentAid == agencyId) {
+              isMember = true;
+              canJoin = false;
+            } else {
+              // التحقق ما إذا كانت عضويته في الوكالة الأخرى نشطة فعلاً
+              try {
+                final otherMem = await _db
+                    .collection('host_agency_members')
+                    .where('agency_id', isEqualTo: currentAid)
+                    .where('user_id', isEqualTo: uid)
+                    .where('status', isEqualTo: 'active')
+                    .limit(1)
+                    .get();
+                canJoin = otherMem.docs.isEmpty;
+              } catch (_) {
+                canJoin = true;
+              }
+            }
+          } else {
+            canJoin = true;
+          }
+        }
+      }
+    }
+
     return <String, dynamic>{
       'id': snap.id,
       'name': d['name'] ?? '',
@@ -553,6 +634,11 @@ class SupabaseClient {
       'total_diamonds_earned': d['total_diamonds_earned'] ?? 0,
       'is_hall_of_fame': d['is_hall_of_fame'] ?? false,
       'is_active': d['is_active'] ?? true,
+      'is_member': isMember,
+      'can_join': canJoin,
+      'has_pending_request': hasPendingRequest,
+      'owner_name': d['owner_name'],
+      'owner_avatar': d['owner_avatar'],
     };
   }
 
@@ -628,26 +714,47 @@ class SupabaseClient {
       return {'status': 'error', 'message': 'missing_params'};
     }
 
-    // Check not already member
-    final existing = await _db
+    // Check not already member of this agency
+    final existingThis = await _db
         .collection('host_agency_members')
+        .where('agency_id', isEqualTo: agencyId)
         .where('user_id', isEqualTo: uid)
         .where('status', isEqualTo: 'active')
         .limit(1)
         .get();
-    if (existing.docs.isNotEmpty) {
-      return {'status': 'error', 'message': 'already_member'};
+    if (existingThis.docs.isNotEmpty) {
+      return {'status': 'error', 'message': 'أنت عضو بالفعل في هذه الوكالة'};
     }
 
-    // Create join request or add as active member directly
-    final docRef = _db.collection('host_agency_join_requests').doc();
-    await docRef.set({
-      'id': docRef.id,
+    final uDoc = await _db.collection('users').doc(uid).get();
+    final uData = uDoc.data() ?? {};
+    final userName = uData['name'] ?? uData['display_name'] ?? 'مستخدم';
+    final userAvatar = uData['photo_url'] ?? uData['avatar_url'] ?? '';
+    final customId = uData['custom_id']?.toString() ?? '';
+
+    // 1. Create or update join request in host_agency_join_requests
+    final reqRef = _db.collection('host_agency_join_requests').doc('${agencyId}_$uid');
+    await reqRef.set({
+      'id': reqRef.id,
       'agency_id': agencyId,
       'user_id': uid,
+      'user_name': userName,
+      'user_avatar': userAvatar,
+      'custom_id': customId,
       'status': 'pending',
       'created_at': DateTime.now().toUtc().toIso8601String(),
     });
+
+    // 2. Also save to host_agency_members with status: 'pending' so queries reflect pending request
+    final memRef = _db.collection('host_agency_members').doc('${agencyId}_$uid');
+    await memRef.set({
+      'id': memRef.id,
+      'agency_id': agencyId,
+      'user_id': uid,
+      'role': 'host',
+      'status': 'pending',
+      'joined_at': DateTime.now().toUtc().toIso8601String(),
+    }, SetOptions(merge: true));
 
     return {'status': 'ok'};
   }
@@ -1162,6 +1269,12 @@ class SupabaseClient {
     // Update agency member_count
     await _db.collection('host_agencies').doc(agencyId).update({
       'member_count': FieldValue.increment(1),
+    });
+
+    // Update user document
+    await _db.collection('users').doc(userId).update({
+      'agency_id': agencyId,
+      'is_agency_member': true,
     });
 
     return {'status': 'ok'};

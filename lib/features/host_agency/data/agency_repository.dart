@@ -121,8 +121,17 @@ abstract final class AgencyRepository {
   // ─── طلب انضمام ─────────────────────────────────────────────────
   static Future<void> requestJoin(String agencyId) async {
     try {
-      await _sb.rpc('agency_request_join', params: {'p_agency_id': agencyId});
-    } catch (_) {
+      final resp = await _sb.rpc('agency_request_join', params: {'p_agency_id': agencyId});
+      if (resp is Map && resp['status'] == 'error') {
+        throw Exception(resp['message'] ?? 'تعذر تقديم طلب الانضمام');
+      }
+    } catch (e) {
+      if (e is Exception &&
+          (e.toString().contains('عضو بالفعل') ||
+              e.toString().contains('طلب معلق') ||
+              e.toString().contains('مسجل بالفعل'))) {
+        rethrow;
+      }
       // Fallback: insert directly into host_agency_members
       final uid = _sb.auth.currentUser?.id;
       if (uid == null) throw Exception('يجب تسجيل الدخول أولاً');

@@ -707,69 +707,7 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
   }
 
   Widget _buildActionButton(AgencyCard a) {
-    // الحالة 1: يمكنه التقديم (union_btn_pre_bg: تدرج ذهبي نص بني داكن #FF59370D)
-    if (a.canJoin) {
-      return GestureDetector(
-        onTap: _joining ? null : _join,
-        child: Container(
-          width: double.infinity,
-          height: 48,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFAE9B5), Color(0xFFF1CC87)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x59F1CC87),
-                blurRadius: 10,
-                offset: Offset(0, 4),
-              ),
-            ],
-          ),
-          alignment: Alignment.center,
-          child: _joining
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF59370D)),
-                )
-              : const Text(
-                  'تقديم طلب الانضمام',
-                  style: TextStyle(
-                    color: Color(0xFF59370D),
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-        ),
-      );
-    }
-
-    // الحالة 2: تم التقديم وموجود طلب معلق (union_btn_nor_bg: رمادي #303030، نص #565964)
-    if (a.hasPendingRequest) {
-      return Container(
-        width: double.infinity,
-        height: 48,
-        decoration: BoxDecoration(
-          color: const Color(0xFF303030),
-          borderRadius: BorderRadius.circular(24),
-        ),
-        alignment: Alignment.center,
-        child: const Text(
-          'تم التقديم',
-          style: TextStyle(
-            color: Color(0xFF565964),
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
-    }
-
-    // الحالة 3: عضو بالفعل في الوكالة -> بطاقة العضوية + زر الانسحاب من الوكالة
+    // الحالة 1: عضو بالفعل في الوكالة -> بطاقة العضوية + زر الانسحاب من الوكالة
     if (a.isMember) {
       return Row(
         children: [
@@ -841,22 +779,63 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
       );
     }
 
-    // افتراضي: معطل
-    return Container(
-      width: double.infinity,
-      height: 48,
-      decoration: BoxDecoration(
-        color: const Color(0xFF303030),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      alignment: Alignment.center,
-      child: const Text(
-        'غير متاح الانضمام',
-        style: TextStyle(
-          color: Color(0xFF565964),
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
+    // الحالة 2: تم التقديم وموجود طلب معلق (union_btn_nor_bg: رمادي #303030، نص #565964)
+    if (a.hasPendingRequest) {
+      return Container(
+        width: double.infinity,
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF303030),
+          borderRadius: BorderRadius.circular(24),
         ),
+        alignment: Alignment.center,
+        child: const Text(
+          'تم التقديم (قيد المراجعة)',
+          style: TextStyle(
+            color: Color(0xFFB0B3C0),
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
+    // الحالة 3: متاح التقديم والانضمام (الزر الذهبي الفاخر)
+    return GestureDetector(
+      onTap: _joining ? null : _join,
+      child: Container(
+        width: double.infinity,
+        height: 48,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(24),
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFAE9B5), Color(0xFFF1CC87)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x59F1CC87),
+              blurRadius: 10,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        child: _joining
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF59370D)),
+              )
+            : const Text(
+                'تقديم طلب الانضمام',
+                style: TextStyle(
+                  color: Color(0xFF59370D),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
       ),
     );
   }
