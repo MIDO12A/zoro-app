@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math';
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -2775,8 +2775,11 @@ class FirebaseService {
       final uSnap = await _db.collection('users').doc(mUid).get();
       final uData = uSnap.exists ? ((uSnap.data() as Map<String, dynamic>?) ?? {}) : {};
 
-      final mDiamonds = math.max(_asInt(mData['diamonds']), _asInt(mData['diamonds_earned_monthly']));
-      final diamonds = math.max(mDiamonds, _asInt(uData['diamonds']));
+      final d1 = _asInt(mData['diamonds']);
+      final d2 = _asInt(mData['diamonds_earned_monthly']);
+      final mDiamonds = d1 > d2 ? d1 : d2;
+      final uDiamonds = _asInt(uData['diamonds']);
+      final int diamonds = mDiamonds > uDiamonds ? mDiamonds : uDiamonds;
       totalDiamonds += diamonds;
 
       anchors.add({
