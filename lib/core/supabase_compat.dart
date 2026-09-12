@@ -14,6 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../services/cloudinary_service.dart';
+import '../services/firebase_service.dart';
 
 /// Singleton mirroring `Supabase.instance`.
 class Supabase {
