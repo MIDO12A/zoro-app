@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { I18nContext, langs } from '../lib/i18n';
 import { getCloudinaryStatus, saveCloudinaryConfig } from '../lib/storage';
 import { supabase, isAdminConnected } from '../lib/supabase';
-import { Save, Crown, Database, Mic, ArrowLeft } from 'lucide-react';
+import { useDashboardMode } from '../lib/dashboardMode';
+import { Save, Crown, Database, Mic, ArrowLeft, Wand2, Palette, Eye, Phone, SlidersHorizontal, Image, Sparkles } from 'lucide-react';
 
 export default function Settings() {
   const navigate = useNavigate();
   const { t, lang, setLang } = useContext(I18nContext);
+  const { isDesigner, toggleMode, setMode } = useDashboardMode();
   const [cloudName, setCloudName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
@@ -61,13 +63,123 @@ export default function Settings() {
   const status = getCloudinaryStatus();
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-3xl">
       <div>
         <h2 className="text-white text-lg font-semibold">{t('settings.title')}</h2>
         <p className="text-slate-500 text-xs mt-0.5">{t('settings.description')}</p>
       </div>
 
       <div className="bg-[#141417] rounded-2xl border border-white/5 p-6 space-y-6">
+        {/* Designer Mode Switcher Card */}
+        <div className={`rounded-xl border p-5 transition-all ${
+          isDesigner
+            ? 'bg-gradient-to-br from-amber-500/10 via-pink-500/5 to-purple-500/10 border-amber-500/30 shadow-lg shadow-amber-500/5'
+            : 'bg-[#18181c] border-white/10'
+        }`}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+                  <Palette className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>{lang === 'ar' ? 'وضع لوحة المصمم (Designer Dashboard)' : 'Designer Dashboard Mode'}</span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                      isDesigner ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-slate-700 text-slate-300'
+                    }`}>
+                      {isDesigner ? (lang === 'ar' ? 'مفعل الآن 🎨' : 'Active') : (lang === 'ar' ? 'لوحة الإدارة 🏢' : 'Standard')}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {lang === 'ar'
+                      ? 'عند تفعيل هذا الخيار، تتحول القائمة الجانبية لعرض أدوات تصميم الواجهات والألوان والخلفيات والأصول.'
+                      : 'Switch between standard admin panel and visual designer tools for screens, assets, and themes.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={toggleMode}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shrink-0 active:scale-95 ${
+                isDesigner
+                  ? 'bg-gradient-to-r from-amber-500 to-pink-600 hover:from-amber-600 hover:to-pink-700 text-white shadow-amber-500/20'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
+              }`}
+            >
+              {isDesigner ? <Wand2 className="w-4 h-4" /> : <Palette className="w-4 h-4" />}
+              <span>
+                {isDesigner
+                  ? (lang === 'ar' ? 'التبديل إلى لوحة الإدارة 🏢' : 'Switch to Admin')
+                  : (lang === 'ar' ? 'التبديل إلى لوحة المصمم 🎨' : 'Switch to Designer Mode')}
+              </span>
+            </button>
+          </div>
+
+          {/* Quick Access to Designer Tools */}
+          <div className="mt-4 pt-4 border-t border-white/10">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-2">
+              {lang === 'ar' ? 'الوصول المباشر لأدوات المصمم والشاشات:' : 'Direct Access to Designer Tools:'}
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              <button
+                onClick={() => { setMode('designer'); navigate('/visual-manager'); }}
+                className="p-2.5 rounded-lg bg-black/30 hover:bg-white/5 border border-white/5 hover:border-amber-500/30 flex items-center gap-2 text-right transition-all group"
+              >
+                <Eye className="w-4 h-4 text-amber-400 shrink-0 group-hover:scale-110 transition-transform" />
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">{lang === 'ar' ? 'المظهر الشامل' : 'Visual Manager'}</div>
+                  <div className="text-[10px] text-slate-400 truncate">/visual-manager</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setMode('designer'); navigate('/app-visual-designer'); }}
+                className="p-2.5 rounded-lg bg-black/30 hover:bg-white/5 border border-white/5 hover:border-amber-500/30 flex items-center gap-2 text-right transition-all group"
+              >
+                <Phone className="w-4 h-4 text-indigo-400 shrink-0 group-hover:scale-110 transition-transform" />
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">{lang === 'ar' ? 'مصمم الواجهات' : 'App Designer'}</div>
+                  <div className="text-[10px] text-slate-400 truncate">/app-visual-designer</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setMode('designer'); navigate('/screen-customization'); }}
+                className="p-2.5 rounded-lg bg-black/30 hover:bg-white/5 border border-white/5 hover:border-amber-500/30 flex items-center gap-2 text-right transition-all group"
+              >
+                <SlidersHorizontal className="w-4 h-4 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">{lang === 'ar' ? 'تخصيص الشاشات' : 'Screen Custom'}</div>
+                  <div className="text-[10px] text-slate-400 truncate">/screen-customization</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setMode('designer'); navigate('/app-assets'); }}
+                className="p-2.5 rounded-lg bg-black/30 hover:bg-white/5 border border-white/5 hover:border-amber-500/30 flex items-center gap-2 text-right transition-all group"
+              >
+                <Image className="w-4 h-4 text-pink-400 shrink-0 group-hover:scale-110 transition-transform" />
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">{lang === 'ar' ? 'أصول التطبيق' : 'App Assets'}</div>
+                  <div className="text-[10px] text-slate-400 truncate">/app-assets</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setMode('designer'); navigate('/gift-banner-configs'); }}
+                className="p-2.5 rounded-lg bg-black/30 hover:bg-white/5 border border-white/5 hover:border-amber-500/30 flex items-center gap-2 text-right transition-all group sm:col-span-2 md:col-span-1"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300 shrink-0 group-hover:scale-110 transition-transform" />
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">{lang === 'ar' ? 'بانرات الهدايا' : 'Gift Banners'}</div>
+                  <div className="text-[10px] text-slate-400 truncate">/gift-banner-configs</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
         <div>
           <label className="block text-[10px] uppercase text-slate-400 font-bold mb-2">Language / اللغة</label>
           <div className="flex gap-2">

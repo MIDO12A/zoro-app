@@ -2,7 +2,7 @@ import { useEffect, useState, useContext } from 'react';
 import { I18nContext } from '../lib/i18n';
 import { getAppConfig, updateAppConfig } from '../lib/db';
 import { uploadAppAsset } from '../lib/storage';
-import { Save, RotateCcw, Upload, Check, Image, Type, Layers } from 'lucide-react';
+import { Save, RotateCcw, Upload, Check, Image, Type, Layers, Search, Plus, Trash2, Sparkles, Wand2 } from 'lucide-react';
 import { to6Hex } from '../lib/colors';
 
 interface ScreenVisuals {
@@ -563,9 +563,10 @@ const defaultVisuals: ScreenVisuals = {
   },
 };
 
-const screenTabs = ['agentRecharge', 'hostAgency', 'hosts', 'rocket', 'rechargeEvent', 'agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'giftPanel', 'wallet', 'level', 'cp', 'miniprofile', 'signin', 'room', 'discover', 'message', 'profile', 'chat', 'userProfile', 'eventInfo', 'notifications'] as const;
+const screenTabs = ['dynamicStrings', 'agentRecharge', 'hostAgency', 'hosts', 'rocket', 'rechargeEvent', 'agency', 'badges', 'necklaces', 'rank', 'checkbox', 'store', 'backpack', 'giftPanel', 'wallet', 'level', 'cp', 'miniprofile', 'signin', 'room', 'discover', 'message', 'profile', 'chat', 'userProfile', 'eventInfo', 'notifications'] as const;
 
 const screenLabels: Record<string, Record<string, string>> = {
+  dynamicStrings: { ar: '🔤 محرر النصوص والعناوين العامة', en: '🔤 Screen Texts & Custom Labels' },
   agentRecharge: { ar: '💸 بوابة وكالة الشحن المعتمدة', en: '💸 Agent Recharge Portal' },
   hostAgency: { ar: '🏢 شاشة وكالات المضيفين الرسمية', en: '🏢 Host Agencies Screen' },
   hosts: { ar: '🎙️ شاشة إدارة المضيفين بالوكالة', en: '🎙️ Hosts Management Screen' },
@@ -868,7 +869,22 @@ export default function ScreenCustomizationPage() {
           if (val && val.trim()) clean[screen][key] = val.trim();
         }
       }
-      await updateAppConfig({ screenVisuals: clean } as any);
+      await updateAppConfig({
+        screenVisuals: clean,
+        custom_strings: customStrings,
+        screenTitles: {
+          agency: customStrings['agency_screen_title'] || 'شاشة الوكالة',
+          wallet: customStrings['wallet_title'] || 'المحفظة',
+          store: customStrings['store_title'] || 'المتجر',
+          backpack: customStrings['backpack_title'] || 'الحقيبة',
+          cp: customStrings['cp_title'] || 'علاقة CP',
+          tasks: customStrings['tasks_title'] || 'مركز المهام',
+          signin: customStrings['signin_title'] || 'تسجيل الدخول اليومي',
+          ...Object.fromEntries(
+            Object.entries(customStrings).filter(([k]) => k.endsWith('_title') || k.endsWith('Title'))
+          ),
+        },
+      } as any);
       showMsg(lang === 'ar' ? 'تم الحفظ!' : 'Saved!');
     } catch (e) {
       showMsg(lang === 'ar' ? 'فشل الحفظ' : 'Save failed');

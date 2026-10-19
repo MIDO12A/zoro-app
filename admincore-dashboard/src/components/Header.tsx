@@ -1,7 +1,8 @@
 import { useLocation } from 'react-router-dom';
-import { Search, X, Languages, Menu } from 'lucide-react';
+import { Search, X, Languages, Menu, Wand2, Palette } from 'lucide-react';
 import { useState, useContext } from 'react';
 import { I18nContext, langs } from '../lib/i18n';
+import { useDashboardMode } from '../lib/dashboardMode';
 
 const pageTitles: Record<string, string> = {
   '/': 'nav.dashboard',
@@ -52,6 +53,7 @@ const pageTitles: Record<string, string> = {
 export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const location = useLocation();
   const { t, lang, setLang } = useContext(I18nContext);
+  const { isDesigner, toggleMode } = useDashboardMode();
   const [search, setSearch] = useState('');
   const [showLang, setShowLang] = useState(false);
   const titleKey = pageTitles[location.pathname] || '';
@@ -103,6 +105,23 @@ export default function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             </div>
           )}
         </div>
+
+        {/* Header Mode Quick Switcher */}
+        <button
+          onClick={toggleMode}
+          className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full border text-[11px] font-bold transition-all shadow-sm active:scale-95 ${
+            isDesigner
+              ? 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
+              : 'bg-indigo-600/15 border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/25'
+          }`}
+          title={isDesigner ? (lang === 'ar' ? 'العودة للوحة الإدارة العامة' : 'Switch to Admin') : (lang === 'ar' ? 'التبديل إلى لوحة المصمم' : 'Switch to Designer')}
+        >
+          {isDesigner ? <Wand2 className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <Palette className="w-3.5 h-3.5 text-indigo-400 shrink-0" />}
+          <span className="hidden sm:inline">
+            {isDesigner ? (lang === 'ar' ? 'وضع المصمم 🎨' : 'Designer Mode') : (lang === 'ar' ? 'لوحة الإدارة 🏢' : 'Admin Mode')}
+          </span>
+        </button>
+
         <div className={`flex items-center gap-2 pl-1 sm:pl-2 border-l border-white/5 ${lang === 'ar' ? 'flex-row-reverse border-r border-l-0 pr-1 sm:pr-2' : ''}`}>
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-rose-500 flex items-center justify-center font-bold text-[11px] sm:text-xs text-white select-none shadow-md">
             A
