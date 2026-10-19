@@ -32,6 +32,7 @@ import GiftBannerConfigs from './pages/GiftBannerConfigs';
 import AppAssets from './pages/AppAssets';
 import ProfileCustomize from './pages/ProfileCustomize';
 import AdminManagement from './pages/AdminManagement';
+import SuperAdminManagement from './pages/SuperAdminManagement';
 import VisualManager from './pages/VisualManager';
 import ScreenCustomization from './pages/ScreenCustomization';
 import AppVisualDesigner from './pages/AppVisualDesigner';
@@ -48,6 +49,7 @@ import TasksManager from './pages/TasksManager';
 import AppSounds from './pages/AppSounds';
 import ZegoAudioSettings from './pages/ZegoAudioSettings';
 import RechargeEventManager from './pages/RechargeEventManager';
+import RechargeSettings from './pages/RechargeSettings';
 import t from './lib/i18n';
 
 export default function App() {
@@ -126,7 +128,9 @@ export default function App() {
               <Route path="/banners" element={<Banners />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/profile-customize" element={<ProfileCustomize />} />
-              <Route path="/admins" element={<AdminManagement currentUser={user} />} />
+              <Route path="/super-admin" element={<SuperAdminManagement />} />
+              <Route path="/admins" element={<SuperAdminManagement />} />
+              <Route path="/admin-list" element={<AdminManagement currentUser={user} />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/visual-manager" element={<VisualManager />} />
               <Route path="/screen-customization" element={<ScreenCustomization />} />
@@ -142,6 +146,8 @@ export default function App() {
               <Route path="/audio-settings" element={<ZegoAudioSettings />} />
               <Route path="/zego-audio" element={<ZegoAudioSettings />} />
               <Route path="/recharge-event" element={<RechargeEventManager />} />
+              <Route path="/recharge-settings" element={<RechargeSettings />} />
+              <Route path="/diamond-exchange" element={<RechargeSettings />} />
             </Route>
           </Routes>
         </BrowserRouter>
