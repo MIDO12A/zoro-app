@@ -61,12 +61,28 @@ class AgencyEngineSettings {
     required this.engineEnabled,
   });
 
+  static const defaults = AgencyEngineSettings(
+    hostSharePct: 100,
+    agencySharePct: 17,
+    platformSharePct: 5,
+    diamondToCoinRate: 1.0,
+    dailyExchangeLimit: 500000,
+    diamondToUsdRate: 0.0001,
+    withdrawalFeePct: 0.0,
+    minWithdrawalUsd: 10.0,
+    minDiamondsToWithdraw: 1000,
+    withdrawalCycleDays: 30,
+    trialPeriodDays: 7,
+    exitPenaltyCoins: 0,
+    engineEnabled: true,
+  );
+
   factory AgencyEngineSettings.fromMap(Map<String, dynamic> m) {
     return AgencyEngineSettings(
       hostSharePct:           (m['host_share_pct'] as num?)?.toInt()              ?? 70,
       agencySharePct:         (m['agency_share_pct'] as num?)?.toInt()            ?? 20,
       platformSharePct:       (m['platform_share_pct'] as num?)?.toInt()          ?? 10,
-      diamondToCoinRate:      (m['diamond_to_coin_rate'] as num?)?.toDouble()     ?? 0.5,
+      diamondToCoinRate:      (m['diamond_to_coin_rate'] as num?)?.toDouble()     ?? 1.0,
       dailyExchangeLimit:     (m['daily_exchange_limit_diamonds'] as num?)?.toInt() ?? 500000,
       diamondToUsdRate:       (m['diamond_to_usd_rate'] as num?)?.toDouble()      ?? 0.0001,
       withdrawalFeePct:       (m['withdrawal_fee_pct'] as num?)?.toDouble()       ?? 10.0,
@@ -90,6 +106,39 @@ class AgencyEngineSettings {
     final gross = grossUsdFromDiamonds(diamonds);
     return gross * (1 - withdrawalFeePct / 100);
   }
+}
+
+/// Helper function to format any agency identifier into a 3-digit numeric string (100–999).
+String formatAgencyNumericId(dynamic agencyDataOrId) {
+  if (agencyDataOrId == null) return '100';
+
+  if (agencyDataOrId is Map) {
+    final pub = agencyDataOrId['agency_code'] ?? agencyDataOrId['agency_public_id'] ?? agencyDataOrId['code'];
+    if (pub != null) {
+      final s = pub.toString().trim();
+      final n = int.tryParse(s);
+      if (n != null) {
+        if (n >= 100 && n <= 999) return n.toString();
+        return (100 + (n % 900)).toString();
+      }
+    }
+    final name = (agencyDataOrId['name'] ?? '').toString().trim();
+    final nameNum = int.tryParse(name);
+    if (nameNum != null && nameNum >= 100 && nameNum <= 999) {
+      return nameNum.toString();
+    }
+    return formatAgencyNumericId(agencyDataOrId['id']);
+  }
+
+  final raw = agencyDataOrId.toString().trim();
+  final directNum = int.tryParse(raw);
+  if (directNum != null) {
+    if (directNum >= 100 && directNum <= 999) return directNum.toString();
+    return (100 + (directNum % 900)).toString();
+  }
+
+  final hash = raw.hashCode.abs();
+  return (100 + (hash % 900)).toString();
 }
 
 // ─── بطاقة الوكالة (للعرض العام والتصنيف) ───────────────────────────────────
@@ -137,7 +186,7 @@ class AgencyCard {
   factory AgencyCard.fromMap(Map<String, dynamic> m) {
     return AgencyCard(
       id:                       m['id'] as String,
-      agencyPublicId:           m['agency_public_id'] as String?,
+      agencyPublicId:           formatAgencyNumericId(m),
       name:                     m['name'] as String? ?? '—',
       description:              m['description'] as String?,
       photoUrl:                 m['photo_url'] as String?,
@@ -164,7 +213,7 @@ class AgencyCard {
 class AgencyLeaderboardEntry {
   final int     rank;
   final String  agencyId;
-  final String? agencyPublicId;   // ≥ 5000
+  final String? agencyPublicId;   // 3-digit numeric string (100..999)
   final String  name;
   final String? photoUrl;
   final AgencyTier tier;
@@ -192,7 +241,7 @@ class AgencyLeaderboardEntry {
     return AgencyLeaderboardEntry(
       rank:                    (m['rank'] as num?)?.toInt() ?? 0,
       agencyId:                m['agency_id'] as String? ?? m['id'] as String,
-      agencyPublicId:          m['agency_public_id'] as String?,
+      agencyPublicId:          formatAgencyNumericId(m),
       name:                    m['name'] as String? ?? '—',
       photoUrl:                m['photo_url'] as String?,
       tier:                    AgencyTierX.fromString(m['tier'] as String? ?? 'bronze'),

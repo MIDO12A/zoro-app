@@ -5,6 +5,7 @@ import '../../../core/supabase_compat.dart';
 
 import '../data/agency_models.dart';
 import '../data/agency_repository.dart';
+import '../../../services/dynamic_config_service.dart';
 
 import '../../../core/cache/encrypted_image_provider.dart';
 import '../../../screens/message/message_reply_detail_screen.dart';
@@ -63,21 +64,34 @@ class _AgencyWithdrawalScreenState extends State<AgencyWithdrawalScreen>
     setState(() => _loading = true);
     try {
       final uid = Supabase.instance.client.auth.currentUser?.id;
-      final results = await Future.wait([
-        AgencyRepository.getHostStats(),
-        AgencyRepository.getEngineSettings(),
-        if (uid != null)
-          Supabase.instance.client
+      HostAgencyStats? stats;
+      AgencyEngineSettings engine = AgencyEngineSettings.defaults;
+      Map<String, dynamic>? profile;
+
+      try {
+        stats = await AgencyRepository.getHostStats();
+      } catch (e) {
+        debugPrint('[agency_withdrawal_screen] getHostStats error: $e');
+      }
+
+      try {
+        engine = await AgencyRepository.getEngineSettings();
+      } catch (e) {
+        debugPrint('[agency_withdrawal_screen] getEngineSettings error: $e');
+      }
+
+      if (uid != null) {
+        try {
+          final res = await Supabase.instance.client
               .from('profiles')
               .select('is_kyc_verified')
               .eq('id', uid)
-              .maybeSingle(),
-      ]);
+              .maybeSingle();
+          if (res != null) profile = Map<String, dynamic>.from(res as Map);
+        } catch (_) {}
+      }
 
       if (!mounted) return;
-      final stats  = results[0] as HostAgencyStats?;
-      final engine = results[1] as AgencyEngineSettings;
-      final profile= uid != null ? results[2] as Map<String, dynamic>? : null;
 
       setState(() {
         _member         = stats?.member;
@@ -86,8 +100,13 @@ class _AgencyWithdrawalScreenState extends State<AgencyWithdrawalScreen>
         _loading        = false;
       });
     } catch (e) {
-debugPrint('[agency_withdrawal_screen] error: $e');
-      if (mounted) setState(() => _loading = false);
+      debugPrint('[agency_withdrawal_screen] error: $e');
+      if (mounted) {
+        setState(() {
+          _engine ??= AgencyEngineSettings.defaults;
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -251,8 +270,13 @@ class _ExchangeTabState extends State<_ExchangeTab> {
   bool _processing = false;
   int  _diamonds   = 0;
 
-  /// يستخدم المعدل من قاعدة البيانات (لا ثوابت مشفّرة)
-  int get _coinsResult => widget.engine.coinsFromDiamonds(_diamonds);
+  /// يستخدم المعدل من إعدادات الشحن في لوحة التحكم (diamond_exchange_config)
+  int get _coinsResult {
+    final mult = DynamicConfigService().coinsPerDiamond > 0
+        ? DynamicConfigService().coinsPerDiamond
+        : widget.engine.diamondToCoinRate;
+    return (_diamonds * mult).floor();
+  }
 
   @override
   void dispose() { _ctrl.dispose(); super.dispose(); }
@@ -286,10 +310,12 @@ class _ExchangeTabState extends State<_ExchangeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final rate    = widget.engine.diamondToCoinRate;
-    final rateStr = rate == rate.truncateToDouble()
-        ? rate.toInt().toString()
-        : rate.toStringAsFixed(2);
+    final mult = DynamicConfigService().coinsPerDiamond > 0
+        ? DynamicConfigService().coinsPerDiamond
+        : widget.engine.diamondToCoinRate;
+    final rateStr = mult == mult.truncateToDouble()
+        ? mult.toInt().toString()
+        : mult.toString();
     final limit   = widget.engine.dailyExchangeLimit;
 
     return SingleChildScrollView(
@@ -299,10 +325,12 @@ class _ExchangeTabState extends State<_ExchangeTab> {
           icon: '💱',
           title: 'تبادل الألماس',
           lines: [
-            'معدل التبادل: 1 ♦ = $rateStr كوينز',
+            'معدل التبادل: 1 ♦ = $rateStr كوينز (حسب إعدادات لوحة التحكم)',
             'حد يومي: ${_fmtK(limit)} ألماس',
             'الحد الأدنى للعملية: 100 ألماس',
-            'يخصم من الرصيد المتاح — لا يؤثر على الهدف الشهري',
+            'يخصم من الرصيد المتاح ومن التارجت الشهري للمضيف ويتراجع التارجت بمقداره',
+            'تنبيه: فك الألماس من التارجت يجعل احتساب الراتب بنسبة 60% (خصم 40% من الراتب)',
+            'عمولة وكيل المضيفين محفوظة ولا يتم الخصم منها نهائياً',
             'فوري بدون رسوم',
           ],
         ),
@@ -629,6 +657,7 @@ class _TransferRechargeTabState extends State<_TransferRechargeTab> {
   final _diamondsCtrl = TextEditingController();
   Map<String, dynamic>? _selectedAgent;
   List<Map<String, dynamic>> _results = [];
+  List<Map<String, dynamic>> _allAgents = [];
   bool _searching   = false;
   bool _processing  = false;
   int  _diamonds    = 0;
@@ -641,6 +670,22 @@ class _TransferRechargeTabState extends State<_TransferRechargeTab> {
       _diamonds = widget.initialDiamonds!;
       _diamondsCtrl.text = _diamonds.toString();
     }
+    _loadInitialAgents();
+  }
+
+  Future<void> _loadInitialAgents() async {
+    setState(() => _searching = true);
+    try {
+      final res = await AgencyRepository.searchRechargeAgents('');
+      if (!mounted) return;
+      setState(() {
+        _allAgents = res;
+        _results = res;
+        _searching = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _searching = false);
+    }
   }
 
   @override
@@ -651,47 +696,87 @@ class _TransferRechargeTabState extends State<_TransferRechargeTab> {
 
   void _onSearchChanged(String q) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), () => _search(q));
+    _debounce = Timer(const Duration(milliseconds: 300), () => _search(q));
   }
 
   Future<void> _search(String q) async {
-    if (q.trim().length < 2) { setState(() => _results = []); return; }
+    final query = q.trim();
+    if (query.isEmpty) {
+      setState(() => _results = _allAgents);
+      return;
+    }
     setState(() => _searching = true);
     try {
-      final res = await AgencyRepository.searchRechargeAgents(q);
+      final res = await AgencyRepository.searchRechargeAgents(query);
       if (!mounted) return;
       setState(() { _results = res; _searching = false; });
     } catch (e) {
-debugPrint('[agency_withdrawal_screen] error: $e');
+      debugPrint('[agency_withdrawal_screen] error: $e');
       if (mounted) setState(() { _searching = false; _results = []; });
     }
   }
 
   Future<void> _confirmTransfer() async {
     if (_selectedAgent == null || _diamonds <= 0) {
-      _snack('اختر وكيل شحن وأدخل الكمية'); return;
+      _snack('اختر وكيل شحن وأدخل كمية الألماس'); return;
     }
     if (_diamonds > widget.member.diamondsAvailable) {
       _snack('الرصيد المتاح غير كافٍ. المتاح: ${widget.member.diamondsAvailable} ♦'); return;
     }
 
-    // Dialog تأكيد مزدوج
+    final agencyName = _selectedAgent!['recharge_agency_name'] ?? _selectedAgent!['display_name'] ?? 'وكالة الشحن';
+    final agentName = _selectedAgent!['display_name'] ?? 'وكيل الشحن';
+    final agentKid = _selectedAgent!['kayan_id'] ?? '';
+
+    // Dialog تأكيد إرسال الطلب للوكيل
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1A1A2E),
-        title: const Text('تأكيد التحويل', style: TextStyle(color: Colors.white)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.send_rounded, color: Color(0xFF00D4FF), size: 40),
-          const SizedBox(height: 12),
-          Text('سيتم تحويل ${_fmtK(_diamonds)} ♦ إلى:',
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.diamond_rounded, color: Color(0xFF00D4FF), size: 24),
+            SizedBox(width: 8),
+            Text('تأكيد إرسال طلب السحب', style: TextStyle(color: Colors.white, fontSize: 16)),
+          ],
+        ),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('سيتم إرسال طلب سحب بقيمة ${_fmtK(_diamonds)} ♦ إلى وكالة:',
               style: const TextStyle(color: Colors.white70, fontSize: 13)),
-          const SizedBox(height: 6),
-          Text(_selectedAgent!['display_name'] as String? ?? '—',
-              style: const TextStyle(color: Color(0xFF00D4FF), fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 8),
-          const Text('العملية فورية ولا يمكن التراجع عنها.',
-              style: TextStyle(color: Colors.white38, fontSize: 11)),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF00D4FF).withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: const Color(0xFF00D4FF).withValues(alpha: 0.2),
+                backgroundImage: (_selectedAgent!['recharge_agency_logo'] != null && _selectedAgent!['recharge_agency_logo'].toString().isNotEmpty)
+                    ? EncryptedImageProvider(_selectedAgent!['recharge_agency_logo'] as String)
+                    : (_selectedAgent!['avatar_url'] != null && _selectedAgent!['avatar_url'].toString().isNotEmpty)
+                        ? EncryptedImageProvider(_selectedAgent!['avatar_url'] as String)
+                        : null,
+                child: const Icon(Icons.storefront_rounded, color: Color(0xFF00D4FF), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(agencyName, style: const TextStyle(color: Color(0xFF00D4FF), fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text('الوكيل: $agentName ${agentKid.isNotEmpty ? "(#$agentKid)" : ""}', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                ]),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 12),
+          const Text('• سيصل إشعار فوري للوكيل لمراجعة الطلب والموافقة عليه.',
+              style: TextStyle(color: Colors.white54, fontSize: 11)),
+          const Text('• لن يتم خصم الألماس إلا بعد موافقة الوكيل الرسمية.',
+              style: TextStyle(color: Color(0xFF00E5A0), fontSize: 11, fontWeight: FontWeight.bold)),
         ]),
         actions: [
           TextButton(
@@ -699,9 +784,13 @@ debugPrint('[agency_withdrawal_screen] error: $e');
             child: const Text('إلغاء', style: TextStyle(color: Colors.white38)),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF00D4FF), foregroundColor: Colors.black),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00D4FF),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('تأكيد'),
+            child: const Text('إرسال الطلب', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -711,23 +800,82 @@ debugPrint('[agency_withdrawal_screen] error: $e');
 
     setState(() => _processing = true);
     try {
-      final key = '${widget.member.memberId}_txfr_${DateTime.now().millisecondsSinceEpoch}';
-      final res = await AgencyRepository.transferDiamondsToAgentWallet(
-        agentId:         _selectedAgent!['id'] as String,
-        diamonds:        _diamonds,
-        idempotencyKey:  key,
-        source:          'host',
+      final myUid = Supabase.instance.client.auth.currentUser?.id ?? widget.member.userId;
+      String hostName = 'مضيف';
+      String hostCustomId = '';
+      String agencyName = '';
+      try {
+        final profile = await Supabase.instance.client
+            .from('profiles')
+            .select('display_name, kayan_id, custom_id')
+            .eq('id', myUid)
+            .maybeSingle();
+        if (profile != null) {
+          hostName = (profile['display_name'] ?? 'مضيف').toString();
+          hostCustomId = (profile['custom_id'] ?? profile['kayan_id'] ?? '').toString();
+        }
+        if (widget.member.agencyId.isNotEmpty) {
+          final agency = await Supabase.instance.client
+              .from('agency_profiles')
+              .select('name')
+              .eq('id', widget.member.agencyId)
+              .maybeSingle();
+          if (agency != null) {
+            agencyName = (agency['name'] ?? '').toString();
+          }
+        }
+      } catch (_) {}
+
+      final res = await AgencyRepository.requestHostWithdrawalToAgent(
+        agent: _selectedAgent!,
+        diamonds: _diamonds,
+        hostUid: myUid,
+        hostName: hostName,
+        hostCustomId: hostCustomId,
+        agencyId: widget.member.agencyId,
+        agencyName: agencyName,
       );
+
       if (res['success'] != true) {
-        _snack(res['error']?.toString() ?? 'فشل التحويل');
+        _snack(res['message']?.toString() ?? 'فشل إرسال طلب السحب');
         setState(() => _processing = false);
         return;
       }
+
       if (!mounted) return;
-      _snack('✅ تم التحويل بنجاح إلى ${_selectedAgent!['display_name']}');
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A2E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.check_circle_rounded, color: Color(0xFF00E5A0), size: 54),
+            const SizedBox(height: 14),
+            const Text('تم إرسال طلب السحب بنجاح! 🚀',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 8),
+            Text(
+              'تم إرسال إشعار فوري إلى $agencyName ($agentName).\nسيتم تحويل الألماس تلقائياً بمجرد موافقة الوكيل.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00D4FF),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('حسناً', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ]),
+        ),
+      );
+
       _diamondsCtrl.clear();
       _searchCtrl.clear();
-      setState(() { _diamonds = 0; _selectedAgent = null; _results = []; });
+      setState(() { _diamonds = 0; _selectedAgent = null; _results = _allAgents; });
       widget.onDone();
     } catch (e) {
       if (mounted) _snack('خطأ: $e');
@@ -746,28 +894,36 @@ debugPrint('[agency_withdrawal_screen] error: $e');
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _InfoCard(
           icon: '🔄',
-          title: 'تحويل إلى وكيل شحن',
+          title: 'طلب سحب ألماس إلى وكيل الشحن',
           lines: [
-            'بدون رسوم — فوري',
-            'الألماس يُحوَّل لمحفظة الوكيل مباشرةً',
-            'لا تحويل للعملة — ألماس إلى ألماس',
-            'يتطلب تأكيداً مزدوجاً',
+            'اختر وكالة الشحن المعتمدة أو ابحث بالآيدي الرقمي للوكيل',
+            'يتم إرسال إشعار فوري للوكيل بموافقة أو رفض الطلب',
+            'الألماس محمي ولا يُخصم إلا عند اعتماد الوكيل الرسمي',
+            'بدون رسوم إضافية — سحب آمن 100%',
           ],
         ),
         const SizedBox(height: 20),
 
-        Text('ابحث عن وكيل الشحن', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('وكالات الشحن المعتمدة', style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 14, fontWeight: FontWeight.bold)),
+            if (_allAgents.isNotEmpty)
+              Text('${_allAgents.length} وكالة متاحة', style: const TextStyle(color: Color(0xFF00D4FF), fontSize: 12)),
+          ],
+        ),
         const SizedBox(height: 8),
+
         TextField(
           controller: _searchCtrl,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
-            filled: true, fillColor: Colors.white.withOpacity(0.06),
+            filled: true, fillColor: Colors.white.withValues(alpha: 0.06),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Color(0xFF00D4FF))),
-            hintText: 'ابحث بالاسم أو الـ ID الرقمي للوكيل',
-            hintStyle: const TextStyle(color: Colors.white24),
+            hintText: 'ابحث بالـ ID أو اسم وكالة الشحن أو اسم الوكيل...',
+            hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
             prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38),
             suffixIcon: _searching
                 ? const Padding(padding: EdgeInsets.all(12),
@@ -778,66 +934,138 @@ debugPrint('[agency_withdrawal_screen] error: $e');
           onChanged: _onSearchChanged,
         ),
 
-        // نتائج البحث
-        if (_results.isNotEmpty && _selectedAgent == null)
-          ..._results.map((r) => ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: CircleAvatar(
-              backgroundColor: const Color(0xFF00D4FF).withOpacity(0.15),
-              backgroundImage: r['avatar_url'] != null ? EncryptedImageProvider(r['avatar_url'] as String) : null,
-              child: r['avatar_url'] == null ? const Icon(Icons.person, color: Color(0xFF00D4FF)) : null,
-            ),
-            title: Text(r['display_name'] as String? ?? '—', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            subtitle: r['kayan_id'] != null
-                ? Text('ID: ${r['kayan_id']}', style: const TextStyle(color: Colors.white54, fontSize: 11))
-                : null,
-            trailing: const Icon(Icons.chevron_left_rounded, color: Colors.white38),
-            onTap: () => setState(() {
-              _selectedAgent = r;
-              _results = [];
-              _searchCtrl.text = r['display_name'] as String? ?? '';
-            }),
-          )),
+        // قائمة الوكالات المقترحة / نتائج البحث
+        if (_results.isNotEmpty && _selectedAgent == null) ...[
+          const SizedBox(height: 12),
+          Text(
+            _searchCtrl.text.trim().isEmpty ? 'اختر من وكالات الشحن أدناه:' : 'نتائج البحث:',
+            style: const TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+          const SizedBox(height: 8),
+          ..._results.map((r) {
+            final agName = r['recharge_agency_name'] ?? r['display_name'] ?? 'وكالة شحن';
+            final agLogo = r['recharge_agency_logo'] ?? r['avatar_url'] ?? '';
+            final kid = r['kayan_id'] ?? '';
+            final agentName = r['display_name'] ?? '';
 
-        // الوكيل المختار
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF00D4FF).withValues(alpha: 0.5), width: 1.5),
+                    image: agLogo.isNotEmpty
+                        ? DecorationImage(image: EncryptedImageProvider(agLogo), fit: BoxFit.cover)
+                        : null,
+                  ),
+                  child: agLogo.isEmpty ? const Icon(Icons.storefront_rounded, color: Color(0xFF00D4FF), size: 22) : null,
+                ),
+                title: Row(children: [
+                  Expanded(
+                    child: Text(agName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00D4FF).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text('وكالة شحن', style: TextStyle(color: Color(0xFF00D4FF), fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                ]),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(children: [
+                    Text('الوكيل: $agentName', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    if (kid.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text('• ID: #$kid', style: const TextStyle(color: Color(0xFFFFD770), fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ]),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF00D4FF), size: 14),
+                onTap: () => setState(() {
+                  _selectedAgent = r;
+                  _results = [];
+                  _searchCtrl.text = agName;
+                }),
+              ),
+            );
+          }),
+        ],
+
+        // بطاقة وكالة الشحن المختارة بالتفصيل (مطابقة لهايوكي)
         if (_selectedAgent != null) ...[
           const SizedBox(height: 14),
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF00D4FF).withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF00D4FF).withOpacity(0.35)),
+              gradient: LinearGradient(
+                colors: [
+                  const Color(0xFF00D4FF).withValues(alpha: 0.12),
+                  const Color(0xFF1A1A2E).withValues(alpha: 0.9),
+                ],
+                begin: Alignment.topRight,
+                end: Alignment.bottomLeft,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF00D4FF).withValues(alpha: 0.4), width: 1.5),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: const Color(0xFF00D4FF).withOpacity(0.2),
-                    backgroundImage: _selectedAgent!['avatar_url'] != null
-                        ? EncryptedImageProvider(_selectedAgent!['avatar_url'] as String)
-                        : null,
-                    child: _selectedAgent!['avatar_url'] == null
-                        ? const Icon(Icons.person, color: Color(0xFF00D4FF))
-                        : null,
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFF00D4FF), width: 2),
+                      image: (_selectedAgent!['recharge_agency_logo'] != null && _selectedAgent!['recharge_agency_logo'].toString().isNotEmpty)
+                          ? DecorationImage(image: EncryptedImageProvider(_selectedAgent!['recharge_agency_logo'] as String), fit: BoxFit.cover)
+                          : (_selectedAgent!['avatar_url'] != null && _selectedAgent!['avatar_url'].toString().isNotEmpty)
+                              ? DecorationImage(image: EncryptedImageProvider(_selectedAgent!['avatar_url'] as String), fit: BoxFit.cover)
+                              : null,
+                    ),
+                    child: const Icon(Icons.storefront_rounded, color: Color(0xFF00D4FF), size: 26),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('${_selectedAgent!['display_name']}',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                        Text('معرف الوكيل: ${_selectedAgent!['kayan_id'] ?? _selectedAgent!['id']}',
-                            style: const TextStyle(color: Color(0xFF00D4FF), fontSize: 12)),
+                        Text('${_selectedAgent!['recharge_agency_name'] ?? _selectedAgent!['display_name']}',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(height: 2),
+                        Row(children: [
+                          Text('الوكيل: ${_selectedAgent!['display_name']}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFD770).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text('ID: #${_selectedAgent!['kayan_id'] ?? _selectedAgent!['id']}',
+                                style: const TextStyle(color: Color(0xFFFFD770), fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ]),
                       ],
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => setState(() { _selectedAgent = null; _searchCtrl.clear(); }),
-                    child: const Icon(Icons.close_rounded, color: Colors.white38, size: 20),
+                  IconButton(
+                    onPressed: () => setState(() { _selectedAgent = null; _searchCtrl.clear(); _results = _allAgents; }),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white54, size: 22),
                   ),
                 ]),
                 const SizedBox(height: 12),
@@ -852,7 +1080,7 @@ debugPrint('[agency_withdrawal_screen] error: $e');
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                     icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
-                    label: const Text('تواصل مع الوكيل لتحويل العملات إليه', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    label: const Text('محادثة وكيل الشحن للتأكيد', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     onPressed: () {
                       final agentUid = _selectedAgent!['id']?.toString() ?? _selectedAgent!['user_id']?.toString() ?? '';
                       final myUid = Supabase.instance.client.auth.currentUser?.id ?? '';
@@ -879,7 +1107,7 @@ debugPrint('[agency_withdrawal_screen] error: $e');
         ],
 
         const SizedBox(height: 20),
-        Text('كمية الرصيد / الألماس للتحويل', style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13)),
+        Text('كمية الألماس المراد سحبها', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 13, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         TextField(
           controller: _diamondsCtrl,
@@ -903,7 +1131,7 @@ debugPrint('[agency_withdrawal_screen] error: $e');
             ),
             child: _processing
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                : const Text('تحويل فوري إلى وكيل الشحن', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                : const Text('إرسال طلب السحب للوكيل (موافقة/رفض)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           ),
         ),
       ]),
