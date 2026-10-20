@@ -73,6 +73,7 @@ class DynamicConfigService extends ChangeNotifier {
   String _messageTitle = 'الرسائل';
   String _profileTitle = 'حسابي';
   Map<String, String> _screenTitles = {};
+  Map<String, String> _customStrings = {};
   
   // CP WebView URL
   String _cpWebUrl = 'https://app.ayomet.com/cp.html';
@@ -466,6 +467,94 @@ class DynamicConfigService extends ChangeNotifier {
   String get profileTitle => _profileTitle;
   Map<String, String> get screenTitles => _screenTitles;
   String getScreenTitle(String key, String fallback) => _screenTitles[key] ?? fallback;
+  Map<String, String> get customStrings => _customStrings;
+
+  /// Dynamic custom text resolver: checks customStrings, then screenTitles, then fallback
+  String getCustomString(String key, String fallback) {
+    if (_customStrings.containsKey(key) && _customStrings[key]!.trim().isNotEmpty) {
+      return _customStrings[key]!.trim();
+    }
+    if (_screenTitles.containsKey(key) && _screenTitles[key]!.trim().isNotEmpty) {
+      return _screenTitles[key]!.trim();
+    }
+    return fallback;
+  }
+
+  /// Dynamic screen text: checks screenVisuals[screen][field], then getCustomString(field), then fallback
+  String getScreenText(String screen, String field, String fallback) {
+    return _screenStr(screen, field, getCustomString(field, fallback));
+  }
+
+  /// Dynamic screen color: checks screenVisuals[screen][field] then fallback
+  Color getScreenColor(String screen, String field, Color fallback) {
+    return _screenColor(screen, field, fallback);
+  }
+
+  /// Dynamic screen image / asset: checks screenVisuals[screen][field] then fallback
+  String getScreenImage(String screen, String field, String fallback) {
+    return _screenStr(screen, field, fallback);
+  }
+
+  /// Whether an element on a screen is hidden by admin
+  bool isElementHidden(String screen, String elementKey) {
+    final s = _screenVisuals[screen];
+    if (s is Map) {
+      final v = s['${elementKey}_hidden'] ?? s['${elementKey}Hidden'];
+      if (v == true || v == 'true' || v == 1 || v == '1') return true;
+    }
+    return false;
+  }
+
+  /// Get element offset (dx, dy) for custom positioning
+  Offset getElementOffset(String screen, String elementKey) {
+    final s = _screenVisuals[screen];
+    if (s is Map) {
+      final dx = double.tryParse((s['${elementKey}_offset_x'] ?? s['${elementKey}OffsetX'])?.toString() ?? '') ?? 0.0;
+      final dy = double.tryParse((s['${elementKey}_offset_y'] ?? s['${elementKey}OffsetY'])?.toString() ?? '') ?? 0.0;
+      return Offset(dx, dy);
+    }
+    return Offset.zero;
+  }
+
+  /// Get element border radius (shape)
+  double getElementBorderRadius(String screen, String elementKey, double fallback) {
+    final s = _screenVisuals[screen];
+    if (s is Map) {
+      final r = double.tryParse((s['${elementKey}_radius'] ?? s['${elementKey}Radius'])?.toString() ?? '');
+      if (r != null) return r;
+    }
+    return fallback;
+  }
+
+  /// Get element size (width, height)
+  Size? getElementSize(String screen, String elementKey) {
+    final s = _screenVisuals[screen];
+    if (s is Map) {
+      final w = double.tryParse((s['${elementKey}_width'] ?? s['${elementKey}Width'])?.toString() ?? '');
+      final h = double.tryParse((s['${elementKey}_height'] ?? s['${elementKey}Height'])?.toString() ?? '');
+      if (w != null && h != null && w > 0 && h > 0) return Size(w, h);
+    }
+    return null;
+  }
+
+  /// Wraps any widget to respect admin visibility, positioning, and custom styling
+  Widget wrapVisualElement({
+    required String screen,
+    required String elementKey,
+    required Widget child,
+  }) {
+    if (isElementHidden(screen, elementKey)) {
+      return const SizedBox.shrink();
+    }
+    final offset = getElementOffset(screen, elementKey);
+    if (offset.dx != 0 || offset.dy != 0) {
+      return Transform.translate(
+        offset: offset,
+        child: child,
+      );
+    }
+    return child;
+  }
   String get cpWebUrl => _cpWebUrl;
   String get audioCompany => _audioCompany;
   String get agoraAppId => _agoraAppId;
@@ -1249,6 +1338,11 @@ class DynamicConfigService extends ChangeNotifier {
       final io = config['iconOverrides'];
       if (io is Map) {
         _iconOverrides = io.map((k, v) => MapEntry(k.toString(), v.toString()));
+      }
+
+      final cs = config['customStrings'] ?? config['custom_strings'];
+      if (cs is Map) {
+        _customStrings = cs.map((k, v) => MapEntry(k.toString(), v.toString()));
       }
 
       final restartFlag = config['restartApp'];
