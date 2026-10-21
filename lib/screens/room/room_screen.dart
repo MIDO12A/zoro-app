@@ -5,24 +5,28 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'widgets/nine_patch_image.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/r.dart';
 import '../../config/app_colors.dart';
 import '../../models/room_model.dart';
 import '../../models/message_model.dart';
 import '../message/message_screen.dart';
+import '../message/message_reply_detail_screen.dart';
 import '../../models/user_model.dart' as app;
 import '../../models/gift_model.dart' as gm;
 import '../../models/gift_banner_config_model.dart';
 import '../../models/store_item_model.dart';
 import '../../services/supabase_service.dart';
+import '../../services/supabase_data_service.dart';
 import '../../services/media_prefetch_service.dart';
 import '../../services/media_cache_service.dart';
 import '../../services/dynamic_config_service.dart';
+import '../../services/global_banner_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../services/room_audio_service.dart';
 import '../../services/room_state_service.dart';
@@ -53,6 +57,8 @@ import 'widgets/room_message_bottom_sheet.dart';
 import 'widgets/room_game_bottom_sheet.dart';
 import 'widgets/room_music_bottom_sheet.dart';
 import '../../features/lucky_gift/widgets/room_burst_settlement_dialog.dart';
+import '../../widgets/coin_recharge_tip_dialog.dart';
+import '../wallet/wallet_main_screen.dart';
 import 'widgets/svga_player.dart'; // ✅ لاستخدام SvgaPlayer.prefetch قبل عرض الأنيميشن
 import 'widgets/vap_player.dart'; // ✅ لاستخدام VapPlayer.prefetch قبل عرض الأنيميشن
 import '../rank/rank_screen.dart';
@@ -60,6 +66,7 @@ import '../game/game_teaming_screen.dart';
 import '../music/music_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../user_profile/user_profile_screen.dart';
+import '../message/message_reply_detail_screen.dart';
 import '../report/report_room_screen.dart';
 import '../report/report_user_screen.dart';
 import '../../features/lucky_gift/services/lucky_gift_service.dart';
@@ -68,6 +75,7 @@ import '../../features/lucky_gift/widgets/gift_seat_flight_overlay.dart';
 import '../../features/lucky_bag/models/lucky_bag_model.dart';
 import '../../features/lucky_bag/services/lucky_bag_service.dart';
 import '../../features/lucky_bag/widgets/lucky_bag_send_dialog.dart';
+import '../../services/room_music_player_service.dart';
 import '../../features/lucky_bag/widgets/lucky_bag_claim_dialog.dart';
 import '../../features/lucky_bag/widgets/lucky_bag_floating_widget.dart';
 import '../../core/widgets/user_id_display_widget.dart';
@@ -93,14 +101,19 @@ Future<void> navigateToRoom(
   final userProvider = Provider.of<UserProvider>(context, listen: false);
   final uid = userProvider.currentUser?.uid;
   bool isReentry = false;
+  int? restoredSeatIndex;
+  bool wasOnSeat = false;
+  bool wasMicMuted = false;
   if (svc.isActive) {
     if (svc.roomId == roomId) {
       // Same room – don't exit, mark as re-entry
       isReentry = true;
-      svc.deactivate();
+      restoredSeatIndex = svc.seatIndex;
+      wasOnSeat = svc.isOnSeat;
+      wasMicMuted = svc.isMicMuted;
     } else {
-      // Different room – exit the old one
-      if (uid != null) svc.exitRoom(uid);
+      // Different room – cleanly exit the old minimized room and release seat/audio
+      if (uid != null) await svc.exitRoom(uid);
     }
   }
 
@@ -152,17 +165,24 @@ Future<void> navigateToRoom(
       roomName: roomName,
       hostName: hostName,
       roomId: roomId,
+      hostUid: hostUid,
       roomPassword: roomPassword,
       hotValue: hotValue,
       gameDesc: gameDesc,
       isReentry: isReentry,
+      initialSeatIndex: restoredSeatIndex,
+      wasOnSeat: wasOnSeat,
+      wasMicMuted: wasMicMuted,
     ),
   );
-  if (replace) {
-    Navigator.pushReplacement(context, route);
-  } else {
-    Navigator.push(context, route);
-  }
+  if (!context.mounted) return;
+  try {
+    if (replace) {
+      Navigator.pushReplacement(context, route);
+    } else {
+      Navigator.push(context, route);
+    }
+  } catch (_) {}
 }
 
 class _RoomGiftNotice {
@@ -205,20 +225,28 @@ class RoomScreen extends StatefulWidget {
   final String roomName;
   final String hostName;
   final String roomId;
+  final String? hostUid;
   final String roomPassword;
   final String hotValue;
   final String gameDesc;
   final bool isReentry;
+  final int? initialSeatIndex;
+  final bool wasOnSeat;
+  final bool wasMicMuted;
 
   const RoomScreen({
     super.key,
     required this.roomName,
     required this.hostName,
     required this.roomId,
+    this.hostUid,
     this.roomPassword = '',
     this.hotValue = '0',
     this.gameDesc = '',
     this.isReentry = false,
+    this.initialSeatIndex,
+    this.wasOnSeat = false,
+    this.wasMicMuted = false,
   });
 
   @override
@@ -456,7 +484,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Future<void> _playGiftArrivalSound() async {
     try {
       HapticFeedback.lightImpact();
-      _giftAudioPlayer ??= AudioPlayer();
+      if (_giftAudioPlayer == null) {
+        _giftAudioPlayer = AudioPlayer();
+      }
 
       final remoteUrl = DynamicConfigService().getAssetUrl('gift_sound') ??
           DynamicConfigService().getAssetUrl('gift') ??
@@ -471,18 +501,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       await _giftAudioPlayer!.seek(Duration.zero);
       await _giftAudioPlayer!.play();
     } catch (e) {
-      debugPrint('[RoomScreen] gift sound error: $e');
-      try {
-        final player = AudioPlayer();
-        await player.setAsset('assets/sounds/key_music.mp3');
-        await player.setVolume(1.0);
-        await player.play();
-        player.playerStateStream.listen((state) {
-          if (state.processingState == ProcessingState.completed) {
-            player.dispose();
-          }
-        });
-      } catch (_) {}
+      debugPrint('[RoomScreen] gift sound notice: $e');
     }
   }
 
@@ -524,6 +543,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _hostCustomId;
   void _resolveHostCustomId(String hostUid) {
     if (hostUid.isEmpty) return;
+    if (hostUid == _currentUserId) {
+      final cur = Provider.of<UserProvider>(context, listen: false).currentUser;
+      if (cur != null && cur.customId.isNotEmpty) {
+        _hostCustomId = cur.customId;
+        UserProfile.customIdCache[hostUid] = _hostCustomId!;
+        return;
+      }
+    }
     if (UserProfile.customIdCache.containsKey(hostUid)) {
       _hostCustomId = UserProfile.customIdCache[hostUid];
       return;
@@ -548,7 +575,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _startRoomComboTimer(Map<String, dynamic> giftData) {
     _lastGiftComboData = giftData;
     _roomComboTimer?.cancel();
-    _roomComboMultiplier = (_roomComboSeconds > 0) ? _roomComboMultiplier + 1 : 1;
+    final giftCount = (giftData['giftCount'] as num?)?.toInt() ?? 1;
+    _roomComboMultiplier = (_roomComboSeconds > 0) ? _roomComboMultiplier + giftCount : giftCount;
     _roomComboSeconds = 10;
     // ✅ بدلاً من setState كامل — نُعلم ValueNotifier فقط لإعادة رسم زر الكومبو وحده
     _comboNotifier.value = _ComboState(_roomComboSeconds, _roomComboMultiplier, _roomComboFiring);
@@ -565,11 +593,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _onRoomComboTap() {
     if (_lastGiftComboData == null || _currentUserId == null) return;
 
+    final data = _lastGiftComboData!;
+    final gift = data['gift'] as gm.GiftModel?;
+    final selectedTargets = (data['selectedTargets'] as List<dynamic>?) ?? [];
+    final count = data['giftCount'] as int? ?? 1;
+    final totalCost = (gift?.value ?? 0) * count * (selectedTargets.isNotEmpty ? selectedTargets.length : 1);
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final user = userProvider.currentUser;
+    final availableCoins = user?.coins ?? 0;
+
+    // ✅ التحقق أولاً من الرصيد: إذا نفد الرصيد لا يرسل ولا يزيد الكومبو ولا يشغل أنيميشن، ويظهر نافذة الشحن فوراً
+    if (availableCoins < totalCost) {
+      _roomComboTimer?.cancel();
+      _roomComboSeconds = 0;
+      _roomComboMultiplier = 0;
+      _lastGiftComboData = null;
+      _comboNotifier.value = _ComboState(0, 0, false);
+      CoinRechargeTipDialog.show(context, totalCost: totalCost, currentCoins: availableCoins);
+      return;
+    }
+
     // ✅ إعادة ضبط مؤقت الـ 10 ثوانٍ مع كل ضغطة كومبو (مثل التطبيق الأصلي تماماً restartCountdown)
     // حتى لا يختفي الزر أثناء الضغط المتتالي
     _roomComboTimer?.cancel();
     _roomComboSeconds = 10;
-    _roomComboMultiplier++;
+    final stepCount = (_lastGiftComboData?['giftCount'] as num?)?.toInt() ?? 1;
+    _roomComboMultiplier += stepCount;
     _roomComboFiring = true;
     _comboNotifier.value = _ComboState(_roomComboSeconds, _roomComboMultiplier, true);
 
@@ -587,8 +636,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _comboNotifier.value = _ComboState(_roomComboSeconds, _roomComboMultiplier, false);
       }
     });
-
-    final data = _lastGiftComboData!;
     final iconUrl = data['defaultImage']?.toString() ?? data['animationAsset']?.toString() ?? '';
     if (iconUrl.isNotEmpty) {
       _triggerGiftFlight(
@@ -626,72 +673,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     // ✅ إرسال الهدية عبر الشبكة بشكل غير متزامن تماماً (fire-and-forget background coroutine)
     // مثل الأصل (Dispatchers.IO) دون حظر الواجهة لسرعة إرسال فائقة
-    final gift = data['gift'] as gm.GiftModel?;
-    final selectedTargets = (data['selectedTargets'] as List<dynamic>?) ?? [];
     if (gift != null && widget.roomId.isNotEmpty) {
       final roomId = widget.roomId;
       final comboMultiplier = _roomComboMultiplier;
-      final count = data['giftCount'] as int? ?? 1;
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final user = userProvider.currentUser;
-      final totalCost = gift.value * count * (selectedTargets.isNotEmpty ? selectedTargets.length : 1);
 
-      if ((user?.coins ?? 0) < totalCost) {
-        return; // رصيد غير كافٍ للكومبو
-      }
-
-      // خصم فوري في الذاكرة لسرعة استجابة فائقة
-      userProvider.deductCoinsLocally(totalCost);
+      // سحب النتائج وحساب صافي الرصيد فوريًا في الذاكرة لتحديث رصيد الواجهة بـ 0ms تأخير ومنع التدبيل واهتزاز الرصيد
+      final fb = SupabaseService();
+      final isLucky = gift.isLucky || gift.type == 3;
 
       unawaited(Future.microtask(() async {
-        final fb = SupabaseService();
         await Future.wait(selectedTargets.map((r) async {
           final receiverId = r['id']?.toString() ?? '';
           final receiverName = r['name']?.toString() ?? '';
-          if (gift.isLucky || gift.type == 3) {
+          if (isLucky) {
             final cover = gift.defaultImage ?? gift.iconAsset;
-            final cardCount = count.clamp(1, 10);
-            final drawn = fb.drawLuckyMultipliers(cardCount);
-            final totalWon = drawn.fold<int>(0, (total, m) => total + (gift.value * m));
-            final maxMult = drawn.isEmpty ? 0 : drawn.reduce((a, b) => a > b ? a : b);
-            final cards = List.generate(drawn.length, (i) => LuckyCardResult(
-              index: i,
-              multiplier: drawn[i],
-              wonCoins: gift.value * drawn[i],
-              giftName: gift.name,
-              giftIcon: gift.iconAsset,
-            ));
-            final luckyModel = LuckyGiftModel(
-              id: gift.id,
-              giftName: gift.name,
-              giftNameAr: gift.name,
-              coinPrice: gift.value,
-              giftIconUrl: gift.iconAsset,
-              giftCoverUrl: cover,
-              giftBgUrl: cover,
-              svgaAnimUrl: gift.animationAsset,
-            );
-            final comboId = 'combo_${DateTime.now().millisecondsSinceEpoch}';
-            final localData = LuckyGiftBroadcastData(
-              roomId: roomId,
-              senderName: user?.name ?? '',
-              senderAvatar: user?.photoUrl ?? '',
-              receiverName: receiverName,
-              gift: luckyModel,
-              cards: cards,
-              totalWonCoins: totalWon,
-              maxMultiplier: maxMult,
-              isBigWin: maxMult >= 50,
-              comboId: comboId,
-              comboCount: comboMultiplier,
-            );
 
-            // عرض فوري لحظي للمرسل بدون أي تأخير في الشبكة (0ms latency)
-            if (mounted) {
-              LuckyGiftService().enqueueLuckyGift(context, localData);
+            final flyIcon = gift.defaultImage ?? gift.iconAsset;
+            if (flyIcon.isNotEmpty) {
+              _triggerGiftFlight(
+                iconUrl: flyIcon,
+                receiverId: receiverId,
+              );
             }
 
-            await fb.sendLuckyGift(
+            final res = await fb.sendLuckyGift(
               roomId: roomId,
               giftId: gift.id,
               giftName: gift.name,
@@ -707,12 +712,70 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               receiverName: receiverName,
               value: gift.value,
               count: count,
-              comboId: comboId,
+              comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
               comboCount: comboMultiplier,
-              preDrawnMultipliers: drawn,
             );
+
+            // ✅ تحديث الرصيد والنتائج من الخادم حصرياً (Server as Source of Truth)
+            if (res != null) {
+              final newBal = (res['newBalance'] as num?)?.toInt();
+              if (newBal != null) {
+                userProvider.updateCoinsImmediately(newBal);
+              }
+
+              final mult = (res['multiplier'] as num?)?.toInt() ?? 0;
+              final won = (res['won_coins'] as num?)?.toInt() ?? (res['totalWon'] as num?)?.toInt() ?? 0;
+              final multList = (res['multipliers'] as List<dynamic>?) ?? [mult];
+
+              final cards = List.generate(multList.length, (i) {
+                final m = (multList[i] as num).toInt();
+                return LuckyCardResult(
+                  index: i,
+                  multiplier: m,
+                  wonCoins: gift.value * m,
+                  giftName: gift.name,
+                  giftIcon: gift.iconAsset,
+                );
+              });
+
+              final luckyModel = LuckyGiftModel(
+                id: gift.id,
+                giftName: gift.name,
+                giftNameAr: gift.name,
+                coinPrice: gift.value,
+                giftIconUrl: gift.iconAsset,
+                giftCoverUrl: cover,
+                giftBgUrl: cover,
+                svgaAnimUrl: gift.animationAsset,
+              );
+
+              final serverData = LuckyGiftBroadcastData(
+                roomId: roomId,
+                senderName: user?.name ?? '',
+                senderAvatar: user?.photoUrl ?? '',
+                receiverName: receiverName,
+                gift: luckyModel,
+                cards: cards,
+                totalWonCoins: won,
+                maxMultiplier: mult,
+                isBigWin: mult >= 50,
+                comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
+                comboCount: comboMultiplier,
+              );
+
+              if (mounted) {
+                LuckyGiftService().enqueueLuckyGift(context, serverData);
+              }
+            }
           } else {
+            userProvider.deductCoinsLocally(gift.value * count);
             final cover = gift.defaultImage ?? gift.iconAsset;
+            if (cover.isNotEmpty) {
+              _triggerGiftFlight(
+                iconUrl: cover,
+                receiverId: receiverId,
+              );
+            }
             await fb.sendGift(
               roomId: roomId,
               giftId: gift.id,
@@ -836,6 +899,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ── 20 seats: index 0 = owner, 1-19 = regular ─────────────────
   late List<SeatModel> _seats;
+  final int _sessionJoinedAt = DateTime.now().millisecondsSinceEpoch - 2000;
 
   // Current user is owner
   bool _isOwner = false;
@@ -843,6 +907,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _currentUserId;
   String? _currentUserName;
   bool get _isOwnerOrModerator => _isOwner || _moderators.contains(_currentUserId);
+  static final Map<String, int> _cachedRoomSeatCount = {};
+  static final Map<String, seat_model.SeatStyle> _cachedRoomSeatStyle = {};
   seat_model.SeatStyle _roomSeatStyle = seat_model.SeatStyle.circle;
 
   // Current room data
@@ -850,11 +916,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // Track seen entrance message IDs to avoid replaying
   final Set<String> _seenEntranceIds = {};
+  final Set<String> _seenInviteIds = {};
 
   // Track total gifts received per seat user ID
   final Map<String?, int> _giftReceiverTotals = {};
   StreamSubscription? _giftSub;
   StreamSubscription? _seatsSub;
+  StreamSubscription? _membersSub;
+  List<app.UserModel> _roomMembers = [];
   StreamSubscription? _roomSub;
   StreamSubscription? _giftCacheSub;
   StreamSubscription? _bannerConfigSub;
@@ -871,10 +940,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Timer? _bannerHideTimer;
   Timer? _presencePingTimer; // ✅ ping دوري للـ presence — يكتشف الخروج الصامت
   final RoomAudioService _roomAudio = RoomAudioService();
+  bool _takingSeat = false;
+  int? _pendingSeatIndex;
+  int? _currentUserSeatIndex;
+  Map<int, Map<String, dynamic>>? _lastProcessedSeatMap;
 
   @override
   void initState() {
     super.initState();
+    if (_cachedRoomSeatStyle.containsKey(widget.roomId)) {
+      _roomSeatStyle = _cachedRoomSeatStyle[widget.roomId]!;
+    }
+    SupabaseDataService().getRoom(widget.roomId).then((room) {
+      if (room != null && mounted) {
+        setState(() {
+          _currentRoom = room;
+          _roomSeatStyle = room.seatStyle;
+          _cachedRoomSeatStyle[widget.roomId] = room.seatStyle;
+          if (room.seatCount > 0 && room.seatCount != _seats.length) {
+            _cachedRoomSeatCount[widget.roomId] = room.seatCount;
+            final old = _seats;
+            _seats = List.generate(room.seatCount, (i) => i < old.length ? old[i] : SeatModel(index: i));
+          }
+        });
+      }
+    });
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -882,7 +972,50 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         statusBarIconBrightness: Brightness.light,
       ),
     );
-    _seats = _buildInitialSeats();
+    final initialSeats = _buildInitialSeats();
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final currentUser = userProvider.currentUser;
+    final minSvc = MinimizedRoomService();
+
+    final isReturning = widget.isReentry ||
+        widget.wasOnSeat ||
+        widget.initialSeatIndex != null ||
+        minSvc.roomId == widget.roomId ||
+        minSvc.isActiveFor(widget.roomId);
+
+    final restoredSeatIndex = widget.initialSeatIndex ??
+        (minSvc.roomId == widget.roomId ? minSvc.seatIndex : null);
+    final userWasOnSeat = widget.wasOnSeat ||
+        (minSvc.roomId == widget.roomId &&
+            (minSvc.isOnSeat || minSvc.seatIndex != null));
+
+    if (isReturning &&
+        userWasOnSeat &&
+        restoredSeatIndex != null &&
+        restoredSeatIndex >= 0 &&
+        restoredSeatIndex < initialSeats.length &&
+        currentUser != null) {
+      _currentUserSeatIndex = restoredSeatIndex;
+      _takingSeat = true;
+      _pendingSeatIndex = restoredSeatIndex;
+      final restoredFrame = _resolveFrameAsset(currentUser.activeFrame);
+      initialSeats[restoredSeatIndex] = SeatModel(
+        index: restoredSeatIndex,
+        user: UserModel(
+          name: currentUser.name,
+          avatar: currentUser.photoUrl,
+          id: currentUser.uid,
+          customId: currentUser.customId,
+          gender: currentUser.gender,
+          country: currentUser.country,
+          frameAsset: restoredFrame,
+        ),
+        hasFrame: restoredFrame != null && restoredFrame.isNotEmpty,
+        frameAsset: restoredFrame,
+        state: SeatState.occupied,
+      );
+    }
+    _seats = initialSeats;
     // ✅ تأجيل العمليات الثقيلة (Firestore، Audio، Zombie cleanup) إلى ما بعد
     //    أول إطار مكتمل — يمنع "Skipped N frames!" عند فتح الغرفة.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -916,14 +1049,59 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _loadRoomData() {
     _joinedAt = DateTime.now();
+    final uProvInit = Provider.of<UserProvider>(context, listen: false).currentUser;
+    if (uProvInit != null) { _cachedUsers[uProvInit.uid] = uProvInit; }
     LuckyGiftService().disposeAllOverlays();
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.currentUser;
+
+    final minSvc = MinimizedRoomService();
+    // If another room was minimized, cleanly exit the old room!
+    if (minSvc.isActive && minSvc.roomId != widget.roomId && currentUser != null) {
+      minSvc.exitRoom(currentUser.uid);
+    }
+
+    final isReturningFromMinimized = widget.isReentry ||
+        widget.wasOnSeat ||
+        widget.initialSeatIndex != null ||
+        minSvc.roomId == widget.roomId ||
+        minSvc.isActiveFor(widget.roomId);
+
+    final restoredSeatIndex = widget.initialSeatIndex ??
+        (minSvc.roomId == widget.roomId ? minSvc.seatIndex : null);
+    final userWasOnSeat = widget.wasOnSeat ||
+        (minSvc.roomId == widget.roomId &&
+            (minSvc.isOnSeat || minSvc.seatIndex != null));
+
+    if (minSvc.isActiveFor(widget.roomId)) {
+      minSvc.deactivate();
+    }
+
+    if (widget.wasMicMuted) {
+      _isMicOn = false;
+    }
+
+    // Ensure room exists in Supabase rooms table
+    final effectiveHostUid = (currentUser?.hostedRoomId == widget.roomId)
+        ? currentUser?.uid
+        : (widget.hostUid != null && widget.hostUid!.isNotEmpty ? widget.hostUid : null);
+    SupabaseDataService().ensureRoomExists(
+      roomId: widget.roomId,
+      name: widget.roomName,
+      hostUid: effectiveHostUid,
+      hostName: widget.hostName,
+    );
+
     if (currentUser != null) {
       _currentUserId = currentUser.uid;
       _currentUserName = currentUser.name;
       _isOwner = false;
       _isFollowed = currentUser.followedRooms.contains(widget.roomId);
+      if (widget.hostUid != null && widget.hostUid!.isNotEmpty) {
+        _resolveHostCustomId(widget.hostUid!);
+      } else if (currentUser.hostedRoomId == widget.roomId) {
+        _resolveHostCustomId(currentUser.uid);
+      }
       _checkRoomBan(currentUser.uid);
       _userBanSub?.cancel();
       _userBanSub = _firebaseService.userRoomBanStream(widget.roomId, currentUser.uid).listen((isBanned) {
@@ -940,17 +1118,47 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       });
       // Clear any stale seats for this user before registering (await to avoid race)
       // Only on fresh joins – on minimized-room re-entry the current seat must survive.
-      if (!widget.isReentry) {
+      if (!isReturningFromMinimized) {
         Future(() async {
           await _firebaseService.leaveSeatForUser(widget.roomId, currentUser.uid);
         });
+      } else if (userWasOnSeat && restoredSeatIndex != null && restoredSeatIndex >= 0 && restoredSeatIndex < _seats.length) {
+        _currentUserSeatIndex = restoredSeatIndex;
+        _takingSeat = true;
+        _pendingSeatIndex = restoredSeatIndex;
+        // Immediately restore seat optimistically
+        setState(() {
+          final restoredFrame = _resolveFrameAsset(currentUser.activeFrame);
+          _seats[restoredSeatIndex] = SeatModel(
+            index: restoredSeatIndex,
+            user: UserModel(
+              name: currentUser.name,
+              avatar: currentUser.photoUrl,
+              id: currentUser.uid,
+              customId: currentUser.customId,
+              gender: currentUser.gender,
+              country: currentUser.country,
+              frameAsset: restoredFrame,
+            ),
+            hasFrame: restoredFrame != null && restoredFrame.isNotEmpty,
+            frameAsset: restoredFrame,
+            state: SeatState.occupied,
+          );
+        });
+        _firebaseService.takeSeat(widget.roomId, restoredSeatIndex, currentUser).then((_) {
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) setState(() => _takingSeat = false);
+          });
+        });
+        _roomAudio.startPublishing();
+        _roomAudio.toggleMic(!widget.wasMicMuted);
       }
       // Register in Firebase so others see this user
       _firebaseService.joinRoom(widget.roomId, currentUser);
       // ✅ تنظيف المستخدمين الصامتين (Zombie) عند الانضمام
       // أي مستخدم آخر لم يرسل ping منذ أكثر من 5 دقائق يُعتبر خارجاً
       _cleanupZombieUsers();
-      if (!widget.isReentry) {
+      if (!isReturningFromMinimized) {
         try {
           // Log entrance effect for other users to see
           _firebaseService.logEntrance(
@@ -1002,14 +1210,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         setState(() {
           _currentRoom = room;
           _isOwner = _currentUserId == room.hostUid;
-          _onlineCount = room.memberCount;
+          _onlineCount = max(_onlineCount, max(room.memberCount, _seats.where((s) => s.isOccupied).length));
           _moderators
             ..clear()
             ..addAll(room.moderators);
           if (room.seatCount != _seats.length) {
-            _seats = List.generate(room.seatCount, (i) => SeatModel(index: i));
+            final oldSeats = _seats;
+            _seats = List.generate(
+              room.seatCount,
+              (i) => i < oldSeats.length ? oldSeats[i] : SeatModel(index: i),
+            );
           }
           _roomSeatStyle = room.seatStyle;
+          _cachedRoomSeatCount[widget.roomId] = room.seatCount;
+          _cachedRoomSeatStyle[widget.roomId] = room.seatStyle;
         });
         _resolveHostCustomId(room.hostUid);
       }
@@ -1021,17 +1235,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     _broadcastSub = _firebaseService.globalBroadcastStream().listen((broadcasts) {
       if (!mounted || broadcasts.isEmpty) return;
-      final latest = broadcasts.first;
-      final createdAt = DateTime.tryParse(latest['created_at']?.toString() ?? '');
-      if (createdAt != null && DateTime.now().difference(createdAt).inSeconds < 15) {
-        final bId = latest['id']?.toString() ?? '${createdAt.millisecondsSinceEpoch}_${latest['sender_uid']}';
-        if (!seenMsgIds.contains(bId)) {
-          seenMsgIds.add(bId);
-          _currentBroadcast = latest;
-          _broadcastNotifier.value = latest;
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      for (final latest in broadcasts) {
+        final bTs = (latest['timestamp'] as num?)?.toInt() ??
+            (DateTime.tryParse(latest['created_at']?.toString() ?? '')?.millisecondsSinceEpoch ?? 0);
+        final isRecent = bTs == 0 || (nowMs - bTs).abs() < 90000; // 90 ثانية استيعاب لأي فارق توقيت بين الأجهزة
+        if (!isRecent) continue;
+        final bId = latest['id']?.toString() ?? '${bTs}_${latest['sender_uid']}';
+        if (seenMsgIds.contains(bId)) continue;
+        seenMsgIds.add(bId);
+        _currentBroadcast = latest;
+        _broadcastNotifier.value = latest;
 
-          // ✅ عرض الهدية/الفوز مباشرة في شات وتعليقات الغرفة تزامناً مع البانر
-          final isLucky = latest['is_lucky'] == true || (latest['multiplier'] != null && (latest['multiplier'] as num) > 0);
+        // ✅ عرض الهدية/الفوز مباشرة في شات وتعليقات الغرفة تزامناً مع البانر
+        final isLucky = latest['is_lucky'] == true || (latest['multiplier'] != null && (latest['multiplier'] as num) > 0);
           _chatMessages.add(MessageModel(
             msgId: bId,
             roomId: widget.roomId,
@@ -1066,15 +1283,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               curve: Curves.easeOut,
             );
           }
+          break;
         }
-      }
     });
 
     _msgSub = _firebaseService.messagesStream(widget.roomId).listen((msgs) {
       if (mounted) {
         final clearedAt = _currentRoom?.chatClearedAt ?? 0;
-        final filterTime = max(joinedMs - 5000, clearedAt);
-        final currentSessionMsgs = msgs.where((m) => m.timestamp >= filterTime).toList();
+        final minTime = clearedAt > _sessionJoinedAt ? clearedAt : _sessionJoinedAt;
+        final currentSessionMsgs = msgs.where((m) => m.timestamp >= minTime).toList();
         _chatMessages
           ..clear()
           ..addAll(currentSessionMsgs);
@@ -1099,6 +1316,35 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           if (seenMsgIds.contains(mId)) continue;
           seenMsgIds.add(mId);
 
+          if (m.type == 'seat_emoji') {
+            int seatIdx = -1;
+            if (m.giftPayload != null && m.giftPayload!['seat_index'] != null) {
+              seatIdx = (m.giftPayload!['seat_index'] as num).toInt();
+            }
+            if (seatIdx < 0 || seatIdx >= _seats.length || _seats[seatIdx].user?.id != m.senderUid) {
+              for (int s = 0; s < _seats.length; s++) {
+                if (_seats[s].user?.id == m.senderUid) {
+                  seatIdx = s;
+                  break;
+                }
+              }
+            }
+            if (seatIdx >= 0 && seatIdx < _seats.length) {
+              final sIdx = seatIdx;
+              final emojiStr = m.text;
+              setState(() {
+                _seatEmojis[sIdx] = emojiStr;
+              });
+              Future.delayed(const Duration(seconds: 4), () {
+                if (mounted && _seatEmojis[sIdx] == emojiStr) {
+                  setState(() {
+                    _seatEmojis.remove(sIdx);
+                  });
+                }
+              });
+            }
+          }
+
           if (m.type == 'gift') {
             if (m.senderUid != _currentUserId) {
               final payload = m.giftPayload ?? {};
@@ -1107,11 +1353,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               final isLucky = giftDef?.isLucky == true || giftDef?.type == 3 || giftDef?.categoryId == 'lucky';
 
               if (!isLucky && (giftId.isEmpty || !_isDuplicateGiftEvent(m.senderUid, giftId))) {
-                final flyIcon = (payload['default_image']?.toString().isNotEmpty == true)
+                String flyIcon = (payload['default_image']?.toString().isNotEmpty == true &&
+                        !payload['default_image'].toString().endsWith('.svga') &&
+                        !payload['default_image'].toString().endsWith('.vap'))
                     ? payload['default_image'].toString()
-                    : ((payload['gift_icon']?.toString().isNotEmpty == true)
+                    : ((payload['gift_icon']?.toString().isNotEmpty == true &&
+                            !payload['gift_icon'].toString().endsWith('.svga') &&
+                            !payload['gift_icon'].toString().endsWith('.vap'))
                         ? payload['gift_icon'].toString()
-                        : (giftDef?.defaultImage ?? giftDef?.iconAsset ?? ''));
+                        : (giftDef?.iconAsset ?? giftDef?.defaultImage ?? ''));
+                if (flyIcon.endsWith('.svga') || flyIcon.endsWith('.vap') || flyIcon.endsWith('.mp4')) {
+                  flyIcon = giftDef?.iconAsset ?? '';
+                }
                 final receiverId = payload['receiver_id']?.toString();
                 if (flyIcon.isNotEmpty && receiverId != null && receiverId.isNotEmpty) {
                   _triggerGiftFlight(
@@ -1169,6 +1422,22 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               if (m.senderUid != _currentUserId) {
                 final data = LuckyGiftBroadcastData.fromJson(m.giftPayload!);
                 LuckyGiftService().enqueueLuckyGift(context, data);
+
+                final payload = m.giftPayload!;
+                final flyIcon = (payload['gift_cover_url']?.toString().isNotEmpty == true)
+                    ? payload['gift_cover_url'].toString()
+                    : ((payload['gift_icon_url']?.toString().isNotEmpty == true)
+                        ? payload['gift_icon_url'].toString()
+                        : ((payload['gift_icon']?.toString().isNotEmpty == true)
+                            ? payload['gift_icon'].toString()
+                            : (payload['default_image']?.toString() ?? '')));
+                final receiverId = payload['receiver_id']?.toString() ?? payload['receiverId']?.toString();
+                if (flyIcon.isNotEmpty && receiverId != null && receiverId.isNotEmpty) {
+                  _triggerGiftFlight(
+                    iconUrl: flyIcon,
+                    receiverId: receiverId,
+                  );
+                }
               }
             } catch (_) {}
           } else if (m.type == 'lucky_bag' && m.luckyBagPayload != null) {
@@ -1185,8 +1454,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             } catch (_) {}
           } else if (m.type == 'entrance') {
             final isExit = m.text.contains('left') || m.text.contains('غادر');
-            if (!isExit && m.senderUid != _currentUserId) {
-              _showMemberEnterBanner(m.senderName, m.senderPhotoUrl);
+            if (!isExit) {
+              if (m.senderUid != _currentUserId) {
+                _showMemberEnterBanner(m.senderName, m.senderPhotoUrl);
+              }
+              final imgUrl = m.imageUrl ?? '';
+              if (imgUrl.isNotEmpty) {
+                final entranceKey = '${m.senderUid}_${imgUrl}_${m.timestamp}';
+                if (!_seenEntranceIds.contains(entranceKey)) {
+                  _seenEntranceIds.add(entranceKey);
+                  final storeItem = _storeItemsIndex[imgUrl];
+                  final entryData = {
+                    'uid': m.senderUid,
+                    'name': m.senderName,
+                    'photoUrl': m.senderPhotoUrl,
+                    'entranceItem': imgUrl,
+                    'timestamp': m.timestamp,
+                  };
+                  if (storeItem != null) {
+                    _playEntranceEffect(entryData, storeItem, m.senderUid);
+                  } else {
+                    _playEntranceEffectRaw(entryData, imgUrl);
+                  }
+                }
+              }
             }
           } else if (m.type == 'room_kick' && m.giftPayload != null) {
             final kickedUid = m.giftPayload!['kickedUid']?.toString();
@@ -1200,6 +1491,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               );
               _exitRoom();
               return;
+            }
+          } else if (m.type == 'seat_invite' && m.giftPayload != null) {
+            final targetUid = m.giftPayload!['targetUid']?.toString();
+            final inviteId = m.msgId;
+            if (targetUid == _currentUserId && !_seenInviteIds.contains(inviteId) && mounted) {
+              _seenInviteIds.add(inviteId);
+              final inviterName = m.giftPayload!['inviterName']?.toString() ?? 'المشرف';
+              final seatIndex = (m.giftPayload!['seatIndex'] as num?)?.toInt() ?? -1;
+              if (seatIndex >= 0) {
+                _showSeatInviteDialog(inviterName, seatIndex);
+              }
             }
           }
         }
@@ -1327,20 +1629,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _processSeatMap(seatMap);
     });
 
+    // Sync room members in real time
+    _membersSub = _firebaseService.roomMembersStream(widget.roomId).listen((members) {
+      if (mounted) {
+        setState(() {
+          _roomMembers = members;
+          _onlineCount = max(members.length, _seats.where((s) => s.isOccupied).length);
+        });
+      }
+    });
+
     // Periodic refresh as fallback in case Realtime misses updates
-    _seatsRefreshTimer = Timer.periodic(const Duration(seconds: 15), (_) async {
+    _seatsRefreshTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       if (!mounted) return;
       try {
-        final list = await Supabase.instance.client
-            .from('room_seats')
-            .select()
-            .eq('room_id', widget.roomId);
-        final seatMap = <int, Map<String, dynamic>>{};
-        for (final e in list) {
-          seatMap[(e['seat_index'] as int?) ?? 0] = Map<String, dynamic>.from(e);
+        final seatMap = await SupabaseDataService().getSeats(widget.roomId);
+        if (seatMap.isNotEmpty && mounted) {
+          _processSeatMap(seatMap);
         }
-        if (!mounted) return;
-        _processSeatMap(seatMap);
+        final members = await SupabaseDataService().getRoomMembers(widget.roomId);
+        if (members.isNotEmpty && mounted) {
+          setState(() {
+            _roomMembers = members;
+            _onlineCount = max(members.length, _seats.where((s) => s.isOccupied).length);
+          });
+        }
       } catch (_) {}
     });
 
@@ -1353,6 +1666,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final index = <String, StoreItemModel>{};
       for (final item in items) {
         index[item.itemId] = item;
+        if (item.svgaAsset != null && item.svgaAsset!.isNotEmpty) {
+          index[item.svgaAsset!] = item;
+        }
+        if (item.animationUrl != null && item.animationUrl!.isNotEmpty) {
+          index[item.animationUrl!] = item;
+        }
       }
       _storeItemsIndex = index;
       // Re-derive assets for all occupied seats (live updates from dashboard)
@@ -1471,8 +1790,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         for (final entry in entrances) {
           final uid = entry['uid']?.toString();
           final entranceItemId = entry['entranceItem']?.toString() ?? '';
+          final entryTs = entry['timestamp']?.toString() ?? '';
           if (uid != null && entranceItemId.isNotEmpty) {
-            _seenEntranceIds.add('${uid}_$entranceItemId');
+            _seenEntranceIds.add('${uid}_${entranceItemId}_$entryTs');
           }
         }
         _entranceStreamInitial = false;
@@ -1486,7 +1806,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final entryTs = entry['timestamp']?.toString() ?? '';
         final entryMs = DateTime.tryParse(entryTs)?.millisecondsSinceEpoch ?? 0;
         if (entryMs < joinedMs) continue;
-        final entranceKey = '${uid}_$entranceItemId';
+        final entranceKey = '${uid}_${entranceItemId}_$entryTs';
         if (_seenEntranceIds.contains(entranceKey)) continue;
         _seenEntranceIds.add(entranceKey);
         final storeItem = _storeItemsIndex[entranceItemId];
@@ -1495,8 +1815,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             _pendingEntrances.add(entry);
             continue;
           }
-          // Fallback: raw URL entrance (VIP-purchased) -> play directly
-          final rawUrl = entranceItemId.startsWith('http') ? entranceItemId : null;
+          // Fallback: raw URL entrance (VIP-purchased or assets) -> play directly
+          final rawUrl = (entranceItemId.startsWith('http') || entranceItemId.startsWith('assets/')) ? entranceItemId : null;
           if (rawUrl == null) continue;
           _playEntranceEffectRaw(entry, rawUrl);
           continue;
@@ -1536,33 +1856,78 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return null;
   }
 
+  bool _areSeatMapsEqual(Map<int, Map<String, dynamic>>? a, Map<int, Map<String, dynamic>>? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return false;
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key)) return false;
+      final mapA = a[key]!;
+      final mapB = b[key]!;
+      if (mapA['uid'] != mapB['uid'] ||
+          mapA['name'] != mapB['name'] ||
+          mapA['photo_url'] != mapB['photo_url'] ||
+          mapA['is_muted'] != mapB['is_muted'] ||
+          mapA['is_locked'] != mapB['is_locked'] ||
+          mapA['active_frame'] != mapB['active_frame'] ||
+          mapA['active_car'] != mapB['active_car']) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   void _processSeatMap(Map<int, Map<String, dynamic>> seatMap) {
     if (!mounted) return;
-    // Preserve locked state before reset
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    // Skip no-op ticks to eliminate seat shaking / flickering
+    if (_areSeatMapsEqual(_lastProcessedSeatMap, seatMap) && !_takingSeat) {
+      return;
+    }
+    _lastProcessedSeatMap = Map<int, Map<String, dynamic>>.from(seatMap);
+
+    // Preserve locked state from both local and remote state
     final lockedIndices = <int>{};
     for (int i = 0; i < _seats.length; i++) {
-      if (_seats[i].isLocked) lockedIndices.add(i);
+      if (_seats[i].isLocked || seatMap[i]?['is_locked'] == true) lockedIndices.add(i);
     }
-    // Reset ALL seats to empty first to clear vacated seats
-    for (int i = 0; i < _seats.length; i++) {
-      _seats[i] = SeatModel(index: i);
-    }
-    // Restore locked seats
-    for (final i in lockedIndices) {
-      _seats[i] = SeatModel(index: i, state: SeatState.locked, isLocked: true);
-    }
-    // Apply seatMap data from Firebase
+
+    final newSeats = List<SeatModel>.generate(_seats.length, (i) {
+      final isLocked = lockedIndices.contains(i);
+      final isSeatMuted = seatMap[i]?['is_muted'] == true;
+      return SeatModel(
+        index: i,
+        state: isLocked ? SeatState.locked : (isSeatMuted ? SeatState.muted : SeatState.empty),
+        isLocked: isLocked,
+        isMuted: isSeatMuted,
+      );
+    });
+
     bool isCurrentUserOnSeatNow = false;
     bool currentUserMuted = false;
+
     for (final entry in seatMap.entries) {
       final idx = entry.key;
-      if (idx < 0 || idx >= _seats.length) continue;
+      if (idx < 0 || idx >= newSeats.length) continue;
       final data = entry.value;
-      final uid = data['uid']?.toString();
+      final rawUid = data['uid']?.toString();
+      final uid = (rawUid != null && rawUid.trim().isNotEmpty && rawUid.trim() != 'null') ? rawUid.trim() : null;
       if (uid != null) {
+        final isMuted = data['is_muted'] == true;
         if (uid == _currentUserId) {
           isCurrentUserOnSeatNow = true;
-          currentUserMuted = data['is_muted'] == true;
+          currentUserMuted = isMuted;
+          _currentUserSeatIndex = idx;
+          if (isMuted && _isMicOn) {
+            _isMicOn = false;
+            _roomAudio.toggleMic(false);
+          }
+        } else {
+          _roomAudio.muteRemoteAudio(uid, widget.roomId, isMuted);
+          final customId = data['custom_id']?.toString() ?? _cachedUsers[uid]?.customId;
+          if (customId != null && customId.isNotEmpty) {
+            _roomAudio.muteRemoteAudio(customId, widget.roomId, isMuted);
+          }
         }
         // Fetch full user data for frame asset resolution
         if (!_cachedUsers.containsKey(uid)) {
@@ -1576,7 +1941,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           });
         }
         final cachedUser = _cachedUsers[uid];
-        final activeFrame = data['active_frame']?.toString() ?? cachedUser?.activeFrame;
+        final activeFrame = data['active_frame']?.toString() ?? cachedUser?.activeFrame ?? (uid == _currentUserId ? currentUser?.activeFrame : null);
         final frameAsset = _resolveFrameAsset(activeFrame);
         final activeCar = data['active_car']?.toString() ?? cachedUser?.activeCar;
         final carStoreItem = activeCar != null && !activeCar.startsWith('http')
@@ -1587,19 +1952,21 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             : carStoreItem?.svgaAsset;
 
         final giftTotal = _giftReceiverTotals[uid] ?? 0;
-        final isMuted = data['is_muted'] == true;
         final activeMicWave = data['active_mic_wave']?.toString() ?? cachedUser?.activeMicWave;
         final gender = data['gender']?.toString() ?? cachedUser?.gender ?? 'male';
-        _seats[idx] = SeatModel(
+        final country = data['country']?.toString() ?? data['country_code']?.toString() ?? cachedUser?.country ?? 'EG';
+
+        newSeats[idx] = SeatModel(
           index: idx,
-          state: SeatState.occupied,
+          state: isMuted ? SeatState.muted : SeatState.occupied,
           user: UserModel(
             name: data['name']?.toString() ?? '',
-            avatar: data['photo_url']?.toString(),
+            avatar: data['photo_url']?.toString() ?? data['avatar']?.toString() ?? cachedUser?.photoUrl ?? (uid == _currentUserId ? currentUser?.photoUrl : null),
             id: uid,
             customId: cachedUser?.customId ?? data['custom_id']?.toString(),
             activeMicWave: activeMicWave,
             gender: gender,
+            country: country,
             giftCount: giftTotal,
             totalGiftsReceived: giftTotal,
             charm: giftTotal.toString(),
@@ -1609,15 +1976,29 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           frameAsset: frameAsset,
           carAsset: carAsset,
         );
-      } else {
-        _seats[idx] = SeatModel(index: idx);
       }
     }
+
+    // 🛡️ CRITICAL PROTECTION: While the current user is moving/taking a seat or on a seat,
+    // preserve their seat optimistically so a background poll doesn't kick them down!
+    final protectedSeat = _pendingSeatIndex ?? _currentUserSeatIndex;
+    if (protectedSeat != null && _currentUserId != null) {
+      final pIdx = protectedSeat;
+      if (pIdx >= 0 && pIdx < newSeats.length && newSeats[pIdx].user?.id != _currentUserId) {
+        if (pIdx < _seats.length && _seats[pIdx].user?.id == _currentUserId) {
+          newSeats[pIdx] = _seats[pIdx];
+          isCurrentUserOnSeatNow = true;
+        }
+      }
+    }
+
+    _seats = newSeats;
+
     // Only allow publishing when the current user is actually on a seat
     if (isCurrentUserOnSeatNow) {
       _roomAudio.startPublishing();
       _roomAudio.toggleMic(!currentUserMuted);
-    } else if (_roomAudio.isPublishing) {
+    } else if (_roomAudio.isPublishing && !_takingSeat && _currentUserSeatIndex == null) {
       _roomAudio.stopPublishingIfActive();
       _roomAudio.resetPublishingState();
     }
@@ -1631,6 +2012,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
     final userName = data['name']?.toString() ?? '';
     final userPhoto = data['photoUrl']?.toString() ?? '';
+    if (userName.isNotEmpty) {
+      _showMemberEnterBanner(userName, userPhoto);
+    }
     setState(() {
       _entranceItemAnimAsset = url;
       _showEntranceItemAnim = true;
@@ -1655,6 +2039,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final userPhoto = (enteringUser != null && enteringUser.photoUrl.isNotEmpty)
         ? enteringUser.photoUrl
         : (data['photoUrl']?.toString() ?? '');
+    if (userName.isNotEmpty) {
+      _showMemberEnterBanner(userName, userPhoto);
+    }
 
     final Map<String, String> textReplacement = {
       if (nameKey != null && nameKey.isNotEmpty && userName.isNotEmpty) nameKey: userName,
@@ -1739,8 +2126,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // }
 
   List<SeatModel> _buildInitialSeats() {
+    final count = _cachedRoomSeatCount[widget.roomId] ?? 20;
     final seats = <SeatModel>[];
-    for (int i = 0; i < 20; i++) {
+    for (int i = 0; i < count; i++) {
       seats.add(SeatModel(index: i));
     }
     return seats;
@@ -1760,6 +2148,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _seenEntranceIds.clear();
     _storeItemsIndex.clear();
     if (!_isMinimized) {
+      RoomMusicPlayerService().stop();
       _leaveRoomSession();
       _roomAudio.dispose();
     }
@@ -1767,14 +2156,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _chatScroll.dispose();
     _giftSub?.cancel();
     _seatsSub?.cancel();
+    _membersSub?.cancel();
     _seatsRefreshTimer?.cancel();
     _presencePingTimer?.cancel();
     _giftAnimWatchdog?.cancel();
-    _giftAudioPlayer?.dispose();
+    final gap = _giftAudioPlayer;
     _giftAudioPlayer = null;
-    _stopEntranceSound();
-    _entranceAudioPlayer?.dispose();
+    if (gap != null) {
+      try {
+        gap.dispose();
+      } catch (_) {}
+    }
+    final eap = _entranceAudioPlayer;
     _entranceAudioPlayer = null;
+    if (eap != null) {
+      try {
+        eap.dispose();
+      } catch (_) {}
+    }
     _roomComboTimer?.cancel();
     _bannerHideTimer?.cancel();
     _roomSub?.cancel();
@@ -1853,13 +2252,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _openGiftPanel() {
-    final hasSeatedUsers = _seats.any((s) => s.isOccupied && s.user != null);
-    if (!hasSeatedUsers) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا يوجد مستخدم على المقعد لإرسال الهدية')),
-      );
-      return;
-    }
     _closeAllPanels();
     setState(() => _showGift = true);
   }
@@ -1966,6 +2358,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         activeBubble: user.activeBubble,
       );
     }
+    FocusScope.of(context).unfocus();
     _chatCtrl.clear();
     setState(() => _showChatInput = false);
   }
@@ -1974,24 +2367,34 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 70,
+      imageQuality: 75,
     );
     if (image == null) return;
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final user = userProvider.currentUser;
       if (user == null) return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('جاري رفع وإرسال الصورة...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
       final imageUrl = await CloudinaryService().uploadImage(
         File(image.path),
         publicId: 'room_${widget.roomId}_${DateTime.now().millisecondsSinceEpoch}',
       );
-      await _firebaseService.sendImageMessage(
-        widget.roomId, imageUrl, user.uid, user.name, user.photoUrl,
-      );
+      if (imageUrl.isNotEmpty) {
+        await _firebaseService.sendImageMessage(
+          widget.roomId, imageUrl, user.uid, user.name, user.photoUrl,
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          SnackBar(content: Text('فشل إرسال الصورة: $e')),
         );
       }
     }
@@ -2002,8 +2405,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final seat = _seats[idx];
     if (seat.isOccupied && seat.user != null) {
       final user = seat.user!;
-      if (_isOwnerOrModerator || user.isAdmin) {
-        // Owner/moderator/admin: show action sheet directly
+      final isSelf = user.id != null && user.id == _currentUserId;
+      if (isSelf || _isOwnerOrModerator || user.isAdmin) {
+        // Owner/moderator/admin or current user tapping their own seat: show action sheet directly
         _showOccupiedDialog(idx, user);
       } else {
         // Regular user: show profile first
@@ -2015,19 +2419,47 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       }
     } else {
       // Empty or locked seat
+      if (!seat.isLocked) {
+        if (_isOwnerOrModerator) {
+          // المالك والمشرف: فتح قائمة إدارة المقعد (صعود، نزول، قفل المقعد، دعوة للمايك، كتم)
+          _showEmptyDialog(idx);
+        } else {
+          // المستخدم العادي: صعود فوري بلمسة واحدة
+          _takeMic(idx);
+        }
+      } else {
+        _showEmptyDialog(idx);
+      }
+    }
+  }
+
+  void _onSeatLongPress(int idx) {
+    if (idx < 0 || idx >= _seats.length) return;
+    final seat = _seats[idx];
+    if (seat.isOccupied && seat.user != null) {
+      _showOccupiedDialog(idx, seat.user!);
+    } else {
       _showEmptyDialog(idx);
     }
   }
 
   void _showEmptyDialog(int idx) {
     final seat = _seats[idx];
+    final isUserOnSeat = _currentUserSeatIndex != null || _seats.any((s) => s.user?.id == _currentUserId);
+    final userCurrentIdx = _currentUserSeatIndex ?? _seats.indexWhere((s) => s.user?.id == _currentUserId);
     SeatDialogs.showEmptySeatDialog(
       context,
       seatIndex: idx,
       isOwnerOrModerator: _isOwnerOrModerator,
       isLocked: seat.isLocked,
       isMuted: seat.isMuted,
+      isUserOnSeat: isUserOnSeat,
       onTakeMic: () => _takeMic(idx),
+      onLeaveMic: () {
+        if (userCurrentIdx >= 0) {
+          _kickOffMic(userCurrentIdx);
+        }
+      },
       onInviteToMic: () => _inviteToMic(idx),
       onToggleLock: (locked) => _toggleSeatLock(idx, locked),
       onToggleMic: (muted) => _toggleSeatMute(idx, muted),
@@ -2036,11 +2468,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _showOccupiedDialog(int idx, UserModel user) {
     final seat = _seats[idx];
+    final targetUid = user.id;
+    final isSelf = targetUid != null && targetUid == _currentUserId;
+    final isTargetOwner = targetUid != null && targetUid == _currentRoom?.hostUid;
+    final isTargetModerator = targetUid != null && _moderators.contains(targetUid);
+    final canKickAndMicDown = _isOwner || (!isTargetOwner && !isTargetModerator);
+
     SeatDialogs.showOccupiedSeatDialog(
       context,
       user: user,
       isOwner: _isOwner,
       isOwnerOrModerator: _isOwnerOrModerator,
+      isSelf: isSelf,
+      canKickAndMicDown: canKickAndMicDown,
       isMuted: seat.isMuted,
       isAdmin: user.isAdmin,
       isBlacked: user.isBlacked,
@@ -2061,13 +2501,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ── Seat actions ──────────────────────────────────────────────
 
-  bool _takingSeat = false;
-  void _takeMic(int idx) {
+  Future<void> _takeMic(int idx) async {
     if (_takingSeat) return;
     if (_currentUserId == null) return;
     // If already on this seat, skip
     if (idx < _seats.length && _seats[idx].user?.id == _currentUserId) return;
     _takingSeat = true;
+    _pendingSeatIndex = idx;
+    _currentUserSeatIndex = idx;
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final currentUser = userProvider.currentUser;
     final name = currentUser?.name ?? 'Me';
@@ -2096,34 +2537,73 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           customId: currentUser?.customId,
           activeMicWave: currentUser?.activeMicWave,
           gender: currentUser?.gender ?? 'male',
+          country: currentUser?.country ?? 'EG',
         ),
       );
       if (previousIdx != null) {
         _seats[previousIdx] = SeatModel(index: previousIdx);
       }
     });
-    Future<void> doTake() async {
-      await _firebaseService.takeSeat(widget.roomId, idx, app.UserModel(
-        uid: _currentUserId!,
-        customId: currentUser?.customId ?? '',
-        name: name,
-        photoUrl: currentUser?.photoUrl ?? '',
-        activeFrame: currentUser?.activeFrame,
-        activeCar: currentUser?.activeCar,
-        activeMicWave: currentUser?.activeMicWave,
-        gender: currentUser?.gender ?? 'male',
-      ));
-      _takingSeat = false;
-    }
-    if (previousIdx != null) {
-      _firebaseService.leaveSeat(widget.roomId, previousIdx).then((_) => doTake());
-    } else {
-      doTake();
+
+    try {
+      await Future.wait([
+        if (previousIdx != null) _firebaseService.leaveSeat(widget.roomId, previousIdx),
+        _firebaseService.takeSeat(widget.roomId, idx, app.UserModel(
+          uid: _currentUserId!,
+          customId: currentUser?.customId ?? '',
+          name: name,
+          photoUrl: currentUser?.photoUrl ?? '',
+          activeFrame: currentUser?.activeFrame,
+          activeCar: currentUser?.activeCar,
+          activeMicWave: currentUser?.activeMicWave,
+          gender: currentUser?.gender ?? 'male',
+          country: currentUser?.country ?? 'EG',
+        )),
+      ]);
+    } catch (e) {
+      debugPrint('[takeMic] error: $e');
+    } finally {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (mounted) {
+        setState(() {
+          _takingSeat = false;
+          _pendingSeatIndex = null;
+        });
+      } else {
+        _takingSeat = false;
+        _pendingSeatIndex = null;
+      }
     }
   }
 
   void _kickOffMic(int idx) {
-    final kickedUid = _seats[idx].user?.id;
+    final kickedUser = _seats[idx].user;
+    final kickedUid = kickedUser?.id;
+    final isSelf = kickedUid != null && kickedUid == _currentUserId;
+
+    if (kickedUid != null && !isSelf && !_isOwner) {
+      final isTargetOwner = kickedUid == _currentRoom?.hostUid;
+      final isTargetModerator = _moderators.contains(kickedUid);
+      if (isTargetOwner || isTargetModerator) {
+        final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isAr ? 'لا يمكنك إنزال مالك الغرفة أو المشرفين من المايك' : 'Cannot kick owner or moderators off mic')),
+        );
+        return;
+      }
+    }
+
+    if (isSelf || idx == _currentUserSeatIndex) {
+      _takingSeat = false;
+      _pendingSeatIndex = null;
+      _currentUserSeatIndex = null;
+      _isMicOn = false;
+      _roomAudio.toggleMic(false);
+      _roomAudio.stopPublishingIfActive();
+      _roomAudio.resetPublishingState();
+    }
+
+    final kickedCustomId = kickedUser?.customId;
 
     setState(() {
       _seats[idx].state = SeatState.empty;
@@ -2133,17 +2613,160 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     _firebaseService.leaveSeat(widget.roomId, idx);
 
-    if (kickedUid != null) {
+    if (kickedUid != null && !isSelf) {
       _roomAudio.muteRemoteAudio(kickedUid, widget.roomId, true);
+      if (kickedCustomId != null && kickedCustomId.isNotEmpty) {
+        _roomAudio.muteRemoteAudio(kickedCustomId, widget.roomId, true);
+      }
       _roomAudio.stopRemoteStream(kickedUid, widget.roomId);
     }
   }
 
   void _inviteToMic(int idx) {
-    // Open invite UI — stub
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Invited to seat $idx')));
+    if (idx >= _seats.length || _seats[idx].isOccupied) {
+      final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(isAr ? 'المقعد مشغول بالفعل' : 'Seat is already occupied')),
+      );
+      return;
+    }
+
+    final seatedUids = _seats.where((s) => s.isOccupied && s.user?.id != null).map((s) => s.user!.id!).toSet();
+    final candidateMembers = _roomMembers.where((m) => m.uid != _currentUserId && !seatedUids.contains(m.uid)).toList();
+
+    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return Container(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(ctx).size.height * 0.6),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1B26),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isAr ? 'دعوة مستخدم للمايك #${idx + 1}' : 'Invite User to Mic #${idx + 1}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: Colors.white12, height: 1),
+              if (candidateMembers.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+                  child: Text(
+                    isAr ? 'لا يوجد أعضاء متاحون للدعوة حالياً' : 'No available members to invite',
+                    style: const TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: candidateMembers.length,
+                    itemBuilder: (context, i) {
+                      final m = candidateMembers[i];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: Colors.white10,
+                          backgroundImage: m.photoUrl.isNotEmpty ? R.cachedImage(m.photoUrl) : null,
+                          child: m.photoUrl.isEmpty ? const Icon(Icons.person, color: Colors.white54) : null,
+                        ),
+                        title: Text(m.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        subtitle: Text('ID: ${m.customId.isNotEmpty ? m.customId : m.uid}', style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                        trailing: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFC525),
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _firebaseService.sendSeatInvite(
+                              widget.roomId,
+                              inviterUid: _currentUserId ?? '',
+                              inviterName: _currentUserName ?? 'المشرف',
+                              targetUid: m.uid,
+                              targetName: m.name,
+                              seatIndex: idx,
+                            );
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              SnackBar(content: Text(isAr ? 'تم إرسال الدعوة إلى ${m.name}' : 'Invitation sent to ${m.name}')),
+                            );
+                          },
+                          child: Text(isAr ? 'دعوة' : 'Invite'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSeatInviteDialog(String inviterName, int seatIndex) {
+    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF231E34),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.mic, color: Color(0xFFFFC525)),
+            const SizedBox(width: 8),
+            Text(
+              isAr ? 'دعوة للصعود على المايك' : 'Mic Seat Invitation',
+              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Text(
+          isAr
+              ? 'قام $inviterName بدعوتك للصعود على المايك رقم ${seatIndex + 1}.\nهل توافق على الصعود؟'
+              : '$inviterName invited you to take mic #${seatIndex + 1}.\nDo you accept?',
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: Text(isAr ? 'رفض' : 'Decline', style: const TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFFC525),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _takeMic(seatIndex);
+            },
+            child: Text(isAr ? 'موافقة' : 'Accept'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _toggleSeatLock(int idx, bool locked) {
@@ -2151,6 +2774,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       _seats[idx].isLocked = locked;
       _seats[idx].state = locked ? SeatState.locked : SeatState.empty;
     });
+    _firebaseService.toggleSeatLock(widget.roomId, idx, locked);
   }
 
   void _toggleSeatMute(int idx, bool muted) {
@@ -2160,6 +2784,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _seats[idx].state = muted ? SeatState.muted : SeatState.occupied;
       }
     });
+    final targetUser = _seats[idx].user;
+    final targetUid = targetUser?.id;
+    final targetCustomId = targetUser?.customId;
+    if (targetUid != null && targetUid.isNotEmpty) {
+      if (targetUid == _currentUserId) {
+        _isMicOn = !muted;
+        _roomAudio.toggleMic(!muted);
+      } else {
+        _roomAudio.muteRemoteAudio(targetUid, widget.roomId, muted);
+        if (targetCustomId != null && targetCustomId.isNotEmpty) {
+          _roomAudio.muteRemoteAudio(targetCustomId, widget.roomId, muted);
+        }
+      }
+    }
     _firebaseService.toggleMute(widget.roomId, idx, muted);
   }
 
@@ -2170,6 +2808,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showKickDialog(UserModel user, [int? seatIdx]) {
+    final targetUid = user.id;
+    if (targetUid != null && !_isOwner) {
+      final isTargetOwner = targetUid == _currentRoom?.hostUid;
+      final isTargetModerator = _moderators.contains(targetUid);
+      if (isTargetOwner || isTargetModerator) {
+        final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isAr ? 'لا يمكنك طرد مالك الغرفة أو المشرفين' : 'Cannot kick room owner or moderators')),
+        );
+        return;
+      }
+    }
+
     bool addToBlacklist = false;
     showDialog(
       context: context,
@@ -2324,12 +2975,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _setAdmin(int idx, bool isAdmin) {
+  Future<void> _setAdmin(int idx, bool isAdmin) async {
     final user = _seats[idx].user;
-    if (user == null) return;
+    if (user == null || user.id == null) return;
+    final targetUid = user.id!;
     setState(() {
       _seats[idx].user = user.copyWith(isAdmin: isAdmin);
+      if (isAdmin) {
+        _moderators.add(targetUid);
+      } else {
+        _moderators.remove(targetUid);
+      }
     });
+
+    final updated = List<String>.from(_moderators);
+    // Sync Supabase rooms.moderators
+    unawaited(SupabaseDataService().updateRoom(widget.roomId, {'moderators': updated}));
+
+    if (!mounted) return;
+    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isAdmin
+            ? (isAr ? 'تم تعيين ${user.name} كمشرف في الغرفة 👑' : 'Appointed ${user.name} as room admin')
+            : (isAr ? 'تم إلغاء إشراف ${user.name}' : 'Removed ${user.name} from room admins')),
+      ),
+    );
   }
 
   void _toggleBlack(int idx, bool blacked) {
@@ -2360,12 +3031,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _openChatUserProfile(String uid, String name, String photoUrl) {
-    String? foundCustomId = UserProfile.customIdCache[uid];
-    if (foundCustomId == null || foundCustomId.isEmpty) {
-      for (final s in _seats) {
-        if (s.user?.id == uid && s.user?.customId != null && s.user!.customId!.isNotEmpty) {
-          foundCustomId = s.user!.customId;
-          break;
+    String? foundCountry;
+    String? foundCustomId;
+    for (final s in _seats) {
+      if (s.user?.id == uid) {
+        if (foundCustomId == null || foundCustomId.isEmpty) {
+          if (s.user?.customId != null && s.user!.customId!.isNotEmpty) {
+            foundCustomId = s.user!.customId;
+          }
+        }
+        if (s.user?.country != null && s.user!.country.isNotEmpty) {
+          foundCountry = s.user!.country;
         }
       }
     }
@@ -2376,6 +3052,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         name: name,
         avatar: photoUrl.isNotEmpty ? photoUrl : null,
         customId: foundCustomId,
+        country: foundCountry ?? 'EG',
       );
       _showProfile = true;
     });
@@ -2389,7 +3066,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => VolumePanel(initialVolume: 20, onVolumeChanged: (_) {}),
+      builder: (_) => VolumePanel(
+        initialVolume: 100,
+        onVolumeChanged: (vol) => _roomAudio.setRoomVolume(vol.round()),
+      ),
     );
   }
 
@@ -2430,12 +3110,26 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _openSeatStyle() {
     _closeAllPanels();
+    SeatStyle panelStyle;
+    switch (_roomSeatStyle) {
+      case seat_model.SeatStyle.circle:
+        panelStyle = SeatStyle.game;
+        break;
+      case seat_model.SeatStyle.classic:
+        panelStyle = SeatStyle.classic;
+        break;
+      case seat_model.SeatStyle.heart:
+      case seat_model.SeatStyle.square:
+        panelStyle = SeatStyle.vip;
+        break;
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => SeatStylePanel(
-        initialStyle: SeatStyle.values[_roomSeatStyle.index.clamp(0, 2)],
+        initialStyle: panelStyle,
         initialSeatCount: _seats.length,
         onConfirm: (style, count) {
           seat_model.SeatStyle newSeatStyle;
@@ -2450,8 +3144,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               newSeatStyle = seat_model.SeatStyle.heart;
               break;
           }
+          _cachedRoomSeatStyle[widget.roomId] = newSeatStyle;
+          _cachedRoomSeatCount[widget.roomId] = count;
+          SharedPreferences.getInstance().then((prefs) {
+            prefs.setInt('room_seat_style_${widget.roomId}', newSeatStyle.index);
+            prefs.setInt('room_seat_count_${widget.roomId}', count);
+          });
           _firebaseService.updateRoomSeatStyle(widget.roomId, newSeatStyle.index);
           _firebaseService.updateRoomSeatCount(widget.roomId, count);
+          unawaited(SupabaseDataService().updateRoom(widget.roomId, {
+            'seat_style': newSeatStyle.index,
+            'seat_count': count,
+          }));
           // Clean up removed seats in Firebase
           if (count < _seats.length) {
             for (int i = count; i < _seats.length; i++) {
@@ -2478,6 +3182,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       builder: (_) => RoomBackgroundBottomSheet(
         roomId: widget.roomId,
         currentBackground: _currentRoom?.bgImage ?? '',
+        onBackgroundSelected: (url) {
+          if (mounted) {
+            setState(() {
+              if (_currentRoom != null) {
+                _currentRoom = _currentRoom!.copyWith(bgImage: url);
+              }
+            });
+          }
+        },
       ),
     );
   }
@@ -2505,14 +3218,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _openPrivateChat(UserModel? user) {
-    if (user?.id == null) return;
+    final targetUid = (user?.id != null && user!.id!.isNotEmpty) ? user.id! : (user?.customId ?? '');
+    if (targetUid.isEmpty) return;
+    final myUid = _currentUserId ?? Provider.of<UserProvider>(context, listen: false).currentUser?.uid ?? '';
+    if (myUid.isEmpty) return;
+    final convId = (myUid.compareTo(targetUid) < 0) ? '${myUid}_$targetUid' : '${targetUid}_$myUid';
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          targetUid: user!.id!,
-          targetName: user.name,
-          targetPhotoUrl: user.avatar,
+        builder: (_) => MessageReplyDetailScreen(
+          conversationId: convId,
+          otherUid: targetUid,
+          otherName: (user?.name != null && user!.name.isNotEmpty) ? user.name : 'مستخدم',
+          otherPhotoUrl: user?.avatar ?? '',
         ),
       ),
     );
@@ -2595,6 +3313,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _openCharmSwitch() {
+    if (!_isOwnerOrModerator) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2618,7 +3337,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       setState(() {
                         _showCharmValues = !_showCharmValues;
                       });
-                      FirebaseService().updateRoom(widget.roomId, {
+                      _firebaseService.updateRoom(widget.roomId, {
                         'charm_enabled': _showCharmValues,
                       });
                     },
@@ -2686,6 +3405,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // ─────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final currentUser = Provider.of<UserProvider>(context).currentUser;
     final navH = MediaQuery.of(context).padding.bottom;
     final sizeH = MediaQuery.of(context).size.height;
 
@@ -2697,17 +3417,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             Navigator.of(context).pop();
             return;
           }
-          bool isOnSeat = false;
-          for (int i = 0; i < _seats.length; i++) {
-            if (_seats[i].user?.id == _currentUserId) {
-              isOnSeat = true;
-              break;
-            }
-          }
-          if (isOnSeat) {
-            _minimizeRoom();
+          if (_showExit) {
+            setState(() => _showExit = false);
           } else {
-            _showExit ? setState(() => _showExit = false) : _exitRoom();
+            setState(() => _showExit = true);
           }
         }
       },
@@ -2729,7 +3442,34 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               builder: (ctx) {
                 final customBg = _currentRoom?.bgImage;
                 if (customBg != null && customBg.isNotEmpty) {
-                  return Image.network(customBg, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.black));
+                  final assetType = detectAssetType(customBg);
+                  if (assetType == AssetType.svga) {
+                    return SizedBox.expand(
+                      child: SvgaPlayer(
+                        assetPath: customBg,
+                        fit: BoxFit.cover,
+                        loops: true,
+                      ),
+                    );
+                  } else if (assetType == AssetType.vap || assetType == AssetType.mp4) {
+                    return SizedBox.expand(
+                      child: VapPlayer(
+                        url: customBg,
+                        fit: BoxFit.cover,
+                        loops: true,
+                      ),
+                    );
+                  } else {
+                    return SizedBox.expand(
+                      child: Image.network(
+                        customBg,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        errorBuilder: (_, __, ___) => Container(color: Colors.black),
+                      ),
+                    );
+                  }
                 }
 
                 final theme = _currentRoom?.category ?? 'themeFriend';
@@ -2761,12 +3501,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               // Header
                RoomHeader(
                 roomName: widget.roomName,
-                roomId: widget.roomId,
-                hostAvatar: _currentRoom?.roomPhotoUrl ?? _seats[0].user?.avatar,
+                roomId: (_hostCustomId != null && _hostCustomId!.isNotEmpty) ? _hostCustomId! : widget.roomId,
+                hostAvatar: (_currentRoom?.roomPhotoUrl != null && _currentRoom!.roomPhotoUrl.isNotEmpty)
+                    ? _currentRoom!.roomPhotoUrl
+                    : ((_seats.isNotEmpty && (_seats[0].user?.avatar?.isNotEmpty ?? false))
+                        ? _seats[0].user!.avatar!
+                        : (_currentRoom?.hostPhotoUrl.isNotEmpty == true ? _currentRoom!.hostPhotoUrl : R.avaBoy)),
                 isLocked: widget.roomPassword.isNotEmpty,
                 hotValue: widget.hotValue,
                 gameDesc: widget.gameDesc,
                 onlineCount: '$_onlineCount',
+                onlineAvatars: _roomMembers
+                    .map((m) => m.photoUrl)
+                    .where((u) => u.isNotEmpty)
+                    .toList(),
                 isFollowed: _isFollowed,
                 onExit: () => setState(() => _showExit = true),
                 onMinimize: _minimizeRoom,
@@ -2790,6 +3538,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               SeatArea(
                 seats: _seats,
                 onSeatTap: _onSeatTap,
+                onSeatLongPress: _onSeatLongPress,
                 seatEmojis: _seatEmojis,
                 moderators: _moderators,
                 hostUid: _currentRoom?.hostUid,
@@ -2805,10 +3554,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               BottomBar(
                 isMicOn: _isMicOn,
                 showMic: _currentUserSeat != null,
+                showMusic: _isOwnerOrModerator,
                 msgCount: _msgCount,
                 onChat: () {
                   if (_currentRoom?.isChatLocked == true && !_isOwnerOrModerator) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم قفل الدردشة من قبل الإدارة')));
+                    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isAr ? 'تم قفل الدردشة من قبل الإدارة' : 'Chat is locked by admins')));
                     return;
                   }
                   final willShow = !_showChatInput;
@@ -2826,6 +3577,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 },
                 onMic: () async {
                   if (_currentUserSeat == null) return;
+                  if (_currentUserSeat!.isMuted && !_isOwnerOrModerator) {
+                    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(isAr ? 'تم كتم المايك بواسطة إدارة الغرفة' : 'Microphone was muted by room admin')),
+                    );
+                    return;
+                  }
                   final newVal = !_isMicOn;
                   setState(() => _isMicOn = newVal);
                   await _roomAudio.toggleMic(newVal);
@@ -2912,14 +3670,27 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         selectedCount: _giftCount,
                         coins: Provider.of<UserProvider>(context).currentUser?.coins ?? 0,
                         roomId: widget.roomId,
-                        targetUsers: _seats
-                            .where((s) => s.isOccupied && s.user != null)
-                            .map((s) => {
-                                  'id': s.user!.id ?? '',
-                                  'name': s.user!.name,
-                                  'photoUrl': s.user!.avatar,
-                                })
-                            .toList(),
+                        targetUsers: () {
+                          final list = _seats
+                              .where((s) => s.isOccupied && s.user != null)
+                              .map((s) => {
+                                    'id': s.user!.id ?? '',
+                                    'name': s.user!.name,
+                                    'photoUrl': s.user!.avatar,
+                                  })
+                              .toList();
+                          if (list.isEmpty && _currentRoom != null && _currentRoom!.hostUid.isNotEmpty) {
+                            final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+                            list.add({
+                              'id': _currentRoom!.hostUid,
+                              'name': _currentRoom!.hostName.isNotEmpty
+                                  ? _currentRoom!.hostName
+                                  : (isAr ? 'صاحب الغرفة' : 'Room Owner'),
+                              'photoUrl': _currentRoom!.hostPhotoUrl,
+                            });
+                          }
+                          return list;
+                        }(),
                         receiverId: _selectedSeatIdx != null &&
                                 _seats[_selectedSeatIdx!].isOccupied &&
                                 _seats[_selectedSeatIdx!].user != null
@@ -2931,7 +3702,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             ? _seats[_selectedSeatIdx!].user!.name
                             : null,
                         onSend: () {
-                          // إبقاء البانل مفتوحاً للاستمرار في الإرسال والكومبو كما في التطبيق الأصلي
+                          setState(() => _showGift = false);
                         },
                         onSendGift: (asset) {
                           _giftAnimAsset = asset;
@@ -2985,6 +3756,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             _startRoomComboTimer(data);
                             _pendingBannerData = data;
                             _checkGiftBanner(data);
+                            GlobalBannerService.instance.triggerGiftBannerLocally(data);
 
                             // تحميل مسبق في الخلفية دون حظر واجهة المستخدم
                             if (animAsset.isNotEmpty && (animAsset.startsWith('http://') || animAsset.startsWith('https://'))) {
@@ -2999,7 +3771,52 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             if (sPhoto.isNotEmpty) {
                               unawaited(MediaCacheService().downloadToBytes(sPhoto).catchError((_) => Uint8List(0)));
                             }
-
+                            if (data['isLucky'] == true) {
+                              try {
+                                final giftObj = data['gift'] as gm.GiftModel?;
+                                final targetDrawn = data['targetDrawnMultipliers'] as Map<String, List<int>>?;
+                                if (giftObj != null && targetDrawn != null && targetDrawn.isNotEmpty) {
+                                  for (final entry in targetDrawn.entries) {
+                                    final drawn = entry.value;
+                                    final totalWon = drawn.fold<int>(0, (total, m) => total + (giftObj.value * m));
+                                    final maxMult = drawn.isEmpty ? 0 : drawn.reduce((a, b) => a > b ? a : b);
+                                    final cards = List.generate(drawn.length, (i) => LuckyCardResult(
+                                      index: i,
+                                      multiplier: drawn[i],
+                                      wonCoins: giftObj.value * drawn[i],
+                                      giftName: giftObj.name,
+                                      giftIcon: giftObj.iconAsset,
+                                    ));
+                                    final luckyModel = LuckyGiftModel(
+                                      id: giftObj.id,
+                                      giftName: giftObj.name,
+                                      giftNameAr: giftObj.name,
+                                      coinPrice: giftObj.value,
+                                      giftIconUrl: giftObj.iconAsset,
+                                      giftCoverUrl: defImg ?? giftObj.iconAsset,
+                                      giftBgUrl: defImg ?? giftObj.iconAsset,
+                                      svgaAnimUrl: giftObj.animationAsset,
+                                    );
+                                    final localData = LuckyGiftBroadcastData(
+                                      roomId: widget.roomId,
+                                      senderName: sName,
+                                      senderAvatar: sPhoto,
+                                      receiverName: data['receiverName']?.toString() ?? '',
+                                      gift: luckyModel,
+                                      cards: cards,
+                                      totalWonCoins: totalWon,
+                                      maxMultiplier: maxMult,
+                                      isBigWin: maxMult >= 50,
+                                      comboId: 'combo_${DateTime.now().millisecondsSinceEpoch}',
+                                      comboCount: (data['giftCount'] as num?)?.toInt() ?? 1,
+                                    );
+                                    if (mounted) {
+                                      LuckyGiftService().enqueueLuckyGift(context, localData);
+                                    }
+                                  }
+                                }
+                              } catch (_) {}
+                            }
                           }
                         },
                         onCountTap: _showGiftCountMenu,
@@ -3036,7 +3853,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
 
           if (_showEmoj) _buildEmojPanel(),
-          if (_showChatInput) _buildChatInputBar(),
+          if (_showChatInput) ...[
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  FocusScope.of(context).unfocus();
+                  setState(() => _showChatInput = false);
+                },
+                child: const SizedBox.expand(),
+              ),
+            ),
+            _buildChatInputBar(),
+          ],
 
           // ── Full-screen overlays ──────────────────────────────
           if (_showProfile && _selectedUser != null)
@@ -3047,11 +3876,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     _selectedSeatIdx != null &&
                     _seats[_selectedSeatIdx!].isOccupied &&
                     (_isOwnerOrModerator || _selectedUser?.id == _currentUserId),
-                isCurrentUser: _selectedUser?.id == _currentUserId,
+                isCurrentUser: (_selectedUser?.id != null && _selectedUser!.id == _currentUserId) ||
+                    (_selectedUser?.customId != null &&
+                        currentUser?.customId != null &&
+                        currentUser!.customId.isNotEmpty &&
+                        _selectedUser!.customId == currentUser.customId),
                 isFollowed: _selectedUser?.id != null && _followedUsers.contains(_selectedUser!.id!),
                 isModerator: _isOwnerOrModerator,
                 isRoomOwner: _isOwner,
                 isTargetModerator: _selectedUser?.id != null && _moderators.contains(_selectedUser!.id!),
+                isTargetRoomOwner: _selectedUser?.id != null && _selectedUser!.id == _currentRoom?.hostUid,
                 isBlocked: _selectedUser?.id != null && _blockedUsers.contains(_selectedUser!.id!),
                 currentUserId: _currentUserId,
                 onClose: () => setState(() {
@@ -3060,9 +3894,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   _selectedSeatIdx = null;
                 }),
                 onViewProfile: () {
-                  Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => UserProfileScreen(targetUid: _selectedUser!.id),
-                  ));
+                  final targetId = _selectedUser?.id ?? _selectedUser?.customId;
+                  if (targetId != null && targetId.isNotEmpty) {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => UserProfileScreen(targetUid: targetId),
+                    ));
+                  }
                 },
                 onToggleAdmin: () async {
                   final targetUid = _selectedUser?.id;
@@ -3070,18 +3907,16 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   final isMod = _moderators.contains(targetUid);
                   try {
                     if (isMod) {
-                      await FirebaseFirestore.instance.collection('rooms').doc(widget.roomId).update({
-                        'moderators': FieldValue.arrayRemove([targetUid]),
-                      });
                       setState(() => _moderators.remove(targetUid));
+                      final updated = List<String>.from(_moderators);
+                      unawaited(SupabaseDataService().updateRoom(widget.roomId, {'moderators': updated}));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('تم إلغاء إشراف ${_selectedUser?.name}')),
                       );
                     } else {
-                      await FirebaseFirestore.instance.collection('rooms').doc(widget.roomId).update({
-                        'moderators': FieldValue.arrayUnion([targetUid]),
-                      });
                       setState(() => _moderators.add(targetUid));
+                      final updated = List<String>.from(_moderators);
+                      unawaited(SupabaseDataService().updateRoom(widget.roomId, {'moderators': updated}));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('تم تعيين ${_selectedUser?.name} كمشرف في الغرفة 👑')),
                       );
@@ -3124,11 +3959,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     );
                     return;
                   }
+                  final target = _selectedUser;
                   setState(() {
                     _showProfile = false;
+                    _selectedUser = null;
+                    _selectedSeatIdx = null;
                   });
                   // Navigate to private message screen
-                  _openPrivateChat(_selectedUser);
+                  _openPrivateChat(target);
                 },
                 onMention: () {
                   final userId = _selectedUser?.id;
@@ -3138,10 +3976,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     );
                     return;
                   }
+                  final targetName = (_selectedUser?.name != null &&
+                          _selectedUser!.name.isNotEmpty &&
+                          _selectedUser!.name != 'null')
+                      ? _selectedUser!.name
+                      : ((_selectedUser?.customId != null &&
+                              _selectedUser!.customId!.isNotEmpty &&
+                              _selectedUser!.customId != 'null')
+                          ? _selectedUser!.customId!
+                          : 'مستخدم');
                   setState(() {
                     _showProfile = false;
                     _showChatInput = true;
-                    _chatCtrl.text = '@${_selectedUser?.name} ';
+                    _chatCtrl.text = '@$targetName ';
+                    _chatCtrl.selection = TextSelection.fromPosition(TextPosition(offset: _chatCtrl.text.length));
                   });
                 },
                 onGift: _openGiftPanel,
@@ -3447,6 +4295,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 left: 0,
                 right: 0,
                 child: RoomMarqueeBroadcast(
+                  key: ValueKey(broadcast['id'] ?? broadcast['timestamp'] ?? DateTime.now().millisecondsSinceEpoch),
                   broadcast: broadcast,
                   onDismissed: () {
                     _currentBroadcast = null;
@@ -3485,11 +4334,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         _openVolume();
         break;
       case 'Settings':
-        if (_isOwnerOrModerator) {
+        if (_isOwner) {
           _openSettings();
         } else {
+          final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(Localizations.localeOf(context).languageCode == 'ar' ? 'إعدادات الغرفة متاحة للمالك والمشرفين فقط' : 'Room settings available for owner and admins only')),
+            SnackBar(content: Text(isAr ? 'تعديل إعدادات وبيانات الغرفة متاح لمالك الغرفة فقط' : 'Room settings available for owner only')),
           );
         }
         break;
@@ -3568,9 +4418,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       roomId: widget.roomId,
       onGameSelect: (gameKey, gameName) {
         if (_isOwner) {
-          FirebaseFirestore.instance.collection('rooms').doc(widget.roomId).update({
+          unawaited(SupabaseDataService().updateRoom(widget.roomId, {
             'game_desc': gameName,
-          }).catchError((_) {});
+          }));
         }
       },
     );
@@ -3639,13 +4489,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final payload = m.giftPayload;
       final giftName = payload?['gift_name']?.toString() ?? '';
       final receiverName = payload?['receiver_name']?.toString() ?? '';
-      final giftIcon = payload?['gift_icon']?.toString() ??
+      final giftId = payload?['gift_id']?.toString() ?? '';
+      final cachedGift = _cachedGiftItems[giftId];
+      String? rawIcon = payload?['gift_icon']?.toString() ??
           payload?['image_url']?.toString() ??
           payload?['gift']?['giftIconUrl']?.toString() ??
           payload?['gift']?['giftCoverUrl']?.toString() ??
           payload?['gift']?['iconAsset']?.toString() ??
           payload?['gift']?['default_image']?.toString() ??
           m.imageUrl;
+      if (rawIcon != null && (rawIcon.endsWith('.svga') || rawIcon.endsWith('.vap') || rawIcon.endsWith('.mp4'))) {
+        rawIcon = null;
+      }
+      String? giftIcon = rawIcon ?? cachedGift?.iconAsset;
+      if (giftIcon == null || giftIcon.endsWith('.svga') || giftIcon.endsWith('.vap') || giftIcon.endsWith('.mp4')) {
+        giftIcon = (cachedGift?.defaultImage != null && !cachedGift!.defaultImage!.endsWith('.svga') && !cachedGift!.defaultImage!.endsWith('.vap'))
+            ? cachedGift.defaultImage
+            : null;
+      }
       final count = payload?['count'] ?? 1;
 
       return Padding(
@@ -4047,25 +4908,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ],
                 ),
                 const SizedBox(height: 9),
-                if (m.type == 'image' && m.imageUrl != null)
-                  GestureDetector(
-                    onTap: () => _showImagePreview(m.imageUrl!),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image(
-                        image: R.cachedImage(m.imageUrl!),
-                        width: 180,
-                        height: 180,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                if (m.type == 'image' || (m.imageUrl != null && m.imageUrl!.isNotEmpty))
+                  () {
+                    final imgUrl = (m.imageUrl != null && m.imageUrl!.isNotEmpty)
+                        ? m.imageUrl!
+                        : m.text;
+                    return GestureDetector(
+                      onTap: () => _showImagePreview(imgUrl),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: R.loadImage(
+                          imgUrl,
                           width: 180,
                           height: 180,
-                          color: const Color(0x33000000),
-                          child: const Icon(Icons.broken_image, color: Colors.white54),
+                          fit: BoxFit.cover,
                         ),
                       ),
-                    ),
-                  )
+                    );
+                  }()
                 else
                   _buildChatBubble(
                     text: m.text,
@@ -4203,9 +5063,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // ── Emoji panel ───────────────────────────────────────────────
   Widget _buildEmojPanel() {
     final navH = MediaQuery.of(context).padding.bottom;
-    final staticEmojis = ['😀', '😂', '🥰', '😎', '🤔', '😅', '😊', '🙂',
-                   '❤️', '🔥', '💯', '✨', '🎉', '🎁', '👍', '👏',
-                   '😢', '😡', '😱', '🤩', '😴', '🤗', '😇', '🤫'];
     
     final config = context.read<DynamicConfigService>();
     final dynamicEmojis = config.appAssets.values
@@ -4213,7 +5070,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         .map((a) => a.remoteUrl!)
         .toList();
         
-    final emojis = [...dynamicEmojis, ...staticEmojis];
+    final emojis = dynamicEmojis;
     
     // Find current user's seat
     int? currentUserSeat;
@@ -4252,62 +5109,76 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 ),
               ),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 6, bottom: 15),
-                  child: GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 8,
-                      crossAxisSpacing: 6,
-                      mainAxisSpacing: 6,
-                    ),
-                    itemCount: emojis.length,
-                    itemBuilder: (_, idx) => GestureDetector(
-                      onTap: () {
-                        // Show emoji on current user's seat
-                        if (currentUserSeat != null) {
-                          final seat = currentUserSeat;
-                          setState(() {
-                            _seatEmojis[seat] = emojis[idx];
-                          });
-                          // Clear emoji after some time
-                          Future.delayed(const Duration(seconds: 3), () {
-                            if (mounted) {
-                              setState(() {
-                                if (_seatEmojis[seat] == emojis[idx]) {
-                                  _seatEmojis.remove(seat);
+                child: emojis.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'لا توجد إيموجيات مضافة من لوحة التحكم',
+                          style: TextStyle(color: Colors.white54, fontSize: 13),
+                        ),
+                      )
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 6, bottom: 15),
+                        child: GridView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 6,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                          itemCount: emojis.length,
+                          itemBuilder: (_, idx) => GestureDetector(
+                            onTap: () {
+                              final userProvider = Provider.of<UserProvider>(context, listen: false);
+                              final user = userProvider.currentUser;
+                              final chosenEmoji = emojis[idx];
+
+                              // Show emoji on current user's seat and broadcast to all room members
+                              if (currentUserSeat != null && user != null) {
+                                final seat = currentUserSeat;
+                                setState(() {
+                                  _seatEmojis[seat] = chosenEmoji;
+                                });
+                                _firebaseService.sendSeatEmoji(
+                                  widget.roomId,
+                                  chosenEmoji,
+                                  user.uid,
+                                  user.name ?? '',
+                                  user.photoUrl ?? '',
+                                  seatIndex: seat,
+                                );
+                                Future.delayed(const Duration(seconds: 4), () {
+                                  if (mounted && _seatEmojis[seat] == chosenEmoji) {
+                                    setState(() {
+                                      _seatEmojis.remove(seat);
+                                    });
+                                  }
+                                });
+                              }
+                              
+                              // Send emoji directly to chat
+                              if (user != null) {
+                                if (chosenEmoji.startsWith('http')) {
+                                  _firebaseService.sendImageMessage(
+                                    widget.roomId, chosenEmoji, user.uid, user.name, user.photoUrl,
+                                  );
+                                } else {
+                                  _firebaseService.sendMessage(
+                                    widget.roomId, chosenEmoji, user.uid, user.name, user.photoUrl,
+                                    activeBubble: user.activeBubble,
+                                  );
                                 }
-                              });
-                            }
-                          });
-                        }
-                        
-                        // Send emoji directly to chat
-                        final userProvider = Provider.of<UserProvider>(context, listen: false);
-                        final user = userProvider.currentUser;
-                        if (user != null) {
-                          if (emojis[idx].startsWith('http')) {
-                            _firebaseService.sendImageMessage(
-                              widget.roomId, emojis[idx], user.uid, user.name, user.photoUrl,
-                            );
-                          } else {
-                            _firebaseService.sendMessage(
-                              widget.roomId, emojis[idx], user.uid, user.name, user.photoUrl,
-                              activeBubble: user.activeBubble,
-                            );
-                          }
-                        }
-                        
-                        setState(() => _showEmoj = false);
-                      },
-                      child: Center(
-                        child: emojis[idx].startsWith('http')
-                            ? Image.network(emojis[idx], width: 40, height: 40, fit: BoxFit.contain)
-                            : Text(emojis[idx], style: const TextStyle(fontSize: 26)),
+                              }
+                              
+                              setState(() => _showEmoj = false);
+                            },
+                            child: Center(
+                              child: emojis[idx].startsWith('http')
+                                  ? Image.network(emojis[idx], width: 44, height: 44, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.sentiment_satisfied, color: Colors.white70))
+                                  : Text(emojis[idx], style: const TextStyle(fontSize: 28)),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
@@ -4319,71 +5190,124 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   // ── Chat input bar ────────────────────────────────────────────
   Widget _buildChatInputBar() {
     final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final seatedUsers = _seats
+        .where((s) => s.user != null && s.user!.name.isNotEmpty && s.user!.name != 'null')
+        .map((s) => s.user!)
+        .toSet()
+        .toList();
+    final atIndex = _chatCtrl.text.lastIndexOf('@');
+    final isTypingMention = atIndex != -1 &&
+        (atIndex == _chatCtrl.text.length - 1 ||
+            !_chatCtrl.text.substring(atIndex).contains(' '));
+
     return Positioned(
       bottom: 0,
       left: 0,
       right: 0,
-      child: GestureDetector(
-        onTap: () {},
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xF51D1111), // shape_room_chat_bg
-            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-          ),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              const SizedBox(width: 15),
-              GestureDetector(
-                onTap: _pickRoomImage,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: const Color(0x1AFFFFFF),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.image, size: 20, color: Colors.white70),
-                ),
-              ),
-              const SizedBox(width: 10),
-              // edit_text (shape_room_input_bg)
-              Expanded(
-                child: Container(
-                  height: 36,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0x33000000), // shape_room_input_bg
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  alignment: Alignment.center,
-                  child: TextField(
-                    controller: _chatCtrl,
-                    autofocus: true,
-                    style: const TextStyle(fontSize: 15, color: Colors.white), // color_FFFFFF
-                    decoration: InputDecoration(
-                      hintText: isAr ? 'قل شيئاً...' : 'Say something...',
-                      hintStyle: const TextStyle(
-                        fontSize: 15,
-                        color: Color(0x66FFFFFF), // color_66ffffff
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isTypingMention && seatedUsers.isNotEmpty)
+            Container(
+              height: 44,
+              color: const Color(0xEE1E1D24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: seatedUsers.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 8),
+                itemBuilder: (ctx, idx) {
+                  final u = seatedUsers[idx];
+                  final displayName = u.name.isNotEmpty ? u.name : (u.customId ?? 'مستخدم');
+                  return GestureDetector(
+                    onTap: () {
+                      final prefix = _chatCtrl.text.substring(0, atIndex);
+                      setState(() {
+                        _chatCtrl.text = '$prefix@$displayName ';
+                        _chatCtrl.selection = TextSelection.fromPosition(
+                          TextPosition(offset: _chatCtrl.text.length),
+                        );
+                      });
+                    },
+                    child: Chip(
+                      backgroundColor: const Color(0x33FFFFFF),
+                      avatar: CircleAvatar(
+                        backgroundImage: (u.avatar != null && u.avatar!.isNotEmpty)
+                            ? R.cachedImage(u.avatar!)
+                            : null,
+                        child: (u.avatar == null || u.avatar!.isEmpty)
+                            ? const Icon(Icons.person, size: 14, color: Colors.white)
+                            : null,
                       ),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                      isDense: true,
+                      label: Text(
+                        '@$displayName',
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
                     ),
-                    maxLines: 1,
-                    maxLength: 100,
-                    buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
-                    onSubmitted: (_) => _sendMessage(),
+                  );
+                },
+              ),
+            ),
+          Container(
+            decoration: const BoxDecoration(
+              color: Color(0xF51D1111), // shape_room_chat_bg
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              children: [
+                const SizedBox(width: 15),
+                GestureDetector(
+                  onTap: _pickRoomImage,
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: const Color(0x1AFFFFFF),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.image, size: 20, color: Colors.white70),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              // send_btn (shape_room_input_btn_send_bg)
-              GestureDetector(
-                onTap: _sendMessage,
-                child: Container(
-                  height: 36,
+                const SizedBox(width: 10),
+                // edit_text (shape_room_input_bg)
+                Expanded(
+                  child: Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0x33000000), // shape_room_input_bg
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: TextField(
+                      controller: _chatCtrl,
+                      autofocus: true,
+                      onChanged: (_) => setState(() {}),
+                      style: const TextStyle(fontSize: 15, color: Colors.white), // color_FFFFFF
+                      decoration: InputDecoration(
+                        hintText: isAr ? 'قل شيئاً...' : 'Say something...',
+                        hintStyle: const TextStyle(
+                          fontSize: 15,
+                          color: Color(0x66FFFFFF), // color_66ffffff
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        isDense: true,
+                      ),
+                      maxLines: 1,
+                      maxLength: 100,
+                      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                      onSubmitted: (_) => _sendMessage(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // send_btn (shape_room_input_btn_send_bg)
+                GestureDetector(
+                  onTap: _sendMessage,
+                  child: Container(
+                    height: 36,
                   constraints: const BoxConstraints(minWidth: 70),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   margin: const EdgeInsets.only(right: 16),
@@ -4409,8 +5333,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ],
           ),
         ),
-      ),
-    );
+      ],
+    ),
+  );
   }
 
   // ── Room info sheet — fragment_room_owner_fragment.xml ─────────
@@ -4615,7 +5540,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                                             ],
                                           ),
                                         ),
-                                        if (_isOwnerOrModerator) ...[
+                                        if (_isOwner) ...[
                                           GestureDetector(
                                             onTap: () {
                                               setState(() => _showRoomInfo = false);
@@ -4975,10 +5900,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         final currentUserId = _currentUserId ?? '';
         final seatedUserIds = occupiedSeats.map((s) => s.user!.id).toSet();
 
-        // Combine seated users and current user if not seated
+        // Combine seated users and all room members
         final displayUsers = <Map<String, dynamic>>[];
+        final seenUids = <String>{};
+
         for (final seat in occupiedSeats) {
           final u = seat.user!;
+          if (u.id != null) seenUids.add(u.id!);
           displayUsers.add({
             'user': u,
             'isOnMic': true,
@@ -4986,8 +5914,30 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             'seatIndex': seat.index,
           });
         }
+
+        // Add other room members
+        for (final m in _roomMembers) {
+          if (m.uid.isNotEmpty && !seenUids.contains(m.uid)) {
+            seenUids.add(m.uid);
+            displayUsers.add({
+              'user': UserModel(
+                id: m.uid,
+                name: m.name.isNotEmpty ? m.name : 'مستخدم',
+                avatar: m.photoUrl,
+                level: m.level,
+                customId: m.customId,
+                country: m.country,
+                gender: m.gender,
+              ),
+              'isOnMic': false,
+              'isMuted': false,
+              'seatIndex': -1,
+            });
+          }
+        }
+
         final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
-        if (currentUser != null && !seatedUserIds.contains(currentUser.uid)) {
+        if (currentUser != null && !seenUids.contains(currentUser.uid)) {
           displayUsers.add({
             'user': UserModel(
               id: currentUser.uid,
@@ -4995,6 +5945,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               avatar: currentUser.photoUrl,
               level: currentUser.level,
               customId: currentUser.customId,
+              country: currentUser.country,
+              gender: currentUser.gender,
             ),
             'isOnMic': false,
             'isMuted': false,
@@ -5056,7 +6008,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           final u = item['user'] as UserModel;
                           final bool isOnMic = item['isOnMic'] as bool;
                           final bool isMuted = item['isMuted'] as bool;
-                          final bool isMale = true; // default
+                          final bool isMale = u.gender != 'female';
 
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -5367,6 +6319,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _minimizeRoom() {
     setState(() => _showExit = false);
     _isMinimized = true;
+
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final myUid = _currentUserId ?? userProvider.currentUser?.uid;
+    final myCustomId = userProvider.currentUser?.customId;
+
+    int? seatIndex = _currentUserSeatIndex;
+    bool isOnSeat = _currentUserSeatIndex != null;
+
+    for (int i = 0; i < _seats.length; i++) {
+      final u = _seats[i].user;
+      if (u != null && (u.id == myUid || (myCustomId != null && u.customId == myCustomId))) {
+        seatIndex = i;
+        isOnSeat = true;
+        break;
+      }
+    }
+
+    _currentUserSeatIndex = seatIndex;
+
     MinimizedRoomService().activate(
       roomId: widget.roomId,
       roomName: widget.roomName,
@@ -5374,40 +6345,70 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       roomPassword: widget.roomPassword.isNotEmpty ? widget.roomPassword : null,
       hotValue: widget.hotValue,
       gameDesc: widget.gameDesc,
-      roomPhoto: _currentRoom?.roomPhotoUrl ?? _seats[0].user?.avatar,
+      roomPhoto: _currentRoom?.roomPhotoUrl ?? (_seats.isNotEmpty ? _seats[0].user?.avatar : null),
+      userId: myUid,
+      seatIndex: seatIndex,
+      isOnSeat: isOnSeat,
+      isMicMuted: !_isMicOn,
+      audioService: _roomAudio,
     );
     Navigator.of(context).pop();
   }
 
   Future<void> _leaveRoomSession() async {
-    if (_currentUserId == null) return;
-    final uid = _currentUserId!;
-    final name = _currentUserName;
+    final uid = _currentUserId ?? Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
     final roomId = widget.roomId;
+    final name = _currentUserName;
+
+    final mySeatIdx = _currentUserSeatIndex;
+    _currentUserSeatIndex = null;
+    _takingSeat = false;
+    _pendingSeatIndex = null;
 
     for (int i = 0; i < _seats.length; i++) {
-      if (_seats[i].user?.id == uid) {
+      if ((uid != null && _seats[i].user?.id == uid) || (mySeatIdx != null && i == mySeatIdx)) {
         _seats[i].state = SeatState.empty;
         _seats[i].user = null;
+        _seats[i].isMuted = false;
         try {
           await _firebaseService.leaveSeat(roomId, i);
+        } catch (_) {}
+        try {
+          await SupabaseDataService().leaveSeat(roomId, i);
         } catch (_) {}
       }
     }
 
-    try {
-      await _firebaseService.leaveSeatForUser(roomId, uid);
-    } catch (_) {}
+    if (uid != null && uid.isNotEmpty) {
+      try {
+        await _firebaseService.leaveSeatForUser(roomId, uid);
+      } catch (_) {}
+      try {
+        await SupabaseService().leaveSeatForUser(roomId, uid);
+      } catch (_) {}
+      try {
+        await SupabaseDataService().leaveSeatForUser(roomId, uid);
+      } catch (_) {}
+      try {
+        await SupabaseDataService().leaveRoom(roomId, uid);
+      } catch (_) {}
+      try {
+        await Supabase.instance.client
+            .from('room_members')
+            .delete()
+            .eq('room_id', roomId)
+            .eq('uid', uid);
+      } catch (_) {}
+      try {
+        await _firebaseService.leaveRoom(roomId, uid);
+      } catch (_) {}
+    }
 
     if (name != null && name.isNotEmpty) {
       try {
         await _firebaseService.logExit(roomId, name);
       } catch (_) {}
     }
-
-    try {
-      await _firebaseService.leaveRoom(roomId, uid);
-    } catch (_) {}
   }
 
   void _cleanupUserSession() {
@@ -5423,62 +6424,52 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   /// تلقائياً بواسطة TTL checker عند دخول أي مستخدم للغرفة.
   void _startPresencePing() {
     _presencePingTimer?.cancel();
-    _presencePingTimer = Timer.periodic(const Duration(seconds: 90), (_) {
+    _presencePingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       _updatePresencePing();
     });
     // أول ping فوري عند الدخول
     _updatePresencePing();
   }
 
-  /// يرسل ping (يحدّث last_ping timestamp) لإثبات أن المستخدم ما زال في الغرفة.
+  /// يرسل ping (يحدّث last_ping timestamp) لإثبات أن المستخدم ما زال في الغرفة عبر Supabase
   void _updatePresencePing() {
     if (_currentUserId == null) return;
     final uid = _currentUserId!;
     final roomId = widget.roomId;
-    // Fire-and-forget: لا نريد انتظار النتيجة
-    FirebaseFirestore.instance
-        .collection('room_members')
-        .doc('${roomId}_$uid')
-        .update({'last_ping': FieldValue.serverTimestamp()})
-        .catchError((_) {}); // تجاهل الأخطاء (المستخدم ربما لم يُسجَّل بعد)
+    // Fire-and-forget directly via Supabase
+    SupabaseDataService().sendPresencePing(roomId, uid).catchError((_) => false);
   }
 
-  /// يبحث عن أعضاء الغرفة الذين لم يرسلوا ping منذ أكثر من 5 دقائق
-  /// ويحذفهم من Firestore — يُستدعى عند كل انضمام جديد.
+  /// تنظيف المستخدمين غير النشطين
   Future<void> _cleanupZombieUsers() async {
     try {
-      final cutoff = Timestamp.fromDate(
-        DateTime.now().subtract(const Duration(minutes: 5)),
-      );
-      final snap = await FirebaseFirestore.instance
-          .collection('room_members')
-          .where('room_id', isEqualTo: widget.roomId)
-          .get();
-      int cleanedCount = 0;
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        final lastPing = data['last_ping'];
-        if (lastPing is Timestamp && lastPing.compareTo(cutoff) < 0) {
-          final uid = data['uid'] as String?;
-          if (uid == null) continue;
-          await doc.reference.delete();
-          await _firebaseService.leaveSeatForUser(widget.roomId, uid);
-          cleanedCount++;
-        }
-      }
-      if (cleanedCount > 0) {
-        debugPrint('Cleaned $cleanedCount zombie user(s) from room ${widget.roomId}');
-      }
-    } catch (e) {
-      debugPrint('_cleanupZombieUsers error (non-fatal): $e');
-    }
+      final cutoff = DateTime.now().toUtc().subtract(const Duration(minutes: 2)).toIso8601String();
+      await Supabase.instance.client
+          .from('room_members')
+          .delete()
+          .eq('room_id', widget.roomId)
+          .lt('joined_at', cutoff);
+    } catch (_) {}
   }
 
-  void _exitRoom() {
-    setState(() => _showExit = false);
-    _leaveRoomSession();
-    _roomAudio.dispose();
-    Navigator.of(context).pop();
+  Future<void> _exitRoom() async {
+    if (mounted) {
+      setState(() => _showExit = false);
+    }
+    RoomMusicPlayerService().stop();
+    _isMicOn = false;
+    try {
+      _roomAudio.toggleMic(false);
+      _roomAudio.stopPublishingIfActive();
+      _roomAudio.leaveChannel();
+    } catch (_) {}
+    await _leaveRoomSession();
+    try {
+      _roomAudio.dispose();
+    } catch (_) {}
+    if (mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   void _checkRoomBan(String uid) {
@@ -5496,12 +6487,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final user = userProvider.currentUser;
     if (user == null) return;
-    if (_isFollowed) {
-      _firebaseService.unfollowRoom(user.uid, widget.roomId);
-    } else {
+    final willFollow = !_isFollowed;
+    if (willFollow) {
       _firebaseService.followRoom(user.uid, widget.roomId);
+    } else {
+      _firebaseService.unfollowRoom(user.uid, widget.roomId);
     }
-    setState(() => _isFollowed = !_isFollowed);
+    userProvider.toggleFollowedRoom(widget.roomId, willFollow);
+    setState(() => _isFollowed = willFollow);
   }
 
   Widget _memberAvatar(String? avatar, double size) {
@@ -5607,6 +6600,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   // ── Share dialog ───────────────────────────────────────────────
   Widget _buildShare() {
+    final isAr = Localizations.maybeLocaleOf(context)?.languageCode != 'en';
+    final shareText = isAr
+        ? 'انضم إلى غرفتي "${widget.roomName}" في تطبيق أحلى لايف!\nhttps://ahla.live/room/${widget.roomId}'
+        : 'Join my room "${widget.roomName}" on Ahla Live!\nhttps://ahla.live/room/${widget.roomId}';
+
     return Positioned.fill(
       child: GestureDetector(
         onTap: () => setState(() => _showShare = false),
@@ -5617,9 +6615,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             onTap: () {},
             child: Container(
               width: double.infinity,
+              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
               decoration: const BoxDecoration(
-                color: Color(0xFF211211),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                color: Color(0xFF1E1B26),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
               ),
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
               child: SafeArea(
@@ -5627,39 +6626,147 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      'Share Room',
-                      style: TextStyle(
+                    Text(
+                      isAr ? 'مشاركة الغرفة' : 'Share Room',
+                      style: const TextStyle(
                         fontSize: 16,
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+                    // External share options
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildShareItem('WhatsApp', Icons.chat, Colors.green),
-                        _buildShareItem('Facebook', Icons.facebook, Colors.blue),
-                        _buildShareItem('Twitter', Icons.flutter_dash, Colors.lightBlue),
-                        _buildShareItem('Copy Link', Icons.link, Colors.grey),
+                        _buildShareItem(
+                          'واتساب',
+                          Icons.chat,
+                          const Color(0xFF25D366),
+                          onTap: () async {
+                            final uri = Uri.parse('whatsapp://send?text=${Uri.encodeComponent(shareText)}');
+                            final webUri = Uri.parse('https://api.whatsapp.com/send?text=${Uri.encodeComponent(shareText)}');
+                            try {
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              } else if (await canLaunchUrl(webUri)) {
+                                await launchUrl(webUri, mode: LaunchMode.externalApplication);
+                              }
+                            } catch (_) {}
+                          },
+                        ),
+                        _buildShareItem(
+                          isAr ? 'نسخ الرابط' : 'Copy Link',
+                          Icons.link,
+                          Colors.blueGrey,
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: 'https://ahla.live/room/${widget.roomId}'));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(isAr ? 'تم نسخ رابط الغرفة' : 'Room link copied')),
+                            );
+                            setState(() => _showShare = false);
+                          },
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+                    const Divider(color: Colors.white12),
+                    // Friends sharing section
+                    Align(
+                      alignment: isAr ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Text(
+                        isAr ? 'إرسال للأصدقاء (رسالة خاصة)' : 'Send to Friends (Private Chat)',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Flexible(
+                      child: FutureBuilder<List<Map<String, dynamic>>>(
+                        future: _firebaseService.getFollowing(_currentUserId ?? ''),
+                        builder: (ctx, snap) {
+                          if (snap.connectionState == ConnectionState.waiting) {
+                            return const Center(child: Padding(
+                              padding: EdgeInsets.all(20),
+                              child: CircularProgressIndicator(color: Color(0xFFFFC525)),
+                            ));
+                          }
+                          final friends = snap.data ?? [];
+                          if (friends.isEmpty) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Text(
+                                isAr ? 'لا يوجد أصدقاء متابعون حالياً' : 'No followed friends found',
+                                style: const TextStyle(color: Colors.white38, fontSize: 13),
+                              ),
+                            );
+                          }
+                          return ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: friends.length,
+                            itemBuilder: (ctx, i) {
+                              final f = friends[i];
+                              final fUid = f['uid']?.toString() ?? f['id']?.toString() ?? '';
+                              final fName = f['name']?.toString() ?? 'صديق';
+                              final fPhoto = f['photo_url']?.toString() ?? f['avatar']?.toString() ?? '';
+                              return ListTile(
+                                dense: true,
+                                leading: CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: Colors.white10,
+                                  backgroundImage: fPhoto.isNotEmpty ? R.cachedImage(fPhoto) : null,
+                                  child: fPhoto.isEmpty ? const Icon(Icons.person, color: Colors.white54, size: 18) : null,
+                                ),
+                                title: Text(fName, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)),
+                                trailing: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFFC525),
+                                    foregroundColor: Colors.black,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                                    minimumSize: const Size(60, 28),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  ),
+                                  onPressed: () async {
+                                    final curUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+                                    await _firebaseService.sendPrivateMessage(
+                                      senderId: _currentUserId ?? '',
+                                      senderName: curUser?.name ?? _currentUserName ?? '',
+                                      senderPhotoUrl: curUser?.photoUrl ?? '',
+                                      receiverId: fUid,
+                                      receiverName: fName,
+                                      receiverPhotoUrl: fPhoto,
+                                      text: isAr
+                                          ? 'تعال إلى غرفتي "${widget.roomName}" الآن! رابط الغرفة: https://ahla.live/room/${widget.roomId}'
+                                          : 'Join my room "${widget.roomName}" now! Link: https://ahla.live/room/${widget.roomId}',
+                                    );
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text(isAr ? 'تمت مشاركة الغرفة مع $fName' : 'Shared room with $fName')),
+                                      );
+                                    }
+                                  },
+                                  child: Text(isAr ? 'إرسال' : 'Send', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     GestureDetector(
                       onTap: () => setState(() => _showShare = false),
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
-                          color: Colors.white24,
+                          color: Colors.white12,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         alignment: Alignment.center,
-                        child: const Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 15,
+                        child: Text(
+                          isAr ? 'إغلاق' : 'Close',
+                          style: const TextStyle(
+                            fontSize: 14,
                             color: Colors.white,
                           ),
                         ),
@@ -5675,28 +6782,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildShareItem(String label, IconData icon, Color color) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
+  Widget _buildShareItem(String label, IconData icon, Color color, {VoidCallback? onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 26),
           ),
-          child: Icon(icon, color: Colors.white, size: 28),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.white,
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.white,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
