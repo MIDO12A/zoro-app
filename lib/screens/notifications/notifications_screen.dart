@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/supabase_compat.dart';
 import '../../config/r.dart';
 import '../../services/supabase_service.dart';
+import '../../services/supabase_data_service.dart';
 import '../../models/notification_model.dart';
 import '../../providers/user_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../features/cp/cp_service.dart';
 import '../../features/cp/cp_detail_full_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
+import 'package:uuid/uuid.dart';
+import '../../features/host_agency/screens/agency_join_requests_screen.dart';
+import '../../features/host_agency/data/agency_repository.dart';
+import '../../services/dynamic_config_service.dart';
 
 /// Replicates [chat_activity_system_notification.xml] and [chat_adapter_activity_item.xml]
 /// from the original decompiled app (F:\Medal\New folder\nu).
@@ -70,14 +75,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   .currentUser
                   ?.uid;
               if (uid != null) {
-                final snap = await FirebaseFirestore.instance
-                    .collection('notifications')
-                    .where('uid', isEqualTo: uid)
-                    .where('is_read', isEqualTo: false)
-                    .get();
-                for (final doc in snap.docs) {
-                  await doc.reference.update({'is_read': true});
-                }
+                try {
+                  await SupabaseDataService().markAllNotificationsRead(uid);
+                } catch (_) {}
+
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -291,11 +292,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           ),
                         ),
 
-                      // Recharge Agency Action Button
-                      if (action == 'recharge_agency_approved' ||
-                          notif.type == 'agency_recharge_approved' ||
-                          notif.title.contains('تفعيل وكالة الشحن') ||
-                          notif.title.contains('وكالة الشحن'))
+                      // Recharge Agency Action Button (مخفية في وضع مراجعة جوجل)
+                      if (!DynamicConfigService().isReviewMode &&
+                          (action == 'recharge_agency_approved' ||
+                              notif.type == 'agency_recharge_approved' ||
+                              notif.title.contains('تفعيل وكالة الشحن') ||
+                              notif.title.contains('وكالة الشحن')))
                         Padding(
                           padding: const EdgeInsets.only(top: 10),
                           child: InkWell(
@@ -342,8 +344,267 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           ),
                         ),
 
+                      // Agent Diamond Withdrawal Request Actions (Accept / Reject)
+                      if (action == 'agent_withdrawal_request' ||
+                          notif.type == 'agent_withdrawal_request' ||
+                          notif.type == 'agent_host_withdrawal_request' ||
+                          action == 'salary_transfer_request' ||
+                          notif.type == 'salary_transfer_request' ||
+                          notif.title.contains('سحب ألماس') ||
+                          notif.title.contains('صرف راتب'))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Row(
+                            children: [
+                              _actionButton(
+                                label: isAr ? 'موافقة وقبول الراتب ✅' : 'Approve & Accept ✅',
+                                color: const Color(0xFF10B981),
+                                onTap: () async {
+                                  final currentUid = Provider.of<UserProvider>(
+                                          context,
+                                          listen: false)
+                                      .currentUser
+                                      ?.uid;
+                                  final requestId = notif.data?['request_id']?.toString() ??
+                                      notif.data?['transfer_id']?.toString() ??
+                                      '';
+                                  final senderUid = notif.data?['host_uid']?.toString() ??
+                                      notif.data?['sender_uid']?.toString() ??
+                                      notif.actorUid;
+                                  final amount = (notif.data?['diamonds'] as num?)?.toInt() ??
+                                      (notif.data?['amount'] as num?)?.toInt() ??
+                                      (notif.data?['diamonds_amount'] as num?)?.toInt() ??
+                                      0;
+
+                                  if (currentUid != null && requestId.isNotEmpty) {
+                                    // 1. استخدام معالج السحب المعتمد في الوكالات
+                                    final res = await AgencyRepository.handleAgentWithdrawalAction(
+                                      requestId: requestId,
+                                      agentUid: currentUid,
+                                      approve: true,
+                                    );
+
+                                    // إذا كان الطلب من نوع salary_transfer_requests كاحتياط
+                                    if (res['success'] != true && amount > 0) {
+                                      try {
+                                        final sb = Supabase.instance.client;
+                                        // إيداع الألماس في محفظة وكالة الشحن حصراً (agency_wallets)
+                                        final aw = await sb
+                                            .from('agency_wallets')
+                                            .select('id, diamond_balance')
+                                            .eq('agency_profile_id', currentUid)
+                                            .maybeSingle();
+                                        if (aw != null) {
+                                          final curDia = (aw['diamond_balance'] as num?)?.toInt() ?? 0;
+                                          await sb.from('agency_wallets').update({
+                                            'diamond_balance': curDia + amount,
+                                            'updated_at': DateTime.now().toIso8601String(),
+                                          }).eq('agency_profile_id', currentUid);
+                                        } else {
+                                          await sb.from('agency_wallets').insert({
+                                            'agency_profile_id': currentUid,
+                                            'diamond_balance': amount,
+                                            'gold_balance': 0,
+                                            'total_earnings': amount,
+                                            'updated_at': DateTime.now().toIso8601String(),
+                                          });
+                                        }
+
+                                        // تصفير تارجت وراتب الراسل فوراً
+                                        if (senderUid.isNotEmpty) {
+                                          // تصفير تارجت المضيف
+                                          try {
+                                            final mRow = await sb.from('host_agency_members')
+                                                .select('id, diamonds_earned_monthly, diamonds_balance')
+                                                .or('user_id.eq.$senderUid,host_uid.eq.$senderUid')
+                                                .maybeSingle();
+                                            if (mRow != null) {
+                                              final curM = (mRow['diamonds_earned_monthly'] as num?)?.toInt() ?? 0;
+                                              final curB = (mRow['diamonds_balance'] as num?)?.toInt() ?? 0;
+                                              await sb.from('host_agency_members').update({
+                                                'diamonds_earned_monthly': (curM - amount).clamp(0, 999999999),
+                                                'diamonds_balance': (curB - amount).clamp(0, 999999999),
+                                                'diamonds': (curB - amount).clamp(0, 999999999),
+                                              }).eq('id', mRow['id']);
+                                            }
+                                          } catch (_) {}
+
+                                          // تصفير رواتب المضيفين والمشرفين
+                                          try {
+                                            await sb.from('host_salaries').update({
+                                              'status': 'disbursed',
+                                              'disbursed_at': DateTime.now().toIso8601String(),
+                                            }).eq('user_id', senderUid).eq('status', 'pending');
+                                          } catch (_) {}
+
+                                          // تصفير رواتب الإدارة إن وجدت
+                                          try {
+                                            await sb.from('users').update({
+                                              'super_admin_salary': 0,
+                                              'admin_salary': 0,
+                                              'bd_salary': 0,
+                                            }).eq('uid', senderUid);
+                                          } catch (_) {}
+                                        }
+
+                                        // إشعار الراسل
+                                        await SupabaseDataService().sendNotification(
+                                          uid: senderUid,
+                                          type: 'salary_transfer_accepted',
+                                          actorUid: currentUid,
+                                          title: 'تم قبول صرف الراتب بنجاح 🎉',
+                                          body: 'وافق وكيل الشحن على طلب الصرف وتم تحويل $amount ماسة وتصفير تارجتك بنجاح.',
+                                        );
+                                      } catch (e) {
+                                        debugPrint('[notifications] fallback error: $e');
+                                      }
+                                    }
+
+                                    if (!mounted) return;
+                                    await Provider.of<UserProvider>(context, listen: false).loadUser(currentUid);
+                                    if (notif.id.isNotEmpty) {
+                                      try {
+                                        await SupabaseDataService().deleteNotification(notif.id);
+                                      } catch (_) {}
+                                    }
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(isAr
+                                              ? '✅ تمت الموافقة وتصفير تارجت المستخدم وإيداع الرصيد في محفظة وكالة الشحن.'
+                                              : '✅ Approved! User target reset and balance credited to recharge agency wallet.'),
+                                          backgroundColor: const Color(0xFF10B981),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              _actionButton(
+                                label: isAr ? 'رفض السحب ❌' : 'Reject ❌',
+                                color: const Color(0xFFEF4444),
+                                onTap: () async {
+                                  final currentUid = Provider.of<UserProvider>(
+                                          context,
+                                          listen: false)
+                                      .currentUser
+                                      ?.uid;
+                                  final requestId = notif.data?['request_id']?.toString() ??
+                                      notif.data?['transfer_id']?.toString() ??
+                                      '';
+
+                                  if (currentUid != null && requestId.isNotEmpty) {
+                                    await AgencyRepository.handleAgentWithdrawalAction(
+                                      requestId: requestId,
+                                      agentUid: currentUid,
+                                      approve: false,
+                                    );
+                                  }
+
+                                  if (notif.id.isNotEmpty) {
+                                    try {
+                                      await SupabaseDataService().deleteNotification(notif.id);
+                                    } catch (_) {}
+                                  }
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(isAr
+                                            ? 'تم رفض طلب السحب ولم يتم خصم أي رصيد.'
+                                            : 'Withdrawal request rejected. No balance deducted.'),
+                                        backgroundColor: const Color(0xFFEF4444),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // Host Invitation to join Agency (Accept/Reject)
+                      if (action == 'host_invite' || notif.type == 'host_invite' || notif.title.contains('دعوة انضمام لوكالة'))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: Row(
+                            children: [
+                              _actionButton(
+                                label: isAr ? 'قبول الانضمام ✅' : 'Accept Join ✅',
+                                color: const Color(0xFF10B981),
+                                onTap: () async {
+                                  final currentUid = Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
+                                  final agId = notif.data?['agency_id']?.toString() ?? '';
+                                  final agencyName = notif.data?['agency_name']?.toString() ?? 'الوكالة';
+
+                                  if (currentUid != null && agId.isNotEmpty) {
+                                    try {
+                                      await SupabaseDataService().upsertHostAgencyMember({
+                                        'id': const Uuid().v4(),
+                                        'agency_id': agId,
+                                        'host_uid': currentUid,
+                                        'user_id': currentUid,
+                                        'role': 'host',
+                                        'status': 'active',
+                                        'joined_at': DateTime.now().toUtc().toIso8601String(),
+                                      });
+                                      await SupabaseDataService().updateUserData(currentUid, {
+                                        'agency_id': agId,
+                                        'agency_name': agencyName,
+                                        'is_host': true,
+                                      });
+                                    } catch (_) {}
+
+
+                                    try {
+                                      final uProv = Provider.of<UserProvider>(context, listen: false);
+                                      await uProv.loadUser(currentUid);
+                                    } catch (_) {}
+
+                                    try {
+                                      await SupabaseDataService().deleteNotification(notif.id);
+                                    } catch (_) {}
+                                    if (notif.id.isNotEmpty) {
+                                    }
+
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('مبروك! تم الانضمام بنجاح إلى وكالة $agencyName كمضيف رسمي! 🎉'),
+                                          backgroundColor: const Color(0xFF10B981),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              _actionButton(
+                                label: isAr ? 'رفض ❌' : 'Reject ❌',
+                                color: const Color(0xFFEF4444),
+                                onTap: () async {
+                                  try {
+                                    await SupabaseDataService().deleteNotification(notif.id);
+                                  } catch (_) {}
+                                  if (notif.id.isNotEmpty) {
+                                  }
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(isAr ? 'تم رفض الدعوة' : 'Invitation rejected'),
+                                        backgroundColor: const Color(0xFFEF4444),
+                                      ),
+                                    );
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+
                       // Agency Invitation Actions (Accept/Reject)
-                      if (action == 'agency_invite')
+                      if (action == 'agency_invite' || notif.type == 'agency_invite' || notif.title.contains('دعوة لفتح وكالة') || notif.body.contains('فتح الوكالة'))
                         Padding(
                           padding: const EdgeInsets.only(top: 10),
                           child: Row(
@@ -369,79 +630,55 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
                                   if (currentUid != null) {
                                     if (agencyType == 'recharge') {
-                                      await FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(currentUid)
-                                          .set({
-                                        'is_recharge_agent': true,
-                                        'isRechargeAgent': true,
-                                        'recharge_agency_name': agencyName,
-                                      }, SetOptions(merge: true));
+                                      try {
+                                        await SupabaseDataService().updateUserData(currentUid, {
+                                          'is_recharge_agent': true,
+                                          'recharge_agency_name': agencyName,
+                                        });
+                                      } catch (_) {}
                                     } else {
-                                      final agDoc = FirebaseFirestore.instance
-                                          .collection('host_agencies')
-                                          .doc();
-                                      await agDoc.set({
-                                        'name': agencyName,
-                                        'owner_id': currentUid,
-                                        'is_active': true,
-                                        'member_count': 1,
-                                        'created_at': DateTime.now()
-                                            .toUtc()
-                                            .toIso8601String(),
-                                      });
-                                      await FirebaseFirestore.instance
-                                          .collection('host_agency_members')
-                                          .doc('${agDoc.id}_$currentUid')
-                                          .set({
-                                        'agency_id': agDoc.id,
-                                        'user_id': currentUid,
-                                        'role': 'owner',
-                                        'status': 'active',
-                                        'joined_at': DateTime.now()
-                                            .toUtc()
-                                            .toIso8601String(),
-                                      });
-                                      await FirebaseFirestore.instance
-                                          .collection('users')
-                                          .doc(currentUid)
-                                          .set({
-                                        'agency_id': agDoc.id,
-                                      }, SetOptions(merge: true));
+                                      final rawAid = notif.data?['agency_id']?.toString() ?? '';
+                                      final agId = rawAid.isNotEmpty ? rawAid : const Uuid().v4();
+                                      try {
+                                        await SupabaseDataService().upsertHostAgency({
+                                          'id': agId,
+                                          'name': agencyName,
+                                          'owner_uid': currentUid,
+                                          'status': 'active',
+                                          'is_active': true,
+                                          'member_count': 1,
+                                          'description': 'الوكالة الرسمية للمضيفين',
+                                          'created_at': DateTime.now().toUtc().toIso8601String(),
+                                        });
+                                        await SupabaseDataService().upsertHostAgencyMember({
+                                          'id': const Uuid().v4(),
+                                          'agency_id': agId,
+                                          'host_uid': currentUid,
+                                          'role': 'owner',
+                                          'status': 'active',
+                                          'joined_at': DateTime.now().toUtc().toIso8601String(),
+                                        });
+                                        await SupabaseDataService().updateUserData(currentUid, {
+                                          'agency_id': agId,
+                                          'is_host_agent': true,
+                                        });
+                                        final uProv = Provider.of<UserProvider>(context, listen: false);
+                                        await uProv.loadUser(currentUid);
+                                      } catch (_) {}
+
                                     }
 
-                                    await FirebaseFirestore.instance
-                                        .collection('notifications')
-                                        .add({
-                                      'user_id': currentUid,
-                                      'uid': currentUid,
-                                      'title': 'مبروك! تم فتح وكالتك بنجاح 🎉',
-                                      'body':
-                                          'مبروك! تم فتح وتفعيل وكالتك [$agencyName] بنجاح بواسطة المشرف [$adminName]. يمكنك الآن البدء بإدارتها.',
-                                      'type': 'system',
-                                      'sent_at':
-                                          DateTime.now().toUtc().toIso8601String(),
-                                      'data': {
-                                        'action': 'agency_created',
-                                        'admin_name': adminName
-                                      },
-                                    });
-
                                     if (notif.id.isNotEmpty) {
-                                      await FirebaseFirestore.instance
-                                          .collection('notifications')
-                                          .doc(notif.id)
-                                          .delete();
+                                      try {
+                                        await SupabaseDataService().deleteNotification(notif.id);
+                                      } catch (_) {}
                                     }
 
                                     if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
+                                      ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
-                                          content: Text(
-                                              'مبروك! تم قبول وتفعيل وكالة $agencyName بنجاح! 🎉'),
-                                          backgroundColor:
-                                              const Color(0xFF10B981),
+                                          content: Text('مبروك! تم قبول وتفعيل وكالة $agencyName بنجاح! 🎉'),
+                                          backgroundColor: const Color(0xFF10B981),
                                         ),
                                       );
                                     }
@@ -453,11 +690,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 label: isAr ? 'رفض ❌' : 'Reject ❌',
                                 color: const Color(0xFFEF4444),
                                 onTap: () async {
+                                  try {
+                                    await SupabaseDataService().deleteNotification(notif.id);
+                                  } catch (_) {}
                                   if (notif.id.isNotEmpty) {
-                                    await FirebaseFirestore.instance
-                                        .collection('notifications')
-                                        .doc(notif.id)
-                                        .delete();
                                   }
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -465,8 +701,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                         content: Text(isAr
                                             ? 'تم رفض دعوة الوكالة'
                                             : 'Agency invitation rejected'),
-                                        backgroundColor:
-                                            const Color(0xFFEF4444),
+                                        backgroundColor: const Color(0xFFEF4444),
                                       ),
                                     );
                                   }
@@ -476,8 +711,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           ),
                         ),
 
+                      // Host Join Request for Agency Owner
+                      if (action == 'host_join_request' || notif.type == 'agency_host_request' || notif.title.contains('طلب انضمام مضيف'))
+                        Padding(
+                          padding: const EdgeInsets.only(top: 10),
+                          child: _actionButton(
+                            label: isAr ? 'عرض طلبات الانضمام 📝' : 'View Join Requests 📝',
+                            color: const Color(0xFF3B82F6),
+                            onTap: () {
+                              final aid = notif.data?['agency_id']?.toString() ?? '';
+                              if (aid.isNotEmpty) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => AgencyJoinRequestsScreen(agencyId: aid)),
+                                );
+                              }
+                            },
+                          ),
+                        ),
+
                       // CP Relationship Request Action
-                      if (action == 'cp_request' || notif.type == 'cp_invite')
+                      if (action == 'cp_request' || action == 'cp_relationship_request' || notif.type == 'cp_invite' || notif.type == 'cp_gift')
                         Padding(
                           padding: const EdgeInsets.only(top: 10),
                           child: Row(
@@ -491,10 +745,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     await CpService.respondRequest(reqId, true);
                                   }
                                   if (notif.id.isNotEmpty) {
-                                    await FirebaseFirestore.instance
-                                        .collection('notifications')
-                                        .doc(notif.id)
-                                        .delete();
+                                    await SupabaseDataService().deleteNotification(notif.id);
                                   }
                                   if (mounted) {
                                     Navigator.push(
@@ -513,10 +764,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 color: const Color(0xFF9BA1B6),
                                 onTap: () async {
                                   if (notif.id.isNotEmpty) {
-                                    await FirebaseFirestore.instance
-                                        .collection('notifications')
-                                        .doc(notif.id)
-                                        .delete();
+                                    await SupabaseDataService().deleteNotification(notif.id);
                                   }
                                 },
                               ),

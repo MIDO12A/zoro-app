@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
+import '../../services/supabase_auth_service.dart';
 import '../../config/r.dart';
 import '../../providers/user_provider.dart';
 import '../../models/user_model.dart';
-import '../../services/firebase_service.dart';
+import '../../services/supabase_service.dart';
 import '../../services/update_service.dart';
 import '../../widgets/app_update_dialog.dart';
 import '../../screens/room/widgets/svga_frame.dart';
@@ -15,18 +17,23 @@ import '../wallet/wallet_main_screen.dart';
 import '../mall/mall_screen.dart';
 import '../user_profile/user_profile_screen.dart';
 import '../level/level_screen.dart';
-import '../badges/badges_screen.dart';
 import '../backpack/backpack_screen.dart';
 import 'edit_profile_screen.dart';
 import '../setting/feedback_screen.dart';
 import '../vip/vip_center_screen.dart';
 import '../../features/cp/cp_space_screen.dart';
 import '../../features/host_agency/host_agency_screen.dart';
+import '../../features/host_agency/screens/bd_center_screen.dart';
+import '../../features/super_admin/screens/super_admin_center_screen.dart';
+import '../../features/super_admin/screens/admin_center_screen.dart';
 import '../../features/financial/agent_recharge_portal_screen.dart';
 import '../../services/dynamic_config_service.dart';
 import '../../services/level_service.dart';
 import '../../features/tasks/screens/daily_tasks_screen.dart';
 import '../../features/signin/weekly_signin_screen.dart';
+import '../badges/badges_screen.dart';
+import '../../widgets/user_id_widget.dart';
+import '../../core/localization/app_strings.dart';
 
 /// شاشة "أنا" (الملف الشخصي) المطابقة تماماً لملف fragment_mine.xml
 /// وكود MineFragment.java من المشروع الأصلي (F:\Medal\New folder\nu):
@@ -65,36 +72,61 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
 
-            SingleChildScrollView(
-              padding: EdgeInsets.only(
-                top: topPadding,
-                bottom: 90,
-              ),
-              child: Column(
-                children: [
-                  // 2. لوحة المستخدم المركزية (cl_info)
-                  _buildUserInfoPanel(context, user),
+            RefreshIndicator(
+              onRefresh: () async {
+                if (user != null) {
+                  await userProvider.loadUser(user.uid);
+                }
+              },
+              color: const Color(0xFFFFB800),
+              backgroundColor: const Color(0xFF141A32),
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.only(
+                  top: topPadding,
+                  bottom: 90,
+                ),
+                child: Column(
+                  children: [
+                    // 2. لوحة المستخدم المركزية (cl_info)
+                    _buildUserInfoPanel(context, user),
 
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                  // 3. شريط الإحصائيات الثلاثي (cl_data_info)
-                  _buildStatsRow(context, user),
+                    // 3. شريط الإحصائيات الثلاثي (cl_data_info)
+                    _buildStatsRow(context, user),
 
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
 
-                  // 4. بطاقة المحفظة (ll_wallet_info)
-                  _buildWalletCard(context, user),
+                    // 4. بطاقة المحفظة (ll_wallet_info)
+                    _buildWalletCard(context, user),
 
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  // 5. بطاقة مركز VIP (cl_vip)
-                  _buildVipBanner(context, user),
+                    // 5. بطاقة مركز VIP (cl_vip)
+                    _buildVipBanner(context, user),
 
-                  const SizedBox(height: 12),
+                    if (user?.isSuperAdmin == true || user?.role == 'super_admin' || user?.role == 'superadmin') ...[
+                      const SizedBox(height: 12),
+                      _buildSuperAdminBanner(context, user),
+                    ],
 
-                  // 6. قائمة الوظائف والإعدادات (ll_set)
-                  _buildSettingsList(context, user),
-                ],
+                    if (user?.isAdmin == true || user?.role == 'admin') ...[
+                      const SizedBox(height: 12),
+                      _buildAdminBanner(context, user),
+                    ],
+
+                    if (user?.isBd == true || user?.role == 'bd') ...[
+                      const SizedBox(height: 12),
+                      _buildBdBanner(context, user),
+                    ],
+
+                    const SizedBox(height: 12),
+
+                    // 6. قائمة الوظائف والإعدادات (ll_set)
+                    _buildSettingsList(context, user),
+                  ],
+                ),
               ),
             ),
           ],
@@ -134,7 +166,10 @@ class ProfileScreen extends StatelessWidget {
 
   /// لوحة المستخدم العلوية المركزية cl_info المطابقة تماماً لـ fragment_mine.xml
   Widget _buildUserInfoPanel(BuildContext context, UserModel? user) {
-    final photoUrl = (user?.photoUrl != null && user!.photoUrl.isNotEmpty) ? user.photoUrl : null;
+    final authPhoto = SupabaseAuthService().currentUser?.photoUrl;
+    final photoUrl = (user?.photoUrl != null && user!.photoUrl.isNotEmpty)
+        ? user.photoUrl
+        : ((authPhoto != null && authPhoto.isNotEmpty) ? authPhoto : null);
     final userId = (user?.customId != null && user!.customId.isNotEmpty)
         ? user.customId
         : ((1000000 + (user?.uid.hashCode.abs() ?? 0) % 9000000).toString());
@@ -178,7 +213,11 @@ class ProfileScreen extends StatelessWidget {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const UserProfileScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => UserProfileScreen(
+                            targetUid: user?.uid ?? SupabaseAuthService().currentUid,
+                          ),
+                        ),
                       );
                     },
                     child: SizedBox(
@@ -194,7 +233,7 @@ class ProfileScreen extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.white, width: 4),
-                              color: Colors.white,
+                              color: const Color(0xFF2A2830),
                               boxShadow: [
                                 BoxShadow(
                                   color: Colors.black.withValues(alpha: 0.08),
@@ -204,45 +243,50 @@ class ProfileScreen extends StatelessWidget {
                               ],
                             ),
                             clipBehavior: Clip.antiAlias,
-                            child: photoUrl != null
-                                ? Image(
-                                    image: R.cachedImage(photoUrl),
+                            child: (photoUrl != null && photoUrl.isNotEmpty)
+                                ? CachedNetworkImage(
+                                    imageUrl: photoUrl,
+                                    width: 92,
+                                    height: 92,
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Image.asset(
+                                    placeholder: (_, __) => Image.asset(
+                                      isMale ? R.avaBoy : R.avaGirl,
+                                      width: 92,
+                                      height: 92,
+                                      fit: BoxFit.cover,
+                                    ),
+                                    errorWidget: (_, __, ___) => Image.asset(
                                       'assets/images/default_header.png',
+                                      width: 92,
+                                      height: 92,
                                       fit: BoxFit.cover,
                                       errorBuilder: (_, __, ___) => Image.asset(
                                         isMale ? R.avaBoy : R.avaGirl,
+                                        width: 92,
+                                        height: 92,
                                         fit: BoxFit.cover,
                                       ),
                                     ),
                                   )
                                 : Image.asset(
                                     'assets/images/default_header.png',
+                                    width: 92,
+                                    height: 92,
                                     fit: BoxFit.cover,
                                     errorBuilder: (_, __, ___) => Image.asset(
                                       isMale ? R.avaBoy : R.avaGirl,
+                                      width: 92,
+                                      height: 92,
                                       fit: BoxFit.cover,
                                     ),
                                   ),
                           ),
 
-                          // الإطار الخارجي: إطار SVGA النشط أو mine_avatar_ic.webp
+                          // الإطار الخارجي: إطار SVGA النشط
                           if (hasFrame)
                             Positioned.fill(
                               child: IgnorePointer(
                                 child: _buildFrameWidget(user.activeFrame!),
-                              ),
-                            )
-                          else
-                            Positioned.fill(
-                              child: IgnorePointer(
-                                child: R.loadAsset(
-                                  'assets/mipmap-xxhdpi/mine_avatar_ic.webp',
-                                  width: 122,
-                                  height: 122,
-                                  fit: BoxFit.contain,
-                                ),
                               ),
                             ),
                         ],
@@ -279,6 +323,22 @@ class ProfileScreen extends StatelessWidget {
                       height: 16,
                       fit: BoxFit.contain,
                     ),
+                    if (user != null && user.country.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(3),
+                        child: Image.network(
+                          'https://flagcdn.com/w40/${UserIdWidget.resolveCountryCode(user.country)}.png',
+                          width: 20,
+                          height: 14,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Text(
+                            UserIdWidget.countryCodeToEmoji(UserIdWidget.resolveCountryCode(user.country)),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
 
@@ -329,6 +389,9 @@ class ProfileScreen extends StatelessWidget {
 
                 // صف الأوسمة والمستوى (level_view)
                 _buildRankLevelView(context, user),
+
+                // صف القلادات الفاخرة البارزة
+                _buildNecklacesRow(user),
               ],
             ),
           ),
@@ -467,12 +530,69 @@ class ProfileScreen extends StatelessWidget {
     if (necklace.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
-      width: 32,
-      height: 32,
+      width: 44,
+      height: 44,
       child: SvgaFrame(
         svgaPath: necklace,
-        size: 32,
+        size: 44,
         fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _buildNecklacesRow(UserModel? user) {
+    if (user == null) return const SizedBox.shrink();
+    final List<String> necklaces = [];
+    final seen = <String>{};
+
+    void addNecklace(String? path) {
+      if (path == null || path.isEmpty || path == 'null') return;
+      if (seen.add(path)) necklaces.add(path);
+    }
+
+    if (user.activeNecklace != null && user.activeNecklace!.isNotEmpty) {
+      addNecklace(user.activeNecklace);
+    }
+
+    final isRechargeAgent = user.isRechargeAgent ||
+        (user.rechargeAgencyName != null && user.rechargeAgencyName!.isNotEmpty);
+    if (isRechargeAgent) {
+      final config = DynamicConfigService.instance;
+      final rc = config.rechargeAgentNecklaceSvga.isNotEmpty
+          ? config.rechargeAgentNecklaceSvga
+          : config.rechargeAgentNecklaceImg;
+      if (rc.isNotEmpty) addNecklace(rc);
+    }
+
+    for (final n in user.ownedNecklaces) {
+      addNecklace(n);
+    }
+
+    final displayList = necklaces.take(4).toList();
+    if (displayList.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (int i = 0; i < displayList.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              SizedBox(
+                width: 68,
+                height: 68,
+                child: SvgaFrame(
+                  key: ValueKey('mine_necklace_${i}_${displayList[i]}'),
+                  svgaPath: displayList[i],
+                  size: 68,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -570,7 +690,7 @@ class ProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            label,
+            context.trAuto(label),
             style: const TextStyle(
               fontSize: 12,
               color: Color(0xFF9BA1B6), // color_9BA1B6
@@ -623,18 +743,18 @@ class ProfileScreen extends StatelessWidget {
                       fit: BoxFit.contain,
                     ),
                     const SizedBox(width: 8),
-                    const Text(
-                      'المحفظة',
-                      style: TextStyle(
+                    Text(
+                      context.tr('المحفظة', 'Wallet'),
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: Color(0xFF000000),
                       ),
                     ),
                     const Spacer(),
-                    const Text(
-                      'إعادة شحن العملات الذهبية',
-                      style: TextStyle(
+                    Text(
+                      context.tr('إعادة شحن العملات الذهبية', 'Recharge Gold Coins'),
+                      style: const TextStyle(
                         fontSize: 11,
                         color: Color(0xFF9BA1B6),
                       ),
@@ -782,6 +902,279 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  /// بطاقة لوحة السوبر أدمن الفاخرة
+  Widget _buildSuperAdminBanner(BuildContext context, UserModel? user) {
+    final isSuper = user?.isSuperAdmin == true || user?.role == 'super_admin' || user?.role == 'superadmin';
+    if (!isSuper) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => SuperAdminCenterScreen(currentUser: user!)),
+          );
+        },
+        child: Container(
+          height: 68,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF2E1C68), Color(0xFF141A32)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFFFB800).withValues(alpha: 0.5), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF9C6BFF).withValues(alpha: 0.2),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [Color(0xFFFFB800), Color(0xFFB8860B)]),
+                ),
+                child: const Icon(Icons.admin_panel_settings_rounded, color: Colors.black87, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'لوحة السوبر أدمن',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFFB800),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFB800).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'SUPER ADMIN',
+                            style: TextStyle(color: Color(0xFFFFB800), fontSize: 9, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'إدارة الوكالات • تارجت الألماس • مدراء BD • صرف الراتب',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF8E9BB0)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFFFB800), size: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// بطاقة لوحة الإدارة (Admin)
+  Widget _buildAdminBanner(BuildContext context, UserModel? user) {
+    final isAdmin = user?.isAdmin == true || user?.role == 'admin';
+    if (!isAdmin) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => AdminCenterScreen(currentUser: user!)),
+          );
+        },
+        child: Container(
+          height: 68,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF4A1020), Color(0xFF141A32)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFFF4D4D).withValues(alpha: 0.5), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF4D4D).withValues(alpha: 0.15),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [Color(0xFFFF4D4D), Color(0xFF990000)]),
+                ),
+                child: const Icon(Icons.shield_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'لوحة الإدارة',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFFF4D4D),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFF4D4D).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'ADMIN',
+                            style: TextStyle(color: Color(0xFFFF4D4D), fontSize: 9, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'إدارة الوكالات • تارجت الألماس • صرف الراتب',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF8E9BB0)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFFFF4D4D), size: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// بطاقة مركز الـ BD والوكالات (BD Manager)
+  Widget _buildBdBanner(BuildContext context, UserModel? user) {
+    final isBd = user?.isBd == true || user?.role == 'bd';
+    if (!isBd) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => BDCenterScreen(currentUser: user!)),
+          );
+        },
+        child: Container(
+          height: 68,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF1E2640), Color(0xFF141A32)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.5), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [Color(0xFF6366F1), Color(0xFF4338CA)]),
+                ),
+                child: const Icon(Icons.business_center_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'مركز الـ BD والوكالات',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF818CF8),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'BD MANAGER',
+                            style: TextStyle(color: Color(0xFF818CF8), fontSize: 9, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'إدارة الوكالات التابعة • متابعة التارجت • صرف الراتب',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF8E9BB0)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF818CF8), size: 14),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   /// قائمة الوظائف والإعدادات البيضاء ll_set المطابقة لـ fragment_mine.xml
   Widget _buildSettingsList(BuildContext context, UserModel? user) {
     final isAgent = user?.isRechargeAgent == true;
@@ -807,7 +1200,7 @@ class ProfileScreen extends StatelessWidget {
             // 1. الوكالة (cl_union)
             _buildFunctionItem(
               icon: DynamicConfigService().profileHostAgencyIcon,
-              title: 'الوكالة',
+              title: DynamicConfigService().profileHostAgencyTitle,
               onTap: () {
                 Navigator.push(
                   context,
@@ -853,7 +1246,31 @@ class ProfileScreen extends StatelessWidget {
               },
             ),
 
-            // 5. مركز المهام اليومية (Task Center)
+            // 5. الشارات والميداليات (Badges and Medals)
+            _buildFunctionItem(
+              icon: DynamicConfigService().profileBadgesIcon,
+              title: DynamicConfigService().profileBadgesTitle,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BadgesScreen(initialTab: 0)),
+                );
+              },
+            ),
+
+            // 6. القلادات (Necklaces)
+            _buildFunctionItem(
+              icon: DynamicConfigService().profileNecklacesIcon,
+              title: DynamicConfigService().profileNecklacesTitle,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const BadgesScreen(initialTab: 1)),
+                );
+              },
+            ),
+
+            // 7. مركز المهام اليومية (Task Center)
             _buildFunctionItem(
               icon: 'assets/images/mine_task.png',
               title: 'مركز المهام',
@@ -865,7 +1282,7 @@ class ProfileScreen extends StatelessWidget {
               },
             ),
 
-            // 6. مكافآت تسجيل الدخول اليومي (Daily Sign-In)
+            // 8. مكافآت تسجيل الدخول اليومي (Daily Sign-In)
             _buildFunctionItem(
               icon: 'assets/mipmap-xxhdpi/mine_user_sign_ic.webp',
               title: 'تسجيل الوصول والمكافآت اليومية',
@@ -874,10 +1291,10 @@ class ProfileScreen extends StatelessWidget {
               },
             ),
 
-            // 7. علاقة CP
+            // 9. علاقة CP
             _buildFunctionItem(
               icon: DynamicConfigService().profileCpIcon,
-              title: 'علاقة CP',
+              title: DynamicConfigService().profileCpTitle,
               onTap: () {
                 Navigator.push(
                   context,
@@ -886,15 +1303,54 @@ class ProfileScreen extends StatelessWidget {
               },
             ),
 
-            // 6. بوابة شحن الوكلاء والرواتب (خاص بالوكلاء المعتمدين)
-            if (isAgent)
+            // 10. بوابة شحن الوكلاء والرواتب (خاص بالوكلاء المعتمدين - مخفية في وضع مراجعة جوجل)
+            if (isAgent && !DynamicConfigService().isReviewMode)
               _buildFunctionItem(
                 icon: DynamicConfigService().profileRechargeAgentIcon,
-                title: 'بوابة شحن الوكلاء والرواتب',
+                title: DynamicConfigService().profileRechargeAgentTitle,
                 onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const AgentRechargePortalScreen()),
+                  );
+                },
+              ),
+
+            // 11. مركز الـ BD والوكالات (خاص بمسؤولي الـ BD المعتمدين)
+            if (user?.isBd == true || user?.role == 'bd')
+              _buildFunctionItem(
+                icon: 'assets/mipmap-xxhdpi/mine_union_ic.webp',
+                title: 'مركز الـ BD والوكالات',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => BDCenterScreen(currentUser: user!)),
+                  );
+                },
+              ),
+
+            // 12. لوحة السوبر أدمن (Super Admin)
+            if (user?.isSuperAdmin == true || user?.role == 'super_admin' || user?.role == 'superadmin')
+              _buildFunctionItem(
+                icon: 'assets/mipmap-xxhdpi/union_admin_center.webp',
+                title: 'لوحة السوبر أدمن (Super Admin)',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => SuperAdminCenterScreen(currentUser: user!)),
+                  );
+                },
+              ),
+
+            // 13. لوحة الإدارة (Admin)
+            if (user?.isAdmin == true || user?.role == 'admin')
+              _buildFunctionItem(
+                icon: 'assets/mipmap-xxhdpi/union_admin_center.webp',
+                title: 'لوحة الإدارة (Admin)',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => AdminCenterScreen(currentUser: user!)),
                   );
                 },
               ),
@@ -956,12 +1412,14 @@ class ProfileScreen extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             const SizedBox(width: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF000000),
+            Builder(
+              builder: (ctx) => Text(
+                ctx.trAuto(title),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF000000),
+                ),
               ),
             ),
             const Spacer(),

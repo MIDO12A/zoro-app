@@ -5,22 +5,32 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/supabase_compat.dart';
 
 import '../../core/auth/auth_service.dart';
+import '../../services/supabase_auth_service.dart';
 import '../../core/ui/in_app_toast.dart';
 import 'screens/agency_profile_screen.dart';
 import 'screens/anchor_agent_screen.dart';
-import '../financial/agent_recharge_portal_screen.dart';
+import 'screens/agency_owner_screen.dart';
+import 'screens/agency_host_screen.dart';
+import 'screens/agency_pending_approval_screen.dart';
 
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import '../../services/cloudinary_service.dart';
+import '../../services/supabase_data_service.dart';
+import '../../models/user_model.dart';
+import 'screens/bd_center_screen.dart';
 import '../../core/cache/encrypted_image_provider.dart';
 import '../../config/r.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../providers/user_provider.dart';
 import '../../services/dynamic_config_service.dart';
+import 'data/agency_models.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 class HostAgencyScreen extends StatefulWidget {
@@ -34,6 +44,8 @@ class _HostAgencyScreenState extends State<HostAgencyScreen> {
   bool  _loading = true;
   _UserAgencyRole _role = _UserAgencyRole.none;
   String? _agencyId;
+  String? _agencyName;
+  Map<String, dynamic>? _pendingApplicationData;
 
   @override
   void initState() {
@@ -43,54 +55,143 @@ class _HostAgencyScreenState extends State<HostAgencyScreen> {
 
   // ── detect role ─────────────────────────────────────────────────────────────
   Future<void> _detect() async {
-    final uid = AuthService.currentSession?.user.id ??
-        Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final uid = user?.uid ??
+        SupabaseAuthService().currentUser?.uid ??
+        AuthService.currentSession?.user.id;
     if (uid == null) {
       if (mounted) setState(() => _loading = false);
       return;
     }
     try {
-      // 1. Check host_agency_members for active membership
-      var row = await Supabase.instance.client
-          .from('host_agency_members')
-          .select('role, agency_id')
-          .eq('user_id', uid)
-          .eq('status', 'active')
-          .maybeSingle();
+      Map<String, dynamic>? row;
 
-      // 2. If not found, check if user is direct owner in host_agencies
-      if (row == null) {
-        final ag = await Supabase.instance.client
-            .from('host_agencies')
-            .select('id, name')
-            .eq('owner_id', uid)
-            .maybeSingle();
-        if (ag != null) {
-          row = {
-            'role': 'owner',
-            'agency_id': ag['id'],
-          };
+      // 1. Check Supabase host_agency_members (column is host_uid or user_id)
+      try {
+        final mList = await Supabase.instance.client
+            .from('host_agency_members')
+            .select('role, agency_id, host_uid, user_id')
+            .or('host_uid.eq.$uid,user_id.eq.$uid')
+            .eq('status', 'active')
+            .limit(1);
+        if (mList.isNotEmpty) {
+          final m = mList.first;
+          final mUid = m['host_uid']?.toString() ?? m['user_id']?.toString() ?? '';
+          if (mUid == uid && m['agency_id'] != null && m['agency_id'].toString().isNotEmpty && m['agency_id'].toString() != 'null') {
+            row = {'role': m['role'] ?? 'host', 'agency_id': m['agency_id'].toString()};
+          }
         }
+      } catch (_) {}
+
+      // 2. Check Supabase host_agencies (column is owner_uid or owner_id) - only if active
+      if (row == null) {
+        try {
+          final agList = await Supabase.instance.client
+              .from('host_agencies')
+              .select('id, name, status, is_active, owner_uid, owner_id')
+              .or('owner_uid.eq.$uid,owner_id.eq.$uid')
+              .limit(1);
+          if (agList.isNotEmpty) {
+            final ag = agList.first;
+            final oUid = ag['owner_uid']?.toString() ?? ag['owner_id']?.toString() ?? '';
+            if (oUid == uid && ag['id'] != null && (ag['status'] == 'active' || ag['is_active'] == true)) {
+              row = {'role': 'owner', 'agency_id': ag['id'].toString(), 'name': ag['name']?.toString()};
+            }
+          }
+        } catch (_) {}
       }
 
-      // 3. If not found, check users/{uid}.agency_id
+      // 3. Check Supabase users table - verify user is actually the agency owner
       if (row == null) {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-        final agencyId = userDoc.data()?['agency_id'] as String?;
-        if (agencyId != null && agencyId.isNotEmpty) {
-          row = {
-            'role': 'host',
-            'agency_id': agencyId,
-          };
+        try {
+          final uList = await Supabase.instance.client
+              .from('users')
+              .select('agency_id, is_host_agent')
+              .eq('uid', uid)
+              .limit(1);
+          if (uList.isNotEmpty) {
+            final u = uList.first;
+            if (u['agency_id'] != null && u['agency_id'].toString().isNotEmpty && u['agency_id'].toString() != 'null' && u['is_host_agent'] == true) {
+              final agList = await Supabase.instance.client
+                  .from('host_agencies')
+                  .select('owner_uid, owner_id, name')
+                  .eq('id', u['agency_id'].toString())
+                  .limit(1);
+              if (agList.isNotEmpty) {
+                final agCheck = agList.first;
+                final oUid = agCheck['owner_uid']?.toString() ?? agCheck['owner_id']?.toString() ?? '';
+                if (oUid == uid) {
+                  row = {
+                    'role': 'owner',
+                    'agency_id': u['agency_id'].toString(),
+                    'name': agCheck['name']?.toString(),
+                  };
+                }
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 4. Check pending agency application if user doesn't have an active agency
+      if (row == null) {
+        Map<String, dynamic>? pendingApp;
+        try {
+          final pRows = await Supabase.instance.client
+              .from('agency_applications')
+              .select('*')
+              .eq('applicant_uid', uid)
+              .order('created_at', ascending: false)
+              .limit(1);
+          if (pRows.isNotEmpty) {
+            final appRow = Map<String, dynamic>.from(pRows.first as Map);
+            final st = appRow['status']?.toString().toLowerCase();
+            // Only true pending/waiting applications block the user
+            if (st == 'pending' || st == 'waiting_approval') {
+              pendingApp = appRow;
+            }
+          }
+        } catch (_) {}
+
+        if (pendingApp != null) {
+          if (!mounted) return;
+          setState(() {
+            _role = _UserAgencyRole.pendingApproval;
+            _pendingApplicationData = pendingApp;
+            _agencyId = pendingApp?['agency_id']?.toString();
+            _agencyName = null;
+            _loading = false;
+          });
+          return;
         }
       }
 
       if (!mounted) return;
       if (row == null) {
-        setState(() { _role = _UserAgencyRole.none; _loading = false; });
+        setState(() {
+          _role = _UserAgencyRole.none;
+          _agencyId = null;
+          _agencyName = null;
+          _loading = false;
+        });
       } else {
         final roleStr = row['role'] as String? ?? 'host';
         final aid     = row['agency_id'] as String?;
+        String? agName = row['name'] as String?;
+
+        if (agName == null && aid != null && aid.isNotEmpty) {
+          try {
+            final agInfo = await Supabase.instance.client
+                .from('host_agencies')
+                .select('name')
+                .eq('id', aid)
+                .maybeSingle();
+            if (agInfo != null && agInfo['name'] != null) {
+              agName = agInfo['name'].toString();
+            }
+          } catch (_) {}
+        }
+
         _UserAgencyRole role;
         if (roleStr == 'owner') {
           role = _UserAgencyRole.owner;
@@ -99,7 +200,12 @@ class _HostAgencyScreenState extends State<HostAgencyScreen> {
         } else {
           role = _UserAgencyRole.host;
         }
-        setState(() { _role = role; _agencyId = aid; _loading = false; });
+        setState(() {
+          _role = role;
+          _agencyId = aid;
+          _agencyName = agName;
+          _loading = false;
+        });
       }
     } catch (e) {
       debugPrint('[host_agency_screen] error: $e');
@@ -120,23 +226,28 @@ class _HostAgencyScreenState extends State<HostAgencyScreen> {
       );
     }
 
-    // Route to the right dashboard immediately
-    switch (_role) {
-      case _UserAgencyRole.owner:
-      case _UserAgencyRole.supervisor:
-      case _UserAgencyRole.host:
-        return AnchorAgentScreen(agencyId: _agencyId);
-      case _UserAgencyRole.none:
-        return _BrowseCreateScreen(
-          role: _role,
-          agencyId: _agencyId,
-        );
+    if (_role == _UserAgencyRole.owner || _role == _UserAgencyRole.supervisor) {
+      return AgencyOwnerScreen(agencyId: _agencyId);
+    } else if (_role == _UserAgencyRole.host) {
+      return AgencyHostScreen(agencyId: _agencyId);
+    } else if (_role == _UserAgencyRole.pendingApproval) {
+      return AgencyPendingApprovalScreen(
+        applicationData: _pendingApplicationData,
+        onRefresh: _detect,
+      );
     }
+
+    return _BrowseCreateScreen(
+      role: _role,
+      agencyId: _agencyId,
+      agencyName: _agencyName,
+      pendingApplication: _pendingApplicationData,
+    );
   }
 }
 
 // ── role enum ─────────────────────────────────────────────────────────────────
-enum _UserAgencyRole { owner, supervisor, host, none }
+enum _UserAgencyRole { owner, supervisor, host, pendingApproval, none }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 //  Browse + Create Screen  —  matches unions_activity_main.xml
@@ -144,10 +255,14 @@ enum _UserAgencyRole { owner, supervisor, host, none }
 class _BrowseCreateScreen extends StatefulWidget {
   final _UserAgencyRole role;
   final String? agencyId;
+  final String? agencyName;
+  final Map<String, dynamic>? pendingApplication;
 
   const _BrowseCreateScreen({
     this.role = _UserAgencyRole.none,
     this.agencyId,
+    this.agencyName,
+    this.pendingApplication,
   });
 
   @override
@@ -166,11 +281,16 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
   bool _loadingList = true;
   bool _creating    = false;
 
-  final _nameCtrl    = TextEditingController();
-  final _descCtrl    = TextEditingController();
-  final _phoneCtrl   = TextEditingController();
+  final _nameCtrl       = TextEditingController();
+  final _descCtrl       = TextEditingController();
+  final _phoneCtrl      = TextEditingController();
+  final _supervisorCtrl = TextEditingController();
   String? _selectedCountry;
-  bool _showForm   = false;
+  bool _showForm      = false;
+  File? _agencyImage;
+  bool _pickingImage  = false;
+  String? _supervisorName;
+  bool _lookingUpSupervisor = false;
 
   static const _countries = [
     'السعودية', 'الإمارات', 'الكويت', 'قطر', 'البحرين', 'عُمان',
@@ -191,21 +311,64 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
     _nameCtrl.dispose();
     _descCtrl.dispose();
     _phoneCtrl.dispose();
+    _supervisorCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAgencyImage() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      if (picked != null) {
+        setState(() {
+          _agencyImage = File(picked.path);
+        });
+      }
+    } catch (e) {
+      debugPrint('[host_agency_screen] image pick error: $e');
+    }
+  }
+
+  Future<void> _lookupSupervisor(String id) async {
+    final clean = id.trim();
+    if (clean.isEmpty) {
+      setState(() => _supervisorName = null);
+      return;
+    }
+    setState(() => _lookingUpSupervisor = true);
+    try {
+      final user = await SupabaseDataService().findUserByIdOrCustomId(clean);
+      if (mounted) {
+        setState(() {
+          _supervisorName = user != null && user.name.isNotEmpty ? user.name : null;
+          _lookingUpSupervisor = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _lookingUpSupervisor = false);
+    }
   }
 
   Future<void> _loadTop() async {
     try {
-      List rows;
+      List rows = [];
       try {
         rows = await _sb
             .from('host_agencies')
-            .select('id, name, tier, photo_url, total_diamonds_monthly, member_count, is_hall_of_fame')
-            .eq('is_active', true)
+            .select('*')
+            .eq('status', 'active')
             .order('total_diamonds_monthly', ascending: false)
-            .limit(20);
-      } catch (_) {
-        rows = await _sb.from('host_agencies').select('*').limit(30);
+            .limit(50);
+      } catch (_) {}
+
+      if (rows.isEmpty) {
+        try {
+          rows = await _sb
+              .from('host_agencies')
+              .select('*')
+              .order('created_at', ascending: false)
+              .limit(50);
+        } catch (_) {}
       }
       if (mounted) {
         setState(() {
@@ -222,31 +385,154 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
   Future<void> _createAgency() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
-      KayanInAppToast.warning('أدخل اسم الوكالة');
+      KayanInAppToast.warning('يرجى إدخال اسم الوكالة');
       return;
     }
-    final uid = AuthService.currentSession?.user.id ??
-        Provider.of<UserProvider>(context, listen: false).currentUser?.uid;
-    if (uid == null) return;
+
+    final supervisorQuery = _supervisorCtrl.text.trim();
+    if (supervisorQuery.isEmpty) {
+      KayanInAppToast.warning('يجب إدخال آيدي المشرف أو مسؤول الـ BD التابع له');
+      return;
+    }
+
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final uid = currentUser?.uid ??
+        SupabaseAuthService().currentUser?.uid ??
+        AuthService.currentSession?.user.id;
+    if (uid == null) {
+      KayanInAppToast.warning('يجب تسجيل الدخول أولاً');
+      return;
+    }
 
     setState(() => _creating = true);
     try {
-      await _sb.rpc('agency_create', params: {
-        'p_name':        name,
-        'p_description': _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        'p_photo_url':   null,
-        'p_phone':       _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
-        'p_country':     _selectedCountry,
-      });
+      // 1. Resolve supervisor details
+      UserModel? supervisorUser;
+      try {
+        supervisorUser = await SupabaseDataService().findUserByIdOrCustomId(supervisorQuery);
+      } catch (_) {}
+
+      final supervisorUid = supervisorUser?.uid ?? supervisorQuery;
+      final supervisorCustomId = supervisorUser?.customId.isNotEmpty == true ? supervisorUser!.customId : supervisorQuery;
+      final supervisorName = supervisorUser?.name.isNotEmpty == true ? supervisorUser!.name : (_supervisorName ?? 'مشرف معتمد');
+
+      // 2. Upload photo if selected
+      String? photoUrl;
+      if (_agencyImage != null) {
+        try {
+          photoUrl = await CloudinaryService().uploadImage(
+            _agencyImage!,
+            publicId: 'agency_${DateTime.now().millisecondsSinceEpoch}',
+          );
+        } catch (uploadErr) {
+          debugPrint('[host_agency_screen] upload photo error: $uploadErr');
+        }
+      }
+
+      final now = DateTime.now().toUtc();
+      final nowIso = now.toIso8601String();
+      final agencyId = 'agency_${now.millisecondsSinceEpoch}_$uid';
+      final agencyCodeInt = 100 + Random().nextInt(900);
+      final agencyCode = agencyCodeInt.toString();
+      final finalLogo = photoUrl ?? currentUser?.photoUrl ?? '';
+
+      // 3. Application payload for Supabase agency_applications table
+      final appId = 'app_${now.millisecondsSinceEpoch}_$uid';
+      final applicationPayload = {
+        'id': appId,
+        'applicant_uid': uid,
+        'agency_name': name,
+        'description': _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : 'وكالة مضيفين معتمدة',
+        'whatsapp': _phoneCtrl.text.trim().isNotEmpty ? _phoneCtrl.text.trim() : null,
+        'country': _selectedCountry ?? 'عالمي',
+        'status': 'pending',
+        'created_at': nowIso,
+      };
+
+      // 4. Pre-register agency record as pending in Supabase host_agencies
+      final agencyPayload = {
+        'id': agencyId,
+        'name': name,
+        'agency_code': agencyCodeInt,
+        'owner_uid': uid,
+        'owner_id': uid,
+        'description': _descCtrl.text.trim().isNotEmpty ? _descCtrl.text.trim() : 'وكالة مضيفين معتمدة',
+        'logo_url': finalLogo,
+        'background_url': '',
+        'announcement': '',
+        'level': 1,
+        'monthly_exp': 0,
+        'total_exp': 0,
+        'total_diamonds_monthly': 0,
+        'total_diamonds_cumulative': 0,
+        'monthly_diamonds': 0,
+        'member_count': 1,
+        'admin_count': 0,
+        'is_active': false,
+        'status': 'pending',
+        'data': {
+          'whatsapp': _phoneCtrl.text.trim().isNotEmpty ? _phoneCtrl.text.trim() : null,
+          'country': _selectedCountry ?? 'عالمي',
+          'tier': 'bronze',
+          'commission_rate': 0.10,
+          'supervisor_id': supervisorCustomId,
+          'supervisor_uid': supervisorUid,
+          'supervisor_custom_id': supervisorCustomId,
+          'supervisor_name': supervisorName,
+          'bd_uid': supervisorUid,
+          'bd_id': supervisorCustomId,
+          'app_id': appId,
+          'agency_code': agencyCode,
+          'user_name': currentUser?.name ?? 'مستخدم',
+          'custom_id': currentUser?.customId ?? '',
+          'user_avatar': finalLogo,
+        },
+        'created_at': nowIso,
+        'updated_at': nowIso,
+      };
+
+      // 5. Save to Supabase (agency_applications & host_agencies)
+      try {
+        await _sb.from('agency_applications').insert(applicationPayload);
+      } catch (appErr) {
+        debugPrint('[host_agency_screen] Supabase insert agency_applications error: $appErr');
+      }
+
+      try {
+        await _sb.from('host_agencies').upsert(agencyPayload);
+      } catch (agErr) {
+        debugPrint('[host_agency_screen] Supabase upsert host_agencies error: $agErr');
+      }
+
+      // 6. Send notification to supervisor via Supabase
+      if (supervisorUid.isNotEmpty && supervisorUid != uid) {
+        try {
+          await SupabaseDataService().sendNotification(
+            uid: supervisorUid,
+            type: 'agency_application',
+            title: 'طلب فتح وكالة جديدة تحت إشرافك 🎙️',
+            body: 'قدم المستخدم [${currentUser?.name ?? "مستخدم"}] طلب فتح وكالة [$name] تحت إشرافك.',
+            data: {'agency_id': agencyId, 'app_id': appId},
+          );
+        } catch (e) {
+          debugPrint('[host_agency_screen] supervisor notification error: $e');
+        }
+      }
+
       if (!mounted) return;
-      KayanInAppToast.agency('تم إنشاء الوكالة بنجاح! 🎉');
+      KayanInAppToast.agency('تم إرسال طلب فتح الوكالة بنجاح وهو بانتظار موافقة الإدارة ⏳');
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const HostAgencyScreen()),
+        MaterialPageRoute(
+          builder: (_) => AgencyPendingApprovalScreen(
+            applicationData: applicationPayload,
+            agencyId: agencyId,
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      KayanInAppToast.warning('تعذر إنشاء الوكالة: $e');
+      KayanInAppToast.warning('تعذر إرسال طلب الوكالة: $e');
     } finally {
       if (mounted) setState(() => _creating = false);
     }
@@ -270,7 +556,60 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
     );
   }
 
-  void _openBdCenterSheet() {
+  Future<void> _openBdCenterSheet() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    var user = userProvider.currentUser;
+    final uid = user?.uid ?? AuthService.currentSession?.user.id ?? SupabaseAuthService().currentUser?.uid;
+
+    if (uid == null || uid.isEmpty) {
+      KayanInAppToast.warning('يرجى تسجيل الدخول أولاً');
+      return;
+    }
+
+    bool isBd = user?.isBd == true;
+
+    // Comprehensive check across Supabase users and app_config
+    if (!isBd) {
+      // 1. Supabase users table
+      try {
+        final row = await _sb.from('users').select('is_bd, role').or('uid.eq.$uid,id.eq.$uid').maybeSingle();
+        if (row != null && (row['is_bd'] == true || row['role'] == 'bd' || ['supervisor', 'admin', 'super_admin'].contains(row['role']))) {
+          isBd = true;
+        }
+      } catch (_) {}
+
+      // 2. Supabase app_config (bd_meta_$uid)
+      if (!isBd) {
+        try {
+          final cfg = await _sb.from('app_config').select('value').eq('key', 'bd_meta_$uid').maybeSingle();
+          if (cfg != null && cfg['value'] != null) {
+            final val = cfg['value'] as Map?;
+            if (val != null && val['status'] != 'revoked') {
+              isBd = true;
+            }
+          }
+        } catch (_) {}
+      }
+
+
+    }
+
+    if (isBd) {
+      await userProvider.loadUser(uid);
+      user = userProvider.currentUser;
+      if (user != null && !user.isBd) {
+        user = user.copyWith(isBd: true);
+      }
+      if (mounted && user != null) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => BDCenterScreen(currentUser: user!)),
+        );
+      }
+      return;
+    }
+
+    if (!mounted) return;
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF1F1F1F),
@@ -310,22 +649,92 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
                 const Text(
                   '• مرحباً بك في مركز دعم وتطوير وكالات التطبيق الرسمية.\n'
                   '• يتم تقييم الوكالات أسبوعياً بناءً على إجمالي ألماس مضيفي الوكالة.\n'
-                  '• الترقية إلى فئات متقدمة (Gold, Platinum, Diamond) تمنح الوكالة نسب أرباح إضافية ومكافآت حصرية.\n'
+                  '• الترقية إلى فئات متقدمة تمنح الوكالة نسب أرباح إضافية ومكافآت حصرية.\n'
                   '• للتواصل مع فريق إدارة الوكالات ومسؤولي الـ BD يرجى مراجعة خدمة العملاء.',
                   style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.6),
                 ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 46,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFF9500),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                const SizedBox(height: 14),
+                if (user != null)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white12),
                     ),
-                    child: const Text('فهمت ذلك', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, color: Color(0xFFFF9500), size: 18),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'إذا تم تعيينك مؤخراً كـ BD أو مشرف، اضغط أدناه لتحديث الصلاحيات والدخول للمركز.',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          Navigator.pop(ctx);
+                          bool verified = false;
+
+                          // Refresh and verify BD status
+                          try {
+                            final row = await _sb.from('users').select('is_bd, role').or('uid.eq.$uid,id.eq.$uid').maybeSingle();
+                            if (row != null && (row['is_bd'] == true || row['role'] == 'bd')) {
+                              verified = true;
+                            }
+                          } catch (_) {}
+
+                          if (!verified) {
+                            try {
+                              final cfg = await _sb.from('app_config').select('value').eq('key', 'bd_meta_$uid').maybeSingle();
+                              if (cfg != null && cfg['value'] != null) {
+                                final val = cfg['value'] as Map?;
+                                if (val != null && val['status'] != 'revoked') verified = true;
+                              }
+                            } catch (_) {}
+                          }
+
+
+
+                          if (verified) {
+                            await userProvider.loadUser(uid);
+                            var fresh = userProvider.currentUser;
+                            if (fresh != null && !fresh.isBd) {
+                              fresh = fresh.copyWith(isBd: true);
+                            }
+                            if (context.mounted && fresh != null) {
+                              KayanInAppToast.success('تم تفعيل صلاحيات الـ BD بنجاح 🎉');
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => BDCenterScreen(currentUser: fresh!)),
+                              );
+                              return;
+                            }
+                          }
+
+                          KayanInAppToast.warning('حسابك ليس مسجلاً كمسؤول BD بعد');
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF9500),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: const Text('تحديث والدخول كـ BD', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('إغلاق', style: TextStyle(color: Colors.white54)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -344,7 +753,6 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
     final scrollView = CustomScrollView(
       slivers: [
         _buildHeader(cfg),
-        SliverToBoxAdapter(child: _buildRechargeAgentBanner()),
         if (cfg.hostAgencyBannerImage.isNotEmpty)
           SliverToBoxAdapter(
             child: Padding(
@@ -358,6 +766,10 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
             ),
           ),
         SliverToBoxAdapter(child: _buildUnionRankHeader(cfg)),
+        if (widget.agencyId != null && widget.agencyId!.isNotEmpty && widget.role != _UserAgencyRole.none)
+          SliverToBoxAdapter(child: _buildMyAgencyCard(cfg)),
+        if (widget.role == _UserAgencyRole.pendingApproval)
+          SliverToBoxAdapter(child: _buildPendingApprovalCard()),
         if (_showForm) ...[
           SliverToBoxAdapter(child: const SizedBox(height: 16)),
           SliverToBoxAdapter(child: _buildCreateForm(cfg)),
@@ -391,23 +803,33 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
     );
   }
 
-  Widget _buildRechargeAgentBanner() {
-    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
-    if (user?.isRechargeAgent != true) return const SizedBox.shrink();
+  // ── My Agency Quick Entry Banner ──
+  Widget _buildMyAgencyCard(DynamicConfigService cfg) {
+    final roleText = widget.role == _UserAgencyRole.owner
+        ? 'مالك الوكالة'
+        : widget.role == _UserAgencyRole.supervisor
+            ? 'مشرف الوكالة'
+            : 'مضيف رسمي بالوكالة';
+
+    final agencyDisplayName = widget.agencyName != null && widget.agencyName!.isNotEmpty
+        ? widget.agencyName!
+        : 'وكالتي الرسمية';
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF2A1E07), Color(0xFF1F1805)],
+          colors: [Color(0xFF2E1A47), Color(0xFF1E1E2E)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.5), width: 1.2),
+        border: Border.all(color: const Color(0xFFFFD700).withValues(alpha: 0.6), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFFFD700).withValues(alpha: 0.15),
-            blurRadius: 12,
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
@@ -415,16 +837,14 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFFFFD700).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFFFD700)),
+              color: const Color(0xFFFFD700).withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFFFFD700), width: 1.5),
             ),
-            child: const Center(
-              child: Text('💼', style: TextStyle(fontSize: 22)),
-            ),
+            child: const Icon(Icons.shield_rounded, color: Color(0xFFFFD700), size: 26),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -433,36 +853,44 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
               children: [
                 Row(
                   children: [
-                    Flexible(
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFF9500).withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFFF9500), width: 0.8),
+                      ),
                       child: Text(
-                        user?.rechargeAgencyName ?? 'وكالة الشحن المعتمدة',
+                        roleText,
                         style: const TextStyle(
-                          color: Color(0xFFFFD700),
-                          fontSize: 14,
+                          color: Color(0xFFFF9500),
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFD700).withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'وكيل معتمد',
-                        style: TextStyle(color: Color(0xFFFFD700), fontSize: 10, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 5),
+                Text(
+                  agencyDisplayName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
                 const Text(
-                  'أنت وكيل شحن معتمد. انقر هنا لدخول لوحة تحكم الوكالة وشحن الرصيد.',
-                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                  'اضغط للدخول إلى لوحة التحكم والتارجت والأرباح',
+                  style: TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -470,21 +898,85 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
           const SizedBox(width: 8),
           ElevatedButton(
             onPressed: () {
+              if (widget.role == _UserAgencyRole.none || widget.agencyId == null || widget.agencyId!.isEmpty) {
+                KayanInAppToast.warning('أنت لست منضماً لأي وكالة حالياً - يرجى تقديم طلب انضمام أولاً');
+                return;
+              }
+              final isOwner = widget.role == _UserAgencyRole.owner || widget.role == _UserAgencyRole.supervisor;
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const AgentRechargePortalScreen()),
+                MaterialPageRoute(
+                  builder: (_) => isOwner
+                      ? AgencyOwnerScreen(agencyId: widget.agencyId)
+                      : AgencyHostScreen(agencyId: widget.agencyId),
+                ),
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFD700),
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              backgroundColor: const Color(0xFFFF9500),
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              minimumSize: Size.zero,
+              elevation: 4,
             ),
-            child: const Text(
-              'دخول البوابة',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('دخول', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                SizedBox(width: 4),
+                Icon(Icons.arrow_forward_ios_rounded, size: 12),
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Pending Approval Banner ──
+  Widget _buildPendingApprovalCard() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2C2416),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFFF9500).withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.hourglass_top_rounded, color: Color(0xFFFF9500), size: 28),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'طلب الانضمام قيد المراجعة',
+                  style: TextStyle(color: Color(0xFFFFFEEC93), fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'تم إرسال طلبك إلى إدارة الوكالة وهو قيد التدقيق حالياً.',
+                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AgencyPendingApprovalScreen(
+                    applicationData: widget.pendingApplication,
+                    agencyId: widget.agencyId,
+                  ),
+                ),
+              );
+            },
+            child: const Text('متابعة', style: TextStyle(color: Color(0xFFFF9500), fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -574,7 +1066,7 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
                     if (widget.role == _UserAgencyRole.owner || widget.role == _UserAgencyRole.supervisor) {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => AnchorAgentScreen(agencyId: widget.agencyId)),
+                        MaterialPageRoute(builder: (_) => AgencyOwnerScreen(agencyId: widget.agencyId)),
                       );
                     } else {
                       KayanInAppToast.warning('هذا المركز مخصص لمدراء الوكالات فقط');
@@ -586,13 +1078,18 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
                   iconAsset: 'assets/mipmap-xxhdpi/union_my_agency.webp',
                   title: 'وكالتي',
                   onTap: () {
-                    if (widget.role != _UserAgencyRole.none && widget.agencyId != null) {
+                    if (widget.role != _UserAgencyRole.none && widget.agencyId != null && widget.agencyId!.isNotEmpty) {
+                      final isOwner = widget.role == _UserAgencyRole.owner || widget.role == _UserAgencyRole.supervisor;
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => AgencyProfileScreen(agencyId: widget.agencyId!)),
+                        MaterialPageRoute(
+                          builder: (_) => isOwner
+                              ? AgencyOwnerScreen(agencyId: widget.agencyId)
+                              : AgencyHostScreen(agencyId: widget.agencyId),
+                        ),
                       );
                     } else {
-                      KayanInAppToast.warning('لست منضماً لأي وكالة حالياً');
+                      KayanInAppToast.warning('أنت لست منضماً لأي وكالة حالياً - يرجى تقديم طلب انضمام أولاً');
                     }
                   },
                 ),
@@ -605,12 +1102,6 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
                       _showForm = !_showForm;
                     });
                   },
-                ),
-                // 4. BD Center
-                _buildFunctionButton(
-                  iconAsset: 'assets/mipmap-xxhdpi/union_bd_center.webp',
-                  title: 'مركز BD',
-                  onTap: _openBdCenterSheet,
                 ),
               ],
             ),
@@ -761,13 +1252,114 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'إنشاء وكالة جديدة',
-            style: TextStyle(color: Color(0xFFFFFEEC93), fontWeight: FontWeight.bold, fontSize: 16),
+          const Center(
+            child: Text(
+              'إنشاء وكالة مضيفين جديدة',
+              style: TextStyle(color: Color(0xFFFFFEEC93), fontWeight: FontWeight.bold, fontSize: 17),
+            ),
           ),
           const SizedBox(height: 16),
+
+          // ── Agency Avatar Picker ──
+          Center(
+            child: GestureDetector(
+              onTap: _pickAgencyImage,
+              child: Stack(
+                children: [
+                  Container(
+                    width: 90,
+                    height: 90,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.08),
+                      border: Border.all(color: const Color(0xFFFF9500), width: 2),
+                      image: _agencyImage != null
+                          ? DecorationImage(image: FileImage(_agencyImage!), fit: BoxFit.cover)
+                          : null,
+                    ),
+                    child: _agencyImage == null
+                        ? const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo_rounded, color: Color(0xFFFFFEEC93), size: 28),
+                                SizedBox(height: 4),
+                                Text(
+                                  'شعار الوكالة',
+                                  style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF9500),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.edit, color: Colors.white, size: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+
           _field(_nameCtrl, 'اسم الوكالة *', Icons.badge_rounded),
           const SizedBox(height: 12),
+
+          // ── Required Supervisor / BD ID ──
+          _field(
+            _supervisorCtrl,
+            'آيدي المشرف أو مسؤول الـ BD *',
+            Icons.supervisor_account_rounded,
+            onChanged: _lookupSupervisor,
+          ),
+          if (_lookingUpSupervisor) ...[
+            const SizedBox(height: 6),
+            const Row(
+              children: [
+                SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF9500))),
+                SizedBox(width: 8),
+                Text('جاري التحقق من هوية المشرف...', style: TextStyle(color: Colors.white70, fontSize: 11)),
+              ],
+            ),
+          ] else if (_supervisorName != null) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00E5A0).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF00E5A0).withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.verified, color: Color(0xFF00E5A0), size: 14),
+                  const SizedBox(width: 6),
+                  Text(
+                    'المشرف المعتمد: $_supervisorName',
+                    style: const TextStyle(color: Color(0xFF00E5A0), fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (_supervisorCtrl.text.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            const Text(
+              '⚠️ سيتم ربط طلب الوكالة بالآيدي المدخل لإشراف الـ BD',
+              style: TextStyle(color: Color(0xFFFFB800), fontSize: 11),
+            ),
+          ],
+          const SizedBox(height: 12),
+
           _field(_descCtrl, 'وصف الوكالة (اختياري)', Icons.description_rounded, maxLines: 2),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
@@ -797,9 +1389,11 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
             items: _countries.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
             onChanged: (v) => setState(() => _selectedCountry = v),
           ),
-          const SizedBox(height: 12),
-          _field(_phoneCtrl, 'رقم الهاتف (اختياري)', Icons.phone_rounded, keyboardType: TextInputType.phone),
-          const SizedBox(height: 16),
+          if (!cfg.isReviewMode) ...[
+            const SizedBox(height: 12),
+            _field(_phoneCtrl, 'رقم الهاتف / واتساب (اختياري)', Icons.phone_rounded, keyboardType: TextInputType.phone),
+          ],
+          const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -820,11 +1414,19 @@ class _BrowseCreateScreenState extends State<_BrowseCreateScreen>
     );
   }
 
-  Widget _field(TextEditingController ctrl, String hint, IconData icon, {int maxLines = 1, TextInputType? keyboardType}) {
+  Widget _field(
+    TextEditingController ctrl,
+    String hint,
+    IconData icon, {
+    int maxLines = 1,
+    TextInputType? keyboardType,
+    ValueChanged<String>? onChanged,
+  }) {
     return TextField(
       controller: ctrl,
       maxLines: maxLines,
       keyboardType: keyboardType,
+      onChanged: onChanged,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(
         hintText: hint,
@@ -865,11 +1467,10 @@ class _AgencyRankItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = agency['name'] as String? ?? 'وكالة';
-    final photoUrl = agency['photo_url'] as String?;
+    final photoUrl = agency['photo_url'] as String? ?? agency['photoUrl'] as String? ?? agency['logo_url'] as String? ?? agency['avatar'] as String?;
     final diamonds = (agency['total_diamonds_monthly'] as num?)?.toInt() ?? 0;
     final members = (agency['member_count'] as num?)?.toInt() ?? 0;
-    final id = agency['id'] as String? ?? '';
-    final shortId = id.length > 8 ? id.substring(0, 8) : id;
+    final displayId = formatAgencyNumericId(agency);
 
     String cardBg;
     String numBg;
@@ -972,7 +1573,9 @@ class _AgencyRankItem extends StatelessWidget {
                     clipBehavior: Clip.antiAlias,
                     child: (photoUrl != null && photoUrl.isNotEmpty)
                         ? Image(
-                            image: EncryptedImageProvider(photoUrl),
+                            image: (photoUrl.startsWith('http') && !photoUrl.endsWith('.enc'))
+                                ? R.cachedImage(photoUrl)
+                                : EncryptedImageProvider(photoUrl),
                             fit: BoxFit.cover,
                             errorBuilder: (_, __, ___) => Center(
                               child: Text(
@@ -1034,7 +1637,7 @@ class _AgencyRankItem extends StatelessWidget {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'ID: $shortId',
+                              'ID: $displayId',
                               style: const TextStyle(color: Colors.white54, fontSize: 11),
                             ),
                           ],
@@ -1100,14 +1703,40 @@ class _AgencySearchSheetState extends State<_AgencySearchSheet> {
     }
     setState(() => _searching = true);
     try {
-      final rows = await Supabase.instance.client
-          .from('host_agencies')
-          .select('id, name, photo_url, member_count, total_diamonds_monthly')
-          .or('name.ilike.%$q%,id.ilike.%$q%')
-          .limit(15);
+      final combined = <Map<String, dynamic>>[];
+      final seenIds = <String>{};
+
+      // 1. Supabase search
+      try {
+        final rows = await Supabase.instance.client
+            .from('host_agencies')
+            .select('id, name, photo_url, member_count, total_diamonds_monthly, agency_public_id, agency_code')
+            .or('name.ilike.%$q%,id.ilike.%$q%,agency_public_id.ilike.%$q%,agency_code.ilike.%$q%')
+            .limit(20);
+        for (final r in rows) {
+          final m = Map<String, dynamic>.from(r as Map);
+          final id = m['id']?.toString() ?? '';
+          if (id.isNotEmpty && !seenIds.contains(id)) {
+            seenIds.add(id);
+            combined.add(m);
+          }
+        }
+      } catch (_) {}
+
+
+
+      // If user typed 3-digit number (e.g. 100, 200), prioritize matches where formatAgencyNumericId == q
+      combined.sort((a, b) {
+        final numA = formatAgencyNumericId(a);
+        final numB = formatAgencyNumericId(b);
+        if (numA == q && numB != q) return -1;
+        if (numB == q && numA != q) return 1;
+        return 0;
+      });
+
       if (mounted) {
         setState(() {
-          _results = List<Map<String, dynamic>>.from(rows as List);
+          _results = combined;
           _searching = false;
         });
       }
