@@ -1,26 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:restart_app/restart_app.dart' show Restart;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import '../models/app_asset_model.dart';
 import '../config/app_config.dart';
+import 'supabase_data_service.dart';
+import 'supabase_auth_service.dart';
 
 class DynamicConfigService extends ChangeNotifier {
   static final DynamicConfigService _instance = DynamicConfigService._();
   static DynamicConfigService get instance => _instance;
   factory DynamicConfigService() => _instance;
   DynamicConfigService._();
-
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  StreamSubscription? _authSub;
   
   // App Configurations
-  String _appName = 'Zero';
+  String _appName = 'Ahla Live';
   String _logoUrl = '';
   String _splashUrl = '';
   bool _splashEnabled = false;
@@ -115,8 +111,11 @@ class DynamicConfigService extends ChangeNotifier {
   // Level config
   int _coinsPerRechargeXp = 10;
 
-  // Diamond-to-coin exchange rate (e.g. 2 means 2 diamonds = 1 coin)
-  int _diamondToCoinRate = 2;
+  // Diamond-to-coin exchange rate (e.g. 1 means 1 diamond = 1 coin, 2 means 1 diamond = 2 coins, or fractional)
+  int _diamondToCoinRate = 1;
+  double _coinsPerDiamond = 1.0;
+  int _minDiamondsToExchange = 10;
+  bool _diamondExchangeEnabled = true;
   int _roomBgPrice = 100;
 
   // Room theme gradients (from app_config.roomGradients)
@@ -384,26 +383,185 @@ class DynamicConfigService extends ChangeNotifier {
 
   String get agencyHostNecklaceName => _screenStr('agency', 'hostNecklaceName', _rawConfig['agency']?['hostNecklaceName']?.toString() ?? 'قلادة المضيف');
 
+  // Recharge Agent SVGA Necklace (خاص بوكيل الشحن فقط من لوحة التحكم)
+  String get rechargeAgentNecklaceSvga {
+    final v = _screenStr('agency', 'rechargeAgentNecklaceSvga',
+        _screenStr('agency', 'rechargeNecklaceSvga',
+            _screenStr('necklaces', 'rechargeAgentNecklaceSvga',
+                _screenStr('necklaces', 'rechargeNecklaceSvga',
+                    _screenStr('rechargeAgent', 'necklaceSvga',
+                        _screenStr('agentRecharge', 'necklaceSvga',
+                            _screenStr('userProfile', 'rechargeAgentNecklaceSvga', '')))))));
+    if (v.isNotEmpty) return v;
+    return _rawConfig['agency']?['rechargeAgentNecklaceSvga']?.toString() ??
+        _rawConfig['agency']?['rechargeNecklaceSvga']?.toString() ??
+        _rawConfig['rechargeAgentNecklaceSvga']?.toString() ??
+        _rawConfig['recharge_agent_necklace_svga']?.toString() ??
+        _rawConfig['rechargeNecklaceSvga']?.toString() ??
+        _rawConfig['recharge_necklace_svga']?.toString() ??
+        _rawConfig['agentRecharge']?['necklaceSvga']?.toString() ??
+        _rawConfig['recharge_agent_svga']?.toString() ??
+        '';
+  }
+
+  String get rechargeAgentNecklaceImg {
+    final v = _screenStr('agency', 'rechargeAgentNecklaceImg',
+        _screenStr('agency', 'rechargeNecklaceImg',
+            _screenStr('necklaces', 'rechargeAgentNecklaceImg',
+                _screenStr('necklaces', 'rechargeNecklaceImg',
+                    _screenStr('rechargeAgent', 'necklaceImg',
+                        _screenStr('agentRecharge', 'necklaceImg',
+                            _screenStr('userProfile', 'rechargeAgentNecklaceImg', '')))))));
+    if (v.isNotEmpty) return v;
+    return _rawConfig['agency']?['rechargeAgentNecklaceImg']?.toString() ??
+        _rawConfig['agency']?['rechargeNecklaceImg']?.toString() ??
+        _rawConfig['rechargeAgentNecklaceImg']?.toString() ??
+        _rawConfig['recharge_agent_necklace_img']?.toString() ??
+        _rawConfig['rechargeNecklaceImg']?.toString() ??
+        _rawConfig['recharge_necklace_img']?.toString() ??
+        _rawConfig['agentRecharge']?['necklaceImg']?.toString() ??
+        _rawConfig['recharge_agent_img']?.toString() ??
+        '';
+  }
+
+  String get rechargeAgentNecklaceName => _screenStr('agency', 'rechargeAgentNecklaceName', _rawConfig['agency']?['rechargeAgentNecklaceName']?.toString() ?? 'قلادة وكيل الشحن');
+
   // ── Agent Recharge Screen Customization (من لوحة التحكم) ──
+  String get agentRechargeTitle => _screenStr('agentRecharge', 'title', 'وكالة الشحن');
+  String get agentRechargeSubtitle => _screenStr('agentRecharge', 'subtitle', 'وكيل معتمد');
   String get agentRechargeBgImage => _screenStr('agentRecharge', 'backgroundImage', '');
   String get agentRechargeHeaderBgImage => _screenStr('agentRecharge', 'headerBgImage', '');
+  String get agentRechargeTransferTitleImage => _screenStr('agentRecharge', 'transferTitleImage', '');
+  String get agentRechargeTransferCardBgImage => _screenStr('agentRecharge', 'transferCardBgImage', '');
+  String get agentRechargeConfirmBtnImage => _screenStr('agentRecharge', 'confirmButtonImage', '');
+  String get agentRechargeCoinIcon => _screenStr('agentRecharge', 'coinIconImage', '');
+  Color get agentRechargeCoinsTextColor => _screenColor('agentRecharge', 'coinsTextColor', const Color(0xFFFDE638));
+  Color get agentRechargeCardBorderColor => _screenColor('agentRecharge', 'cardBorderColor', const Color(0x803ED78A));
   Color get agentRechargeHeaderColor => _screenColor('agentRecharge', 'headerColor', const Color(0xFF16151A));
   Color get agentRechargeTextColor => _screenColor('agentRecharge', 'textColor', Colors.white);
-  Color get agentRechargeCardColor => _screenColor('agentRecharge', 'cardColor', Colors.white);
-  Color get agentRechargeAccentColor => _screenColor('agentRecharge', 'accentColor', const Color(0xFFFFD700));
+  Color get agentRechargeCardColor => _screenColor('agentRecharge', 'cardColor', const Color(0xFF141C24));
+  Color get agentRechargeAccentColor => _screenColor('agentRecharge', 'accentColor', const Color(0xFF3ED78A));
+  Color get agentRechargeTabBarColor => _screenColor('agentRecharge', 'tabBarColor', const Color(0xFF1E1D24));
   String get agentRechargeBannerImage => _screenStr('agentRecharge', 'bannerImage', '');
+  String get agentRechargeDataPanelBgImage => _screenStr('agentRecharge', 'dataPanelBgImage', '');
+  String get agentRechargeCoinsBgImage => _screenStr('agentRecharge', 'coinsBgImage', '');
+  String get agentRechargeDiamondsBgImage => _screenStr('agentRecharge', 'diamondsBgImage', '');
+  String get agentRechargeTabDashboard => _screenStr('agentRecharge', 'tabDashboard', '📊 لوحة التحكم');
+  String get agentRechargeTabRecharge => _screenStr('agentRecharge', 'tabRecharge', '💸 شحن');
+  String get agentRechargeTabHistory => _screenStr('agentRecharge', 'tabHistory', '📋 السجل');
+  String get agentRechargeTabDiamond => _screenStr('agentRecharge', 'tabDiamond', '💎 ألماسي');
+  String get agentRechargeTabUsd => _screenStr('agentRecharge', 'tabUsd', '💵 الدولار');
+  String get agentRechargeWithdrawText => _screenStr('agentRecharge', 'withdrawButtonText', 'إرسال طلب السحب 📤');
+  String get agentRechargeConfirmText => _screenStr('agentRecharge', 'confirmButtonText', 'تأكيد الشحن ✅');
 
   // ── Host Agency & Hosts Screens Customization (من لوحة التحكم) ──
   String get hostAgencyBgImage => _screenStr('hostAgency', 'backgroundImage', '');
   String get hostAgencyHeaderBgImage => _screenStr('hostAgency', 'headerBgImage', '');
+  String get hostAgencyLevelBgImage => _screenStr('hostAgency', 'levelCardBgImage', '');
+  String get hostAgencyFlagImage => _screenStr('hostAgency', 'flagImage', '');
+  String get hostAgencyRankNameBgImage => _screenStr('hostAgency', 'rankNameBgImage', '');
+  String get hostAgencyBroadcastIcon => _screenStr('hostAgency', 'broadcastIconImage', '');
+  String get hostAgencyEditIcon => _screenStr('hostAgency', 'editIconImage', '');
+  String get hostAgencyHelpIcon => _screenStr('hostAgency', 'helpIconImage', '');
+  String get hostAgencyLineDotIcon => _screenStr('hostAgency', 'lineDotIconImage', '');
+  String get hostAgencyDiamondCardBgImage => _screenStr('hostAgency', 'diamondCardBgImage', '');
+  String get hostAgencyDiamondWatermark => _screenStr('hostAgency', 'diamondWatermarkImage', '');
+  String get hostAgencySalaryCardBgImage => _screenStr('hostAgency', 'salaryCardBgImage', '');
+  String get hostAgencySalaryWatermark => _screenStr('hostAgency', 'salaryWatermarkImage', '');
+  String get hostAgencyTransferArrowIcon => _screenStr('hostAgency', 'transferArrowIconImage', '');
+  String get hostAgencyWithdrawBtnImage => _screenStr('hostAgency', 'withdrawButtonImage', '');
   Color get hostAgencyHeaderColor => _screenColor('hostAgency', 'headerColor', const Color(0xFF16151A));
   Color get hostAgencyTextColor => _screenColor('hostAgency', 'textColor', Colors.white);
-  Color get hostAgencyCardColor => _screenColor('hostAgency', 'cardColor', Colors.white);
+  Color get hostAgencyCardColor => _screenColor('hostAgency', 'cardColor', const Color(0xFF00B5B3));
   String get hostAgencyBannerImage => _screenStr('hostAgency', 'bannerImage', '');
 
   String get hostsBgImage => _screenStr('hosts', 'backgroundImage', hostAgencyBgImage);
+  String get hostsHoursCardBgImage => _screenStr('hosts', 'hoursCardBgImage', '');
+  Color get hostsCardColor => _screenColor('hosts', 'cardColor', Colors.white);
   Color get hostsHeaderColor => _screenColor('hosts', 'headerColor', hostAgencyHeaderColor);
   Color get hostsTextColor => _screenColor('hosts', 'textColor', hostAgencyTextColor);
+
+  // Agency Owner & Host Screen Custom Assets
+  String get hostAgencyAddMemberBtnImage => _screenStr('hostAgency', 'addMemberButtonImage', '');
+  String get hostAgencyAddMemberBtnText => _screenStr('hostAgency', 'addMemberButtonText', 'إضافة عضو');
+  String get hostAgencyAdminSettingIcon => _screenStr('hostAgency', 'adminSettingIconImage', '');
+  String get hostAgencyMemberDetailIcon => _screenStr('hostAgency', 'memberDetailIconImage', '');
+  String get hostAgencyMemberDeleteIcon => _screenStr('hostAgency', 'memberDeleteIconImage', '');
+  String get hostAgencyMemberMoreIcon => _screenStr('hostAgency', 'memberMoreIconImage', '');
+  String get hostAgencyTagHostIcon => _screenStr('hostAgency', 'tagHostIconImage', '');
+  String get hostsStageCompletedBadge => _screenStr('hosts', 'stageCompletedBadgeImage', '');
+  String get hostsStageNextBadge => _screenStr('hosts', 'stageNextBadgeImage', '');
+
+  /// Returns a decoration image from either a network URL or local asset.
+  DecorationImage? getDecorationImage(
+    String? urlOrPath, {
+    String? defaultAsset,
+    BoxFit fit = BoxFit.cover,
+    ColorFilter? colorFilter,
+  }) {
+    final effective = (urlOrPath != null && urlOrPath.trim().isNotEmpty)
+        ? urlOrPath.trim()
+        : (defaultAsset != null && defaultAsset.trim().isNotEmpty ? defaultAsset.trim() : null);
+    if (effective == null || effective.isEmpty) return null;
+    final provider = getImageProvider(effective);
+    if (provider == null) return null;
+    return DecorationImage(
+      image: provider,
+      fit: fit,
+      colorFilter: colorFilter,
+    );
+  }
+
+  /// Returns an [ImageProvider] for a network URL or local asset.
+  ImageProvider? getImageProvider(String? urlOrPath, {String? defaultAsset}) {
+    final effective = (urlOrPath != null && urlOrPath.trim().isNotEmpty)
+        ? urlOrPath.trim()
+        : (defaultAsset != null && defaultAsset.trim().isNotEmpty ? defaultAsset.trim() : null);
+    if (effective == null || effective.isEmpty) return null;
+    if (effective.startsWith('http://') || effective.startsWith('https://')) {
+      return CachedNetworkImageProvider(effective);
+    }
+    return AssetImage(effective);
+  }
+
+  /// Builds a dynamic image widget from [customUrl] with fallback to [defaultAsset] or [fallbackWidget].
+  Widget buildDynamicImage(
+    String? customUrl, {
+    String? defaultAsset,
+    double? width,
+    double? height,
+    BoxFit fit = BoxFit.contain,
+    Color? color,
+    Widget? fallbackWidget,
+  }) {
+    final effective = (customUrl != null && customUrl.trim().isNotEmpty)
+        ? customUrl.trim()
+        : (defaultAsset != null && defaultAsset.trim().isNotEmpty ? defaultAsset.trim() : null);
+    if (effective == null || effective.isEmpty) {
+      return fallbackWidget ?? const SizedBox.shrink();
+    }
+    if (effective.startsWith('http://') || effective.startsWith('https://')) {
+      return CachedNetworkImage(
+        imageUrl: effective,
+        width: width,
+        height: height,
+        fit: fit,
+        color: color,
+        placeholder: (_, __) => fallbackWidget ?? const SizedBox.shrink(),
+        errorWidget: (_, __, ___) => (defaultAsset != null && defaultAsset.isNotEmpty)
+            ? Image.asset(defaultAsset, width: width, height: height, fit: fit, color: color)
+            : (fallbackWidget ?? const SizedBox.shrink()),
+      );
+    }
+    return Image.asset(
+      effective,
+      width: width,
+      height: height,
+      fit: fit,
+      color: color,
+      errorBuilder: (_, __, ___) => fallbackWidget ?? const SizedBox.shrink(),
+    );
+  }
 
   // ── CP Space Screen Customization (من لوحة التحكم) ──
   String get cpSpaceBgImage => _screenStr('cp', 'backgroundImage', _screenStr('cpSpace', 'backgroundImage', ''));
@@ -412,21 +570,35 @@ class DynamicConfigService extends ChangeNotifier {
   Color get cpSpaceTextColor => _screenColor('cp', 'textColor', Colors.white);
   Color get cpSpaceCardColor => _screenColor('cp', 'cardColor', const Color(0xFF1E1D24));
 
-  // ── Profile Screen Icons Customization (من لوحة التحكم) ──
+  // ── Profile Screen Customization (من لوحة التحكم) ──
   String get profileCpIcon => _screenStr('profile', 'cpIcon',
       _assetsOverride['assets/mipmap-xxhdpi/mine_cp_ic.webp'] ??
       _assetsOverride['mine_cp_ic'] ??
       'assets/mipmap-xxhdpi/mine_cp_ic.webp');
+  String get profileCpTitle => _screenStr('profile', 'cpTitle', 'علاقة CP');
 
   String get profileRechargeAgentIcon => _screenStr('profile', 'rechargeAgentIcon',
       _assetsOverride['assets/images/profile/ic_coinseller_entrance.png'] ??
       _assetsOverride['ic_coinseller_entrance'] ??
       'assets/images/profile/ic_coinseller_entrance.png');
+  String get profileRechargeAgentTitle => _screenStr('profile', 'rechargeAgentTitle', 'وكالة الشحن');
 
   String get profileHostAgencyIcon => _screenStr('profile', 'hostAgencyIcon',
       _assetsOverride['assets/mipmap-xxhdpi/mine_union_ic.webp'] ??
       _assetsOverride['mine_union_ic'] ??
       'assets/mipmap-xxhdpi/mine_union_ic.webp');
+  String get profileHostAgencyTitle => _screenStr('profile', 'hostAgencyTitle', 'الوكالة');
+
+  String get profileBadgesIcon => _screenStr('profile', 'badgesIcon',
+      _assetsOverride['assets/mipmap-xxhdpi/ic_new_user_badge.png'] ??
+      _assetsOverride['ic_new_user_badge'] ??
+      'assets/mipmap-xxhdpi/ic_new_user_badge.png');
+  String get profileBadgesTitle => _screenStr('profile', 'badgesTitle', 'الشارات والميداليات');
+
+  String get profileNecklacesIcon => _screenStr('profile', 'necklacesIcon',
+      _assetsOverride['assets/mipmap-xxhdpi/ic_new_user_badge.png'] ??
+      'assets/mipmap-xxhdpi/ic_new_user_badge.png');
+  String get profileNecklacesTitle => _screenStr('profile', 'necklacesTitle', 'القلادات');
 
   // Getters
   String get appName => _appName;
@@ -578,6 +750,9 @@ class DynamicConfigService extends ChangeNotifier {
   String get vipBuyBtnImgUrl => _vipBuyBtnImgUrl;
   int get coinsPerRechargeXp => _coinsPerRechargeXp;
   int get diamondToCoinRate => _diamondToCoinRate;
+  double get coinsPerDiamond => _coinsPerDiamond;
+  int get minDiamondsToExchange => _minDiamondsToExchange;
+  bool get diamondExchangeEnabled => _diamondExchangeEnabled;
   int get roomBgPrice => _roomBgPrice;
 
   // Room gradient getter (returns gradient if found, null otherwise)
@@ -745,6 +920,9 @@ class DynamicConfigService extends ChangeNotifier {
   Color get discoverTextColor => _screenColor('discover', 'textColor', const Color(0xFF16151A));
   Color get discoverSubTextColor => _screenColor('discover', 'subTextColor', const Color(0xFF9BA1B6));
   Color get discoverCardBgColor => _screenColor('discover', 'cardBgColor', const Color(0xFFF7F7F8));
+  Color get discoverFollowCardBgColor => _screenColor('discover', 'followCardBgColor', const Color(0x59000000));
+  Color get discoverFollowCardBorderColor => _screenColor('discover', 'followCardBorderColor', const Color(0x33FFFFFF));
+  Color get discoverFollowCardBtnColor => _screenColor('discover', 'followCardBtnColor', const Color(0xFFFFD700));
 
   // Message screen visuals
   String get messageBackgroundImage => _screenStr('message', 'backgroundImage', '');
@@ -1079,292 +1257,337 @@ class DynamicConfigService extends ChangeNotifier {
   int _assetVersion = 0;
   int get assetVersion => _assetVersion;
 
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _configSub;
-  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _appAssetsSub;
   Completer<void>? _initCompleter;
   Completer<void>? _initAssetsCompleter;
 
-  bool get hasValidSession => _auth.currentUser != null;
+  bool get hasValidSession => SupabaseAuthService().currentUid != null;
 
   // Initialize and listen to app_config
   Future<void> init() async {
     _initCompleter = Completer<void>();
-    // Cancel any existing subscriptions (safety for hot restart)
-    _configSub?.cancel();
-    _appAssetsSub?.cancel();
-    _authSub?.cancel();
-    // Re-subscribe when auth state changes (Firestore streams handle their own auth)
-    _authSub = _auth.authStateChanges().listen((user) {
-      if (user == null) {
-        debugPrint('DynamicConfigService: signed out, cancelling subscriptions');
-        _configSub?.cancel();
-        _appAssetsSub?.cancel();
-      } else {
-        debugPrint('DynamicConfigService: signed in, reconnecting subscriptions...');
-        _configSub?.cancel();
-        _appAssetsSub?.cancel();
-        _setupConfigStream();
-        _setupAppAssetsStream();
-      }
-    });
+    _initAssetsCompleter = Completer<void>();
 
     _setupConfigStream();
-    _initAssetsCompleter = Completer<void>();
     _setupAppAssetsStream();
 
-    // Only block startup on first data when there is a real session. When
-    // signed out, Firestore streams won't emit (permission denied) and we do
-    // NOT want to stall the app at the login screen for the full timeout.
-    if (!hasValidSession) {
-      _initCompleter?.complete();
-      _initAssetsCompleter?.complete();
-      debugPrint('DynamicConfigService: no session, continuing immediately with defaults');
-      return;
-    }
-
-    // Wait for both config and assets first data, or timeout after 10s.
-    // Never throw here: a timeout (offline / signed-out) must not block startup.
     try {
       await Future.any([
-        _initCompleter!.future.timeout(const Duration(seconds: 10)),
-        _initAssetsCompleter!.future.timeout(const Duration(seconds: 10)),
+        _initCompleter!.future.timeout(const Duration(seconds: 4)),
+        _initAssetsCompleter!.future.timeout(const Duration(seconds: 4)),
       ]);
     } catch (e) {
       debugPrint('DynamicConfigService: init timed out, continuing with defaults: $e');
     }
   }
 
-  void _setupAppAssetsStream() {
-    _appAssetsSub = _db.collection('app_assets').snapshots().listen((snap) {
-      final assets = <String, AppAssetModel>{};
-      for (final doc in snap.docs) {
-        final row = doc.data();
-        if (row['is_active'] != false) {
-          final asset = AppAssetModel.fromJson(row);
-          if (asset.key.isNotEmpty) {
-            assets[asset.key] = asset;
-            final old = _appAssets[asset.key];
-            if (old != null && old.remoteUrl != null) {
-              final oldUrl = old.remoteUrl!;
-              final newUrl = asset.remoteUrl ?? '';
-              if (oldUrl != newUrl && newUrl.isNotEmpty) {
-                imageCache.evict(CachedNetworkImageProvider(oldUrl));
-                DefaultCacheManager().removeFile(oldUrl);
-                debugPrint('DynamicConfigService: evicted cache for ${asset.key}');
-              }
-            }
-          }
+  void _setupAppAssetsStream() async {
+    // 1. Fetch from Supabase app_assets first (primary source for dashboard Cloudinary uploads)
+    try {
+      final sbAssets = await SupabaseDataService().getAppAssets();
+      if (sbAssets.isNotEmpty) {
+        _appAssets.addAll(sbAssets);
+        _assetVersion++;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('DynamicConfigService: supabase app_assets error: $e');
+    } finally {
+      if (_initAssetsCompleter != null && !_initAssetsCompleter!.isCompleted) {
+        _initAssetsCompleter!.complete();
+      }
+    }
+
+    // 2. Periodic refresh from Supabase for any newly uploaded dashboard assets
+    Timer.periodic(const Duration(seconds: 15), (_) async {
+      try {
+        final freshAssets = await SupabaseDataService().getAppAssets();
+        if (freshAssets.isNotEmpty) {
+          _appAssets.addAll(freshAssets);
+          _assetVersion++;
+          notifyListeners();
         }
-      }
-      _appAssets = assets;
-      _assetVersion++;
-      if (_initAssetsCompleter != null && !_initAssetsCompleter!.isCompleted) {
-        _initAssetsCompleter!.complete();
-      }
-      notifyListeners();
-    }, onError: (error) {
-      debugPrint('DynamicConfigService: app_assets stream error: $error');
-      if (_initAssetsCompleter != null && !_initAssetsCompleter!.isCompleted) {
-        _initAssetsCompleter!.complete();
-      }
-      final errorStr = error.toString();
-      if (errorStr.contains('permission-denied') || errorStr.contains('Unauthenticated')) {
-        debugPrint('DynamicConfigService: permissions error detected, stopping retry. Waiting for sign-in...');
-        return;
-      }
-      Future.delayed(const Duration(seconds: 5), () {
-        debugPrint('DynamicConfigService: reconnecting app_assets stream...');
-        _appAssetsSub?.cancel();
-        _setupAppAssetsStream();
-      });
+      } catch (_) {}
     });
   }
 
+  void _applyConfig(Map<String, dynamic> config) {
+    for (final entry in config.entries) {
+      final k = entry.key;
+      final v = entry.value;
+      if (v is String) {
+        final parsed = _tryParseJson(v);
+        _rawConfig[k] = parsed ?? v;
+      } else {
+        _rawConfig[k] = v;
+      }
+    }
+
+    _appName = _rawConfig['appName'] as String? ?? _appName;
+    _logoUrl = _rawConfig['logoUrl'] as String? ?? _logoUrl;
+    _splashEnabled = _rawConfig['splash_enabled'] == true ||
+        _rawConfig['splash_enabled'] == 'true' ||
+        _rawConfig['splashEnabled'] == true ||
+        _rawConfig['splashEnabled'] == 'true';
+    _splashImageUrl = _rawConfig['splash_image_url'] as String? ??
+        _rawConfig['splashImageUrl'] as String? ??
+        _rawConfig['splashGifUrl'] as String? ??
+        '';
+    _splashSvgaUrl = _rawConfig['splash_svga_url'] as String? ??
+        _rawConfig['splashSvgaUrl'] as String? ??
+        '';
+    _splashDurationSeconds =
+        (_rawConfig['splash_duration_seconds'] as num?)?.toInt() ??
+            (_rawConfig['splashDurationSeconds'] as num?)?.toInt() ??
+            3;
+    _splashActionType = _rawConfig['splash_action_type'] as String? ??
+        _rawConfig['splashActionType'] as String? ??
+        '';
+    _splashActionValue = _rawConfig['splash_action_value'] as String? ??
+        _rawConfig['splashActionValue'] as String? ??
+        '';
+    _splashUrl = _splashImageUrl.isNotEmpty
+        ? _splashImageUrl
+        : (_rawConfig['splashGifUrl'] as String? ?? _splashUrl);
+    _splashNameColor =
+        _parseColor(_rawConfig['splashNameColor'], _splashNameColor);
+
+    _primaryBg = _parseColor(_rawConfig['primaryBg'], _primaryBg);
+    _textPrimary = _parseColor(_rawConfig['textPrimary'], _textPrimary);
+    _textSecondary = _parseColor(_rawConfig['textSecondary'], _textSecondary);
+    _goldColor = _parseColor(_rawConfig['goldColor'], _goldColor);
+    _buttonColor = _parseColor(_rawConfig['buttonColor'], _buttonColor);
+    _buttonTextColor =
+        _parseColor(_rawConfig['buttonTextColor'], _buttonTextColor);
+    _headerColor = _parseColor(_rawConfig['headerColor'], _headerColor);
+    _tabBarColor = _parseColor(_rawConfig['tabBarColor'], _tabBarColor);
+
+    _bottomNavBgImage =
+        _rawConfig['bottomNavBgImage'] as String? ?? _bottomNavBgImage;
+    _bottomNavGradientStart = _parseColor(
+        _rawConfig['bottomNavGradientStart'], _bottomNavGradientStart);
+    _bottomNavGradientEnd =
+        _parseColor(_rawConfig['bottomNavGradientEnd'], _bottomNavGradientEnd);
+    _bottomNavActiveTextColor = _parseColor(
+        _rawConfig['bottomNavActiveTextColor'], _bottomNavActiveTextColor);
+    _bottomNavInactiveTextColor = _parseColor(
+        _rawConfig['bottomNavInactiveTextColor'], _bottomNavInactiveTextColor);
+
+    _giftPanelBgImage = _rawConfig['giftPanelBgImage'] as String? ??
+        _rawConfig['gift_panel_bg_image'] as String? ??
+        _giftPanelBgImage;
+    _giftPanelHeaderBgImage = _rawConfig['giftPanelHeaderBgImage'] as String? ??
+        _rawConfig['gift_panel_header_bg_image'] as String? ??
+        _giftPanelHeaderBgImage;
+    _giftPanelBgColor = _parseColor(
+        _rawConfig['giftPanelBgColor'] ?? _rawConfig['gift_panel_bg_color'],
+        _giftPanelBgColor);
+    _giftPanelTabColor = _parseColor(
+        _rawConfig['giftPanelTabColor'] ?? _rawConfig['gift_panel_tab_color'],
+        _giftPanelTabColor);
+
+    _fontFamily = _rawConfig['fontFamily'] as String? ?? _fontFamily;
+    _borderRadius =
+        (_rawConfig['borderRadius'] as num?)?.toInt() ?? _borderRadius;
+
+    _vipCardBgColor =
+        _parseColor(_rawConfig['vipCardBgColor'], _vipCardBgColor);
+    _vipCardBorderColor =
+        _parseColor(_rawConfig['vipCardBorderColor'], _vipCardBorderColor);
+
+    _vipCardBgImgUrl =
+        _rawConfig['vipCardBgImgUrl'] as String? ?? _vipCardBgImgUrl;
+    _vipPurchaseBarImgUrl =
+        _rawConfig['vipPurchaseBarImgUrl'] as String? ?? _vipPurchaseBarImgUrl;
+    _vipCoinImgUrl = _rawConfig['vipCoinImgUrl'] as String? ?? _vipCoinImgUrl;
+    _vipBuyBtnImgUrl =
+        _rawConfig['vipBuyBtnImgUrl'] as String? ?? _vipBuyBtnImgUrl;
+
+    _discoverTitle =
+        _rawConfig['discoverTitle'] as String? ?? _discoverTitle;
+    _messageTitle = _rawConfig['messageTitle'] as String? ?? _messageTitle;
+    _profileTitle = _rawConfig['profileTitle'] as String? ?? _profileTitle;
+    final titles = _rawConfig['screenTitles'];
+    if (titles is Map) {
+      _screenTitles =
+          titles.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    final cs = _rawConfig['customStrings'] ?? _rawConfig['custom_strings'];
+    if (cs is Map) {
+      _customStrings =
+          cs.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    _cpWebUrl = _rawConfig['cpWebUrl'] as String? ?? _cpWebUrl;
+    _audioCompany =
+        _rawConfig['audioProvider'] as String? ?? _audioCompany;
+
+    final overrides = _rawConfig['assetsOverrides'];
+    if (overrides is Map) {
+      _assetsOverride =
+          overrides.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    final sizes = _rawConfig['assetSizes'];
+    if (sizes is Map) {
+      _assetSizes = sizes.map((k, v) {
+        final entry =
+            v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
+        return MapEntry(k.toString(), entry);
+      });
+    }
+
+    final msg = _rawConfig['lastSystemMessage'];
+    if (msg is Map) {
+      _lastSystemMessage = msg.cast<String, dynamic>();
+    }
+
+    _coinsPerRechargeXp =
+        (_rawConfig['coinsPerRechargeXp'] ?? 10).toInt();
+    _diamondToCoinRate = (_rawConfig['diamondToCoinRate'] ?? 1).toInt();
+    if (_diamondToCoinRate <= 0) _diamondToCoinRate = 1;
+
+    dynamic dec = _rawConfig['diamond_exchange_config'];
+    if (dec is String) {
+      try {
+        dec = jsonDecode(dec);
+      } catch (_) {}
+    }
+
+    if (dec is Map) {
+      _coinsPerDiamond = (dec['coinsPerDiamond'] as num?)?.toDouble() ?? 1.0;
+      _minDiamondsToExchange = (dec['minDiamonds'] as num?)?.toInt() ?? 10;
+      _diamondExchangeEnabled = dec['enabled'] != false;
+    } else {
+      // Fallback: 1 diamond gives 1 / _diamondToCoinRate or _diamondToCoinRate coins
+      if (_diamondToCoinRate == 1) {
+        _coinsPerDiamond = 1.0;
+      } else if (_diamondToCoinRate > 1) {
+        _coinsPerDiamond = 1.0 / _diamondToCoinRate;
+      } else {
+        _coinsPerDiamond = 1.0;
+      }
+      _minDiamondsToExchange = 10;
+      _diamondExchangeEnabled = true;
+    }
+    _roomBgPrice = (_rawConfig['roomBgPrice'] ?? 100).toInt();
+
+    final rc = _rawConfig['rankConfig'];
+    if (rc is Map) {
+      _rankBg = rc['bg']?.toString() ?? _rankBg;
+      _rankGoldColor = rc['goldColor']?.toString() ?? _rankGoldColor;
+      _rankSilverColor = rc['silverColor']?.toString() ?? _rankSilverColor;
+      _rankBronzeColor = rc['bronzeColor']?.toString() ?? _rankBronzeColor;
+      _rankPointsColor = rc['pointsColor']?.toString() ?? _rankPointsColor;
+      _rankTrophyIcon = rc['trophyIcon']?.toString() ?? _rankTrophyIcon;
+      _rankEmptyText = rc['emptyText']?.toString() ?? _rankEmptyText;
+      _rankTextColor = rc['textColor']?.toString() ?? _rankTextColor;
+      _rankSubTextColor = rc['subTextColor']?.toString() ?? _rankSubTextColor;
+
+      for (final cat in ['wealth', 'charm', 'room']) {
+        final catCfg = <String, String>{};
+        final bgKey = '${cat}_bg';
+        if (rc[bgKey] != null) catCfg['bg'] = rc[bgKey].toString();
+        for (final field in [
+          'goldColor',
+          'silverColor',
+          'bronzeColor',
+          'pointsColor',
+          'textColor',
+          'subTextColor'
+        ]) {
+          final key = '${cat}_$field';
+          if (rc[key] != null) catCfg[field] = rc[key].toString();
+        }
+        if (catCfg.isNotEmpty) _rankCategoryConfigs[cat] = catCfg;
+      }
+    }
+
+    final rgs = _rawConfig['roomGradients'];
+    if (rgs is Map) {
+      _roomGradients = rgs.map((k, v) {
+        final colors = <Color>[];
+        if (v is List) {
+          for (final c in v) {
+            colors.add(_parseColor(c.toString(), Colors.transparent));
+          }
+        }
+        return MapEntry(k.toString(), colors);
+      });
+    }
+
+    final rbi = _rawConfig['roomBgImages'];
+    if (rbi is Map) {
+      _roomBgImages =
+          rbi.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    final gi = _rawConfig['globalImages'];
+    if (gi is Map) {
+      _globalImages =
+          gi.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    final cc = _rawConfig['chatColors'];
+    if (cc is Map) {
+      _chatBubbleSelf = _parseColor(cc['bubbleSelf'], _chatBubbleSelf);
+      _chatBubbleOther = _parseColor(cc['bubbleOther'], _chatBubbleOther);
+      _chatBubbleSelfBorder =
+          _parseColor(cc['bubbleSelfBorder'], _chatBubbleSelfBorder);
+      _chatBubbleOtherBorder =
+          _parseColor(cc['bubbleOtherBorder'], _chatBubbleOtherBorder);
+      _chatBubbleSelfText =
+          _parseColor(cc['bubbleSelfText'], _chatBubbleSelfText);
+      _chatBubbleOtherText =
+          _parseColor(cc['bubbleOtherText'], _chatBubbleOtherText);
+    }
+
+    final sv = _rawConfig['screenVisuals'];
+    if (sv is Map) {
+      _screenVisuals = sv.map((k, v) => MapEntry(k.toString(), v));
+    }
+
+    final io = _rawConfig['iconOverrides'];
+    if (io is Map) {
+      _iconOverrides =
+          io.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
+
+    final restartFlag = _rawConfig['restartApp'];
+    if (restartFlag == true || restartFlag == 'true') {
+      debugPrint('DynamicConfigService: restartApp flag detected, restarting...');
+      SupabaseDataService().setAppConfig('restartApp', false);
+      Restart.restartApp();
+    }
+
+    _assetVersion++;
+    if (_initCompleter != null && !_initCompleter!.isCompleted) {
+      _initCompleter!.complete();
+    }
+    notifyListeners();
+  }
+
   void _setupConfigStream() {
-    _configSub = _db.collection('app_config').snapshots().listen((snap) {
-      final config = <String, dynamic>{};
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        final k = doc.id;
-        final v = data['value'];
-        if (v is String) {
-          final parsed = _tryParseJson(v);
-          config[k] = parsed ?? v;
-        } else {
-          config[k] = v;
-        }
+    // 1. Fetch from Supabase app_config first
+    SupabaseDataService().getAppConfig().then((cfg) {
+      if (cfg.isNotEmpty) {
+        _applyConfig(cfg);
       }
-
-      _rawConfig.clear();
-      _rawConfig.addAll(config);
-
-      _appName = config['appName'] as String? ?? _appName;
-      _logoUrl = config['logoUrl'] as String? ?? _logoUrl;
-      _splashEnabled = config['splash_enabled'] == true || config['splash_enabled'] == 'true' || config['splashEnabled'] == true || config['splashEnabled'] == 'true';
-      _splashImageUrl = config['splash_image_url'] as String? ?? config['splashImageUrl'] as String? ?? config['splashGifUrl'] as String? ?? '';
-      _splashSvgaUrl = config['splash_svga_url'] as String? ?? config['splashSvgaUrl'] as String? ?? '';
-      _splashDurationSeconds = (config['splash_duration_seconds'] as num?)?.toInt() ?? (config['splashDurationSeconds'] as num?)?.toInt() ?? 3;
-      _splashActionType = config['splash_action_type'] as String? ?? config['splashActionType'] as String? ?? '';
-      _splashActionValue = config['splash_action_value'] as String? ?? config['splashActionValue'] as String? ?? '';
-      _splashUrl = _splashImageUrl.isNotEmpty ? _splashImageUrl : (config['splashGifUrl'] as String? ?? _splashUrl);
-      _splashNameColor = _parseColor(config['splashNameColor'], _splashNameColor);
-
-      _primaryBg = _parseColor(config['primaryBg'], _primaryBg);
-      _textPrimary = _parseColor(config['textPrimary'], _textPrimary);
-      _textSecondary = _parseColor(config['textSecondary'], _textSecondary);
-      _goldColor = _parseColor(config['goldColor'], _goldColor);
-      _buttonColor = _parseColor(config['buttonColor'], _buttonColor);
-      _buttonTextColor = _parseColor(config['buttonTextColor'], _buttonTextColor);
-      _headerColor = _parseColor(config['headerColor'], _headerColor);
-      _tabBarColor = _parseColor(config['tabBarColor'], _tabBarColor);
-
-      _bottomNavBgImage = config['bottomNavBgImage'] as String? ?? _bottomNavBgImage;
-      _bottomNavGradientStart = _parseColor(config['bottomNavGradientStart'], _bottomNavGradientStart);
-      _bottomNavGradientEnd = _parseColor(config['bottomNavGradientEnd'], _bottomNavGradientEnd);
-      _bottomNavActiveTextColor = _parseColor(config['bottomNavActiveTextColor'], _bottomNavActiveTextColor);
-      _bottomNavInactiveTextColor = _parseColor(config['bottomNavInactiveTextColor'], _bottomNavInactiveTextColor);
-
-      _giftPanelBgImage = config['giftPanelBgImage'] as String? ?? config['gift_panel_bg_image'] as String? ?? _giftPanelBgImage;
-      _giftPanelHeaderBgImage = config['giftPanelHeaderBgImage'] as String? ?? config['gift_panel_header_bg_image'] as String? ?? _giftPanelHeaderBgImage;
-      _giftPanelBgColor = _parseColor(config['giftPanelBgColor'] ?? config['gift_panel_bg_color'], _giftPanelBgColor);
-      _giftPanelTabColor = _parseColor(config['giftPanelTabColor'] ?? config['gift_panel_tab_color'], _giftPanelTabColor);
-
-      _fontFamily = config['fontFamily'] as String? ?? _fontFamily;
-      _borderRadius = (config['borderRadius'] as num?)?.toInt() ?? _borderRadius;
-
-      _vipCardBgColor = _parseColor(config['vipCardBgColor'], _vipCardBgColor);
-      _vipCardBorderColor = _parseColor(config['vipCardBorderColor'], _vipCardBorderColor);
-
-      _vipCardBgImgUrl = config['vipCardBgImgUrl'] as String? ?? _vipCardBgImgUrl;
-      _vipPurchaseBarImgUrl = config['vipPurchaseBarImgUrl'] as String? ?? _vipPurchaseBarImgUrl;
-      _vipCoinImgUrl = config['vipCoinImgUrl'] as String? ?? _vipCoinImgUrl;
-      _vipBuyBtnImgUrl = config['vipBuyBtnImgUrl'] as String? ?? _vipBuyBtnImgUrl;
-
-      _discoverTitle = config['discoverTitle'] as String? ?? _discoverTitle;
-      _messageTitle = config['messageTitle'] as String? ?? _messageTitle;
-      _profileTitle = config['profileTitle'] as String? ?? _profileTitle;
-      final titles = config['screenTitles'];
-      if (titles is Map) {
-        _screenTitles = titles.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-
-      _cpWebUrl = config['cpWebUrl'] as String? ?? _cpWebUrl;
-      _audioCompany = config['audioProvider'] as String? ?? _audioCompany;
-
-      final overrides = config['assetsOverrides'];
-      if (overrides is Map) {
-        _assetsOverride = overrides.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-
-      final sizes = config['assetSizes'];
-      if (sizes is Map) {
-        _assetSizes = sizes.map((k, v) {
-          final entry = v is Map ? Map<String, dynamic>.from(v) : <String, dynamic>{};
-          return MapEntry(k.toString(), entry);
-        });
-      }
-
-      final msg = config['lastSystemMessage'];
-      if (msg is Map) {
-        _lastSystemMessage = msg.cast<String, dynamic>();
-      }
-
-      _coinsPerRechargeXp = (config['coinsPerRechargeXp'] ?? 10).toInt();
-      _diamondToCoinRate = (config['diamondToCoinRate'] ?? 2).toInt();
-      _roomBgPrice = (config['roomBgPrice'] ?? 100).toInt();
-
-      final rc = config['rankConfig'];
-      if (rc is Map) {
-        _rankBg = rc['bg']?.toString() ?? _rankBg;
-        _rankGoldColor = rc['goldColor']?.toString() ?? _rankGoldColor;
-        _rankSilverColor = rc['silverColor']?.toString() ?? _rankSilverColor;
-        _rankBronzeColor = rc['bronzeColor']?.toString() ?? _rankBronzeColor;
-        _rankPointsColor = rc['pointsColor']?.toString() ?? _rankPointsColor;
-        _rankTrophyIcon = rc['trophyIcon']?.toString() ?? _rankTrophyIcon;
-        _rankEmptyText = rc['emptyText']?.toString() ?? _rankEmptyText;
-        _rankTextColor = rc['textColor']?.toString() ?? _rankTextColor;
-        _rankSubTextColor = rc['subTextColor']?.toString() ?? _rankSubTextColor;
-
-        for (final cat in ['wealth', 'charm', 'room']) {
-          final catCfg = <String, String>{};
-          final bgKey = '${cat}_bg';
-          if (rc[bgKey] != null) catCfg['bg'] = rc[bgKey].toString();
-          for (final field in ['goldColor', 'silverColor', 'bronzeColor', 'pointsColor', 'textColor', 'subTextColor']) {
-            final key = '${cat}_$field';
-            if (rc[key] != null) catCfg[field] = rc[key].toString();
-          }
-          if (catCfg.isNotEmpty) _rankCategoryConfigs[cat] = catCfg;
-        }
-      }
-
-      final rgs = config['roomGradients'];
-      if (rgs is Map) {
-        _roomGradients = rgs.map((k, v) {
-          final colors = <Color>[];
-          if (v is List) {
-            for (final c in v) {
-              colors.add(_parseColor(c.toString(), Colors.transparent));
-            }
-          }
-          return MapEntry(k.toString(), colors);
-        });
-      }
-
-      final rbi = config['roomBgImages'];
-      if (rbi is Map) {
-        _roomBgImages = rbi.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-
-      final gi = config['globalImages'];
-      if (gi is Map) {
-        _globalImages = gi.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-
-      final cc = config['chatColors'];
-      if (cc is Map) {
-        _chatBubbleSelf = _parseColor(cc['bubbleSelf'], _chatBubbleSelf);
-        _chatBubbleOther = _parseColor(cc['bubbleOther'], _chatBubbleOther);
-        _chatBubbleSelfBorder = _parseColor(cc['bubbleSelfBorder'], _chatBubbleSelfBorder);
-        _chatBubbleOtherBorder = _parseColor(cc['bubbleOtherBorder'], _chatBubbleOtherBorder);
-        _chatBubbleSelfText = _parseColor(cc['bubbleSelfText'], _chatBubbleSelfText);
-        _chatBubbleOtherText = _parseColor(cc['bubbleOtherText'], _chatBubbleOtherText);
-      }
-
-      final sv = config['screenVisuals'];
-      if (sv is Map) {
-        _screenVisuals = sv.map((k, v) => MapEntry(k.toString(), v));
-      }
-
-      final io = config['iconOverrides'];
-      if (io is Map) {
-        _iconOverrides = io.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-
-      final cs = config['customStrings'] ?? config['custom_strings'];
-      if (cs is Map) {
-        _customStrings = cs.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-
-      final restartFlag = config['restartApp'];
-      if (restartFlag == true || restartFlag == 'true') {
-        debugPrint('DynamicConfigService: restartApp flag detected, restarting...');
-        _db.collection('app_config').doc('restartApp').set({'value': false}, SetOptions(merge: true));
-        Restart.restartApp();
-      }
-
-      _assetVersion++;
+    }).catchError((e) {
+      debugPrint('DynamicConfigService: supabase getAppConfig error: $e');
+    }).whenComplete(() {
       if (_initCompleter != null && !_initCompleter!.isCompleted) {
         _initCompleter!.complete();
       }
-      notifyListeners();
-    }, onError: (error) {
-      debugPrint('DynamicConfigService: error loading config: $error');
-      final errorStr = error.toString();
-      if (errorStr.contains('JWT expired') || errorStr.contains('PGRST303') || errorStr.contains('Unauthorized')) {
-      }
-      if (_initCompleter != null && !_initCompleter!.isCompleted) {
-        _initCompleter!.complete();
-      }
+    });
+
+    // 2. Periodic poll Supabase app_config every 10s
+    Timer.periodic(const Duration(seconds: 10), (_) {
+      SupabaseDataService().getAppConfig().then((cfg) {
+        if (cfg.isNotEmpty) {
+          _applyConfig(cfg);
+        }
+      }).catchError((_) {});
     });
   }
 
@@ -1429,6 +1652,206 @@ class DynamicConfigService extends ChangeNotifier {
     return _parseColor(val, Colors.transparent);
   }
 
+  /// نسبة دخول هدايا الحظ في تارجت وماسات المستلم (%)
+  /// القيمة الافتراضية 10.0 (أي 10%) ويمكن تعديلها من لوحة الإدارة
+  double get luckyGiftTargetPercentage {
+    final candidates = [
+      _rawConfig['lucky_gift_target_percentage'],
+      _rawConfig['luckyGiftTargetPercentage'],
+      _rawConfig['lucky_gift_rate'],
+      _rawConfig['lucky_target_percentage'],
+      _rawConfig['lucky_target_percent'],
+      _rawConfig['lucky_target_ratio'],
+      _rawConfig['lucky_target_rate'],
+      _rawConfig['lucky_gift_diamond_percentage'],
+      _rawConfig['lucky_diamond_percentage'],
+      _rawConfig['lucky_diamond_rate'],
+      _rawConfig['lucky_diamonds_rate'],
+      _rawConfig['lucky_box_target_percentage'],
+      _rawConfig['lucky_box_percentage'],
+      _rawConfig['lucky_box_rate'],
+      _rawConfig['luckyGiftRate'],
+    ];
+
+    for (final direct in candidates) {
+      if (direct != null) {
+        final p = double.tryParse(direct.toString());
+        if (p != null && p >= 0) {
+          // إذا كانت القيمة كسرية مثل 0.1 نحولها لنسبة مئوية 10%
+          return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+        }
+      }
+    }
+
+    final nestedMaps = [
+      _rawConfig['lucky_box_config'],
+      _rawConfig['lucky_gift_config'],
+      _rawConfig['lucky_config'],
+      _rawConfig['luckyGiftConfig'],
+      _rawConfig['lucky_box'],
+      _rawConfig['lucky_gift'],
+    ];
+
+    for (final map in nestedMaps) {
+      if (map is Map) {
+        final v = map['targetPercentage'] ??
+            map['target_percentage'] ??
+            map['targetPercent'] ??
+            map['target_percent'] ??
+            map['rate'] ??
+            map['diamond_percentage'] ??
+            map['target_ratio'];
+        if (v != null) {
+          final p = double.tryParse(v.toString());
+          if (p != null && p >= 0) {
+            return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+          }
+        }
+      }
+    }
+
+    return 10.0;
+  }
+
+  /// سعر الصرف: عدد الكوينز لكل 1 دولار أمريكي (افتراضياً 15,000 كوينز)
+  int get coinsPerUsd {
+    final v = _rawConfig['coins_per_usd'] ?? _rawConfig['coinsPerUsd'];
+    if (v is int && v > 0) return v;
+    if (v != null) {
+      final parsed = int.tryParse(v.toString());
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    final pol = _rawConfig['agency_financial_policy'];
+    if (pol is Map && pol['coins_per_usd'] != null) {
+      final p = int.tryParse(pol['coins_per_usd'].toString());
+      if (p != null && p > 0) return p;
+    }
+    return 15000;
+  }
+
+  /// نسبة عمولة وكيل المضيف من ماس المضيف (%) (افتراضياً 10%)
+  double get agencyRatePercentage {
+    final candidates = [
+      _rawConfig['agency_rate'],
+      _rawConfig['agency_rate_pct'],
+      _rawConfig['agencyRate'],
+      _rawConfig['agencyRatePct'],
+    ];
+
+    for (final direct in candidates) {
+      if (direct != null) {
+        final p = double.tryParse(direct.toString());
+        if (p != null && p > 0) {
+          return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+        }
+      }
+    }
+
+    final pol = _rawConfig['agency_financial_policy'];
+    if (pol is Map) {
+      final p = double.tryParse((pol['agency_rate_pct'] ?? pol['agency_rate'])?.toString() ?? '');
+      if (p != null && p > 0) {
+        return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+      }
+    } else if (pol is String) {
+      try {
+        final m = jsonDecode(pol);
+        if (m is Map) {
+          final p = double.tryParse((m['agency_rate_pct'] ?? m['agency_rate'])?.toString() ?? '');
+          if (p != null && p > 0) {
+            return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return 10.0; // 10% افتراضياً
+  }
+
+  /// نسبة راتب المضيف من الكوينز المستلمة (%)
+  /// القيمة الافتراضية 100.0 (أي 100% كاملة)
+  double get hostRatePercentage {
+    final candidates = [
+      _rawConfig['host_rate'],
+      _rawConfig['host_rate_pct'],
+      _rawConfig['hostRate'],
+      _rawConfig['hostRatePct'],
+    ];
+
+    for (final direct in candidates) {
+      if (direct != null) {
+        final p = double.tryParse(direct.toString());
+        if (p != null && p > 0) {
+          return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+        }
+      }
+    }
+
+    final pol = _rawConfig['agency_financial_policy'];
+    if (pol is Map) {
+      final p = double.tryParse((pol['host_rate_pct'] ?? pol['host_rate'])?.toString() ?? '');
+      if (p != null && p > 0) {
+        return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+      }
+    } else if (pol is String) {
+      try {
+        final m = jsonDecode(pol);
+        if (m is Map) {
+          final p = double.tryParse((m['host_rate_pct'] ?? m['host_rate'])?.toString() ?? '');
+          if (p != null && p > 0) {
+            return (p > 0 && p <= 1.0) ? p * 100.0 : p;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return 100.0; // 100% كاملة افتراضياً
+  }
+
+  /// نسبة راتب المضيف في حال فك جزء من ألماس التارجت (افتراضياً 60%، أي خصم 40% من الراتب)
+  /// مثلاً: إذا كان الراتب 9 دولار، ينزل إلى 5.4 دولار (~ 5 دولار)
+  double get hostTargetSalaryRate {
+    final candidates = [
+      _rawConfig['host_target_salary_rate'],
+      _rawConfig['host_target_salary_rate_pct'],
+      _rawConfig['host_target_exchange_rate'],
+      _rawConfig['host_target_exchange_rate_pct'],
+      _rawConfig['hostExchangeRate'],
+    ];
+
+    for (final direct in candidates) {
+      if (direct != null) {
+        final p = double.tryParse(direct.toString());
+        if (p != null && p > 0) {
+          return (p > 1.0) ? p / 100.0 : p;
+        }
+      }
+    }
+
+    final pol = _rawConfig['agency_financial_policy'];
+    if (pol is Map) {
+      final p = double.tryParse((pol['host_target_salary_rate_pct'] ?? pol['host_target_exchange_rate_pct'] ?? pol['host_target_salary_rate'])?.toString() ?? '');
+      if (p != null && p > 0) {
+        return (p > 1.0) ? p / 100.0 : p;
+      }
+    } else if (pol is String) {
+      try {
+        final m = jsonDecode(pol);
+        if (m is Map) {
+          final p = double.tryParse((m['host_target_salary_rate_pct'] ?? m['host_target_exchange_rate_pct'] ?? m['host_target_salary_rate'])?.toString() ?? '');
+          if (p != null && p > 0) {
+            return (p > 1.0) ? p / 100.0 : p;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return 0.60; // 60% من الراتب افتراضياً (خصم 40%)
+  }
+
+  /// متوافق مع المسميات القديمة
+  double get hostTargetExchangeRate => hostTargetSalaryRate;
+
   // ─── Audio & Zego Configurations ──────────────────────────────────────
   int get zegoAppId {
     final v = _rawConfig['zego_app_id'] ?? _rawConfig['zegoAppId'];
@@ -1454,7 +1877,7 @@ class DynamicConfigService extends ChangeNotifier {
     return 0; // 0 = Default, 1 = StandardVoiceCall, 2 = HighQualityChatroom
   }
 
-  /// Update Zego & Audio configurations in Firestore dynamically
+  /// Update Zego & Audio configurations in Supabase dynamically
   Future<void> updateAudioConfig({
     required int appId,
     required String appSign,
@@ -1462,19 +1885,17 @@ class DynamicConfigService extends ChangeNotifier {
     bool? audioEnabled,
     int? scenario,
   }) async {
-    final batch = _db.batch();
-    batch.set(_db.collection('app_config').doc('zego_app_id'), {'value': appId}, SetOptions(merge: true));
-    batch.set(_db.collection('app_config').doc('zego_app_sign'), {'value': appSign.trim()}, SetOptions(merge: true));
+    await SupabaseDataService().setAppConfig('zego_app_id', appId);
+    await SupabaseDataService().setAppConfig('zego_app_sign', appSign.trim());
     if (provider != null) {
-      batch.set(_db.collection('app_config').doc('audio_provider'), {'value': provider}, SetOptions(merge: true));
+      await SupabaseDataService().setAppConfig('audio_provider', provider);
     }
     if (audioEnabled != null) {
-      batch.set(_db.collection('app_config').doc('zego_audio_enabled'), {'value': audioEnabled}, SetOptions(merge: true));
+      await SupabaseDataService().setAppConfig('zego_audio_enabled', audioEnabled);
     }
     if (scenario != null) {
-      batch.set(_db.collection('app_config').doc('zego_scenario'), {'value': scenario}, SetOptions(merge: true));
+      await SupabaseDataService().setAppConfig('zego_scenario', scenario);
     }
-    await batch.commit();
 
     _rawConfig['zego_app_id'] = appId;
     _rawConfig['zego_app_sign'] = appSign.trim();
