@@ -3,6 +3,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:zego_express_engine/zego_express_engine.dart';
 import '../config/app_config.dart';
 import '../services/dynamic_config_service.dart';
+import 'room_music_player_service.dart';
 
 class RoomAudioService {
   static final RoomAudioService _instance = RoomAudioService._();
@@ -24,6 +25,14 @@ class RoomAudioService {
   bool get isInitialized => _initialized;
   bool get isMicEnabled => _micEnabled;
   bool get isPublishing => _isPublishing;
+  bool _isRoomDeafened = false;
+  int _roomVolume = 100;
+  final Set<String> _activeStreamIds = {};
+  final Set<String> _mutedUserKeys = {};
+
+  bool get isRoomDeafened => _isRoomDeafened;
+  int get roomVolume => _roomVolume;
+  final ValueNotifier<bool> roomDeafenedNotifier = ValueNotifier<bool>(false);
 
   final ValueNotifier<Set<String>> speakingUsersNotifier = ValueNotifier<Set<String>>({});
 
@@ -37,6 +46,40 @@ class RoomAudioService {
     return sign.isNotEmpty ? sign : AppConfig.zegoAppSign;
   }
 
+  Future<void> setRoomVolume(int volume) async {
+    _roomVolume = volume.clamp(0, 100);
+    if (!_initialized || effectiveAppSign.isEmpty) return;
+    try {
+      if (!_isRoomDeafened) {
+        await ZegoExpressEngine.instance.setAllPlayStreamVolume(_roomVolume);
+      }
+      debugPrint('[RoomAudioService] Set room playback volume: $_roomVolume');
+    } catch (e) {
+      debugPrint('[RoomAudioService] setRoomVolume failed: $e');
+    }
+  }
+
+  Future<void> toggleRoomDeafen([bool? deafen]) async {
+    _isRoomDeafened = deafen ?? !_isRoomDeafened;
+    roomDeafenedNotifier.value = _isRoomDeafened;
+    if (!_initialized || effectiveAppSign.isEmpty) return;
+    try {
+      final engine = ZegoExpressEngine.instance;
+      // 1. Mute or unmute all stream playback at SDK level
+      await engine.muteAllPlayStreamAudio(_isRoomDeafened);
+      // 2. Hardware mixer volume mute: 0 when deafened, restore when undeafened
+      await engine.setAllPlayStreamVolume(_isRoomDeafened ? 0 : _roomVolume);
+      // 3. Explicitly mute/unmute each active stream as a safety guarantee
+      for (final sId in _activeStreamIds) {
+        final shouldMute = _isRoomDeafened || _mutedUserKeys.any((key) => key.isNotEmpty && sId.contains(key));
+        await engine.mutePlayStreamAudio(sId, shouldMute);
+      }
+      debugPrint('[RoomAudioService] Room deafen toggled to: $_isRoomDeafened (streams: ${_activeStreamIds.length})');
+    } catch (e) {
+      debugPrint('[RoomAudioService] toggleRoomDeafen failed: $e');
+    }
+  }
+
   void _onRoomStreamUpdate(String roomID, ZegoUpdateType updateType,
       List<ZegoStream> streamList, Map<String, dynamic> extendedData) {
     if (!_initialized || effectiveAppSign.isEmpty) return;
@@ -44,11 +87,17 @@ class RoomAudioService {
       final engine = ZegoExpressEngine.instance;
       for (final stream in streamList) {
         if (updateType == ZegoUpdateType.Add) {
+          _activeStreamIds.add(stream.streamID);
           engine.startPlayingStream(stream.streamID).catchError((e) {
             debugPrint('[ZegoAudio] startPlayingStream error: $e');
           });
-          debugPrint('[ZegoAudio] Started playing stream: ${stream.streamID}');
+          final shouldMute = _isRoomDeafened || _mutedUserKeys.any((key) => key.isNotEmpty && stream.streamID.contains(key));
+          if (shouldMute) {
+            engine.mutePlayStreamAudio(stream.streamID, true).catchError((_) {});
+          }
+          debugPrint('[ZegoAudio] Started playing stream: ${stream.streamID} (muted=$shouldMute)');
         } else {
+          _activeStreamIds.remove(stream.streamID);
           engine.stopPlayingStream(stream.streamID).catchError((e) {
             debugPrint('[ZegoAudio] stopPlayingStream error: $e');
           });
@@ -156,6 +205,11 @@ class RoomAudioService {
       debugPrint('[RoomAudioService] Cannot join: not initialized');
       return;
     }
+    // If already in this channel with this uid, keep the live connection without interrupting audio!
+    if (_currentRoomId == channelName && _currentUid == uid) {
+      debugPrint('[RoomAudioService] Already connected to room $channelName, keeping live audio');
+      return;
+    }
     try {
       await leaveChannel();
       _currentRoomId = channelName;
@@ -184,7 +238,13 @@ class RoomAudioService {
       await engine.startPublishingStream(streamId);
       await engine.enableCamera(false);
       _isPublishing = true;
-      debugPrint('[RoomAudioService] Started publishing stream: $streamId');
+      if (!_micEnabled) {
+        try {
+          await engine.muteMicrophone(true);
+          await engine.mutePublishStreamAudio(true);
+        } catch (_) {}
+      }
+      debugPrint('[RoomAudioService] Started publishing stream: $streamId (micEnabled=$_micEnabled)');
     } catch (e) {
       debugPrint('[RoomAudioService] startPublishing failed: $e');
     }
@@ -203,33 +263,55 @@ class RoomAudioService {
     }
     _currentRoomId = null;
     _isPublishing = false;
+    _isRoomDeafened = false;
+    _activeStreamIds.clear();
+    _mutedUserKeys.clear();
+    roomDeafenedNotifier.value = false;
     speakingUsersNotifier.value = {};
   }
 
   Future<bool> toggleMic(bool on) async {
-    if (!_initialized || !_isPublishing || effectiveAppSign.isEmpty) {
-      _micEnabled = on;
+    _micEnabled = on;
+    if (!_initialized || effectiveAppSign.isEmpty) {
       return true;
     }
     try {
       final engine = ZegoExpressEngine.instance;
-      await engine.mutePublishStreamAudio(!on);
-      _micEnabled = on;
+      await engine.muteMicrophone(!on);
+      if (_isPublishing) {
+        final isMusicPlaying = RoomMusicPlayerService().isPlaying;
+        if (!isMusicPlaying) {
+          await engine.mutePublishStreamAudio(!on);
+        } else {
+          await engine.mutePublishStreamAudio(false);
+        }
+      }
+      debugPrint('[RoomAudioService] toggleMic on=$on (hardware + stream muted=${!on})');
       return true;
     } catch (e) {
       debugPrint('[RoomAudioService] toggleMic failed: $e');
-      _micEnabled = on;
       return false;
     }
   }
 
   void muteRemoteAudio(String uid, String channelName, bool muted) async {
+    if (uid.isEmpty) return;
+    if (muted) {
+      _mutedUserKeys.add(uid);
+    } else {
+      _mutedUserKeys.remove(uid);
+    }
     if (!_initialized || effectiveAppSign.isEmpty) return;
     try {
       final engine = ZegoExpressEngine.instance;
       final streamId = 'audio_${uid}_$channelName';
       await engine.mutePlayStreamAudio(streamId, muted);
-      debugPrint('[RoomAudioService] ${muted ? "Muted" : "Unmuted"} remote stream: $streamId');
+      for (final sId in _activeStreamIds) {
+        if (sId.contains(uid)) {
+          await engine.mutePlayStreamAudio(sId, muted);
+        }
+      }
+      debugPrint('[RoomAudioService] ${muted ? "Muted" : "Unmuted"} remote stream for: $uid');
     } catch (e) {
       debugPrint('[RoomAudioService] muteRemoteAudio failed: $e');
     }
@@ -256,32 +338,26 @@ class RoomAudioService {
     _isPublishing = false;
   }
 
-  /// Pause mic publishing when the app goes to the background to save battery
-  /// and avoid Zego SIGSEGV on some devices. Remote audio (listening) keeps
-  /// running so the minimized room stays audible.
+  /// Keep mic publishing and audio listening active when the app goes to background
+  /// (e.g. WhatsApp, Home Screen) without terminating or cutting off after 30 seconds.
   void pauseForBackground() async {
-    if (!_isPublishing || !_initialized || effectiveAppSign.isEmpty) return;
-    try {
-      final engine = ZegoExpressEngine.instance;
-      await engine.stopPublishingStream();
-      _isPublishing = false;
-      debugPrint('[RoomAudioService] Publishing paused for background');
-    } catch (e) {
-      debugPrint('[RoomAudioService] pauseForBackground failed: $e');
-    }
+    debugPrint('[RoomAudioService] App backgrounded: maintaining active voice stream and listening');
   }
 
-  /// Restore mic publishing when the app returns to the foreground.
+  /// Restore mic publishing if it was interrupted when returning to foreground.
   Future<void> resumeFromBackground() async {
-    if (!_initialized || _currentRoomId == null || _currentUid == null || _isPublishing || effectiveAppSign.isEmpty) return;
-    try {
-      final engine = ZegoExpressEngine.instance;
-      final streamId = 'audio_${_currentUid}_$_currentRoomId';
-      await engine.startPublishingStream(streamId);
-      _isPublishing = true;
-      debugPrint('[RoomAudioService] Publishing resumed from background');
-    } catch (e) {
-      debugPrint('[RoomAudioService] resumeFromBackground failed: $e');
+    if (!_initialized || _currentRoomId == null || _currentUid == null || effectiveAppSign.isEmpty) return;
+    if (!_isPublishing) {
+      try {
+        final streamId = 'audio_${_currentUid}_$_currentRoomId';
+        final engine = ZegoExpressEngine.instance;
+        await engine.startPublishingStream(streamId);
+        _isPublishing = true;
+        await toggleMic(_micEnabled);
+        debugPrint('[RoomAudioService] Restored publishing from background');
+      } catch (e) {
+        debugPrint('[RoomAudioService] resumeFromBackground failed: $e');
+      }
     }
   }
 

@@ -67,11 +67,21 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   @override
   void initState() {
     super.initState();
+    UpdateService.instance.sessionPromptedBuildNumber = widget.info.buildNumber;
     _sub = UpdateService.instance.stateStream.listen((_) {
       if (mounted) setState(() {});
     });
-    // بدء التنزيل تلقائياً في الخلفية فور ظهور نافذة التحديث
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // التحقق أولاً إذا كان التحديث محملاً مسبقاً على الذاكرة لتجنب إعادة التنزيل
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final cached = await UpdateService.instance.getDownloadedApkFile(widget.info.buildNumber);
+      if (cached != null) {
+        UpdateService.instance.downloadedApkPath = cached.path;
+        UpdateService.instance.isDownloaded = true;
+        UpdateService.instance.isDownloading = false;
+        UpdateService.instance.downloadProgress = 1.0;
+        if (mounted) setState(() {});
+        return;
+      }
       if (!UpdateService.instance.isDownloading && !UpdateService.instance.isDownloaded) {
         _startDownload();
       }
@@ -85,7 +95,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
   }
 
   void _startDownload() {
-    UpdateService.instance.startDownloadInBackground(widget.info.apkUrl);
+    UpdateService.instance.startDownloadInBackground(widget.info.apkUrl, buildNumber: widget.info.buildNumber);
   }
 
   void _install() {
@@ -125,7 +135,7 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: R.image(
+              child: R.loadAsset(
                 R.splashImgLogo,
                 width: 76,
                 height: 76,
@@ -193,6 +203,23 @@ class _AppUpdateDialogState extends State<AppUpdateDialog> {
                   Expanded(
                     child: TextButton(
                       onPressed: () {
+                        UpdateService.instance.sessionUpdateDismissed = true;
+                        if (!UpdateService.instance.isDownloading && !UpdateService.instance.isDownloaded) {
+                          UpdateService.instance.startDownloadInBackground(
+                            widget.info.apkUrl,
+                            buildNumber: widget.info.buildNumber,
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'جاري تنزيل التحديث في الخلفية... سيظهر إشعار التثبيت فور اكتماله.',
+                                textAlign: TextAlign.center,
+                              ),
+                              backgroundColor: Color(0xFF1E1528),
+                              duration: Duration(seconds: 4),
+                            ),
+                          );
+                        }
                         Navigator.of(context).pop();
                       },
                       style: TextButton.styleFrom(foregroundColor: Colors.black54),

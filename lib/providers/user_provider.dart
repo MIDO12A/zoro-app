@@ -1,13 +1,15 @@
+import '../services/supabase_data_service.dart';
 import 'dart:async';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../models/store_item_model.dart';
 import '../models/gifted_item_model.dart';
 import '../services/api_service.dart';
 import '../services/supabase_service.dart';
+import '../services/supabase_auth_service.dart';
 import '../core/utils/id_generator.dart';
+import '../services/device_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserProvider extends ChangeNotifier {
   UserModel? _currentUser;
@@ -16,13 +18,33 @@ class UserProvider extends ChangeNotifier {
   StreamSubscription? _userSub;
   StreamSubscription? _giftedSub;
   Timer? _expiryTimer;
+  int _lastLocalCoinsUpdateMs = 0;
+  int? _optimisticCoins;
 
   UserModel? get currentUser => _currentUser;
   bool get isLoading => _isLoading;
 
+  void setUser(UserModel user) {
+    _currentUser = user;
+    notifyListeners();
+  }
+
   void startListening(String uid) {
     _userSub?.cancel();
     _userSub = _supabaseService.userStream(uid).listen((user) {
+      if (user != null) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        // حماية رصيد العملات المكتسب لحظياً من أي تأخير في الشبكة أو استجابات قديمة (0ms Latency Protection)
+        if (_optimisticCoins != null && (now - _lastLocalCoinsUpdateMs) < 5000) {
+          if (user.coins >= _optimisticCoins!) {
+            _optimisticCoins = null;
+          } else {
+            user = user.copyWith(coins: _optimisticCoins!);
+          }
+        } else {
+          _optimisticCoins = null;
+        }
+      }
       _currentUser = _ensureFrame(user);
       notifyListeners();
     });
@@ -42,9 +64,12 @@ class UserProvider extends ChangeNotifier {
   Future<void> _reconcileGiftedItems(String uid, List<GiftedItemModel> items) async {
     final activeItemIds = <String>{};
     final expiredGiftIds = <String>[];
+    final expiredGifts = <GiftedItemModel>[];
+
     for (final gift in items) {
       if (gift.isExpired) {
         expiredGiftIds.add(gift.id);
+        expiredGifts.add(gift);
       } else {
         activeItemIds.add(gift.itemId);
       }
@@ -52,10 +77,16 @@ class UserProvider extends ChangeNotifier {
     final user = _currentUser;
     if (user == null) return;
     final currentOwned = Set<String>.from(user.ownedItems);
+    final currentBadges = Set<String>.from(user.ownedBadges);
+    final currentNecklaces = Set<String>.from(user.ownedNecklaces);
     final needsUpdate = <String, dynamic>{};
     final newOwned = List<String>.from(currentOwned);
+    final newBadges = List<String>.from(currentBadges);
+    final newNecklaces = List<String>.from(currentNecklaces);
 
     bool changed = false;
+
+    // Add active store items to owned
     for (final itemId in activeItemIds) {
       if (!currentOwned.contains(itemId)) {
         newOwned.add(itemId);
@@ -63,16 +94,53 @@ class UserProvider extends ChangeNotifier {
       }
     }
 
-    final expiredItemIds = items.where((g) => g.isExpired).map((g) => g.itemId).toSet();
-    for (final itemId in expiredItemIds) {
-      if (currentOwned.contains(itemId)) {
-        newOwned.remove(itemId);
+    // Process expired gifts
+    for (final gift in expiredGifts) {
+      // 1. Special ID expired -> restore original custom ID!
+      if (gift.itemCategory == 'special_id') {
+        if (user.customId == gift.itemId) {
+          final orig = user.originalCustomId;
+          if (orig != null && orig.isNotEmpty && orig != gift.itemId) {
+            needsUpdate['custom_id'] = orig;
+            changed = true;
+          } else {
+            final nextNumericId = UserIdGenerator.extractIdFromUid(user.uid);
+            needsUpdate['custom_id'] = nextNumericId;
+            changed = true;
+          }
+        }
+      }
+
+      // 2. Badge expired -> remove from owned_badges
+      if (gift.itemCategory == 'badge') {
+        if (newBadges.contains(gift.itemId)) {
+          newBadges.remove(gift.itemId);
+          needsUpdate['owned_badges'] = newBadges;
+          changed = true;
+        }
+      }
+
+      // 3. Necklace expired -> remove from owned_necklaces
+      if (gift.itemCategory == 'necklace') {
+        if (newNecklaces.contains(gift.itemId)) {
+          newNecklaces.remove(gift.itemId);
+          needsUpdate['owned_necklaces'] = newNecklaces;
+          if (user.activeNecklace == gift.itemId) {
+            needsUpdate['active_necklace'] = null;
+          }
+          changed = true;
+        }
+      }
+
+      // 4. Store item expired -> remove from owned_items
+      if (currentOwned.contains(gift.itemId)) {
+        newOwned.remove(gift.itemId);
         changed = true;
-        if (user.activeFrame == itemId) needsUpdate['active_frame'] = null;
-        if (user.activeHeadwear == itemId) needsUpdate['active_headwear'] = null;
-        if (user.activeBubble == itemId) needsUpdate['active_bubble'] = null;
-        if (user.activeEntrance == itemId) needsUpdate['active_entrance'] = null;
-        if (user.activeCar == itemId) needsUpdate['active_car'] = null;
+        if (user.activeFrame == gift.itemId) needsUpdate['active_frame'] = null;
+        if (user.activeHeadwear == gift.itemId) needsUpdate['active_headwear'] = null;
+        if (user.activeBubble == gift.itemId) needsUpdate['active_bubble'] = null;
+        if (user.activeEntrance == gift.itemId) needsUpdate['active_entrance'] = null;
+        if (user.activeCar == gift.itemId) needsUpdate['active_car'] = null;
       }
     }
 
@@ -102,42 +170,82 @@ class UserProvider extends ChangeNotifier {
   Future<void> loadUser(String uid) async {
     _isLoading = true;
     notifyListeners();
-    _currentUser = await _supabaseService.getUser(uid);
-    if (_currentUser != null && _currentUser!.customId.isEmpty) {
-      // FIX: Use secure ID generator with uniqueness check
-      String customId;
-      try {
-        // TODO: Use server-side generation first (preferred)
-        final idResult = await ApiService().generateCustomId();
-        customId = idResult['customId'] as String;
-      } catch (_) {
-        // FIX: Fallback to local secure generator with uniqueness check
-        customId = await UserIdGenerator().generateUniqueId(
-          minDigits: 8,
-          maxDigits: 8,
-        );
-      }
-      await _supabaseService.updateUser(uid, {'custom_id': customId});
+    try {
       _currentUser = await _supabaseService.getUser(uid);
+      if (_currentUser == null) {
+        final supaUser = SupabaseAuthService().currentUser;
+        if (supaUser != null && supaUser.uid == uid) {
+          _currentUser = UserModel(
+            uid: uid,
+            customId: '',
+            name: supaUser.displayName ?? '',
+            email: supaUser.email ?? '',
+            photoUrl: supaUser.photoUrl ?? '',
+            gender: 'male',
+          );
+        }
+      }
+      if (_currentUser != null && _currentUser!.customId.isEmpty) {
+        String customId;
+        try {
+          final idResult = await ApiService().generateCustomId();
+          customId = idResult['customId'] as String;
+        } catch (_) {
+          customId = await UserIdGenerator().generateUniqueId(
+            minDigits: 6,
+            maxDigits: 7,
+          );
+        }
+        await _supabaseService.updateUser(uid, {'custom_id': customId});
+        _currentUser = await _supabaseService.getUser(uid);
+      }
+      if (_currentUser != null && _currentUser!.photoUrl.isEmpty) {
+        final supaUser = SupabaseAuthService().currentUser;
+        final authPhoto = (supaUser != null && supaUser.uid == uid && supaUser.photoUrl != null && supaUser.photoUrl!.isNotEmpty)
+            ? supaUser.photoUrl
+            : null;
+        if (authPhoto != null && authPhoto.isNotEmpty) {
+          _currentUser = _currentUser!.copyWith(photoUrl: authPhoto);
+          try {
+            await _supabaseService.updateUser(uid, {
+              'photo_url': authPhoto,
+              'photoUrl': authPhoto,
+              'avatar': authPhoto,
+              'avatar_url': authPhoto,
+            });
+          } catch (_) {}
+        }
+      }
+      if (_currentUser != null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final spFollowed = prefs.getStringList('followed_rooms_$uid') ?? [];
+          if (spFollowed.isNotEmpty) {
+            final merged = Set<String>.from(_currentUser!.followedRooms)..addAll(spFollowed);
+            _currentUser = _currentUser!.copyWith(followedRooms: merged.toList());
+          }
+        } catch (_) {}
+
+        try {
+          DeviceService().saveDeviceRegistration(_currentUser!.uid, email: _currentUser!.email);
+        } catch (_) {}
+      }
+      startListening(uid);
+      _checkExpiredBackpackItems(uid);
+    } catch (e) {
+      debugPrint('[UserProvider] Error loading user $uid: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-    _isLoading = false;
-    notifyListeners();
-    startListening(uid);
-    _checkExpiredBackpackItems(uid);
   }
 
   Future<void> _checkExpiredBackpackItems(String uid) async {
     try {
-      // نقرأ بأدنى شروط (user_id فقط) ثم نفلتر المنتهي محلياً — تجنباً لمؤشر
-      // مركب (composite index) لم يُنشأ بعد على user_backpack.
-      final qs = await FirebaseFirestore.instance.collection('user_backpack')
-          .where('user_id', isEqualTo: uid)
-          .get();
-
+      final items = await SupabaseDataService().getUserBackpack(uid);
       final now = DateTime.now();
-      final expired = qs.docs.where((d) {
-        final data = d.data();
-        final expStr = data['expires_at']?.toString()?.trim();
+      final expired = items.where((d) {
+        final expStr = d['expires_at']?.toString().trim();
         if (expStr == null || expStr.isEmpty || expStr == 'null') return false; // دائم لا ينتهي
         final expDate = DateTime.tryParse(expStr);
         if (expDate == null) return false;
@@ -147,17 +255,19 @@ class UserProvider extends ChangeNotifier {
       if (expired.isNotEmpty) {
         bool frameExpired = false;
         for (var d in expired) {
-          if (d['item_type'] == 'frame' && d['item_id'] == _currentUser?.activeFrame) {
+          final cat = d['category']?.toString() ?? d['item_type']?.toString();
+          if (cat == 'frame' && d['item_id'] == _currentUser?.activeFrame) {
             frameExpired = true;
           }
-          await d.reference.delete();
+          final docId = d['id']?.toString();
+          if (docId != null && docId.isNotEmpty) {
+            await SupabaseDataService().deleteUserBackpackItem(docId);
+          }
         }
         
         if (frameExpired) {
-          await FirebaseFirestore.instance.collection('users').doc(uid).update({
-            'active_frame': FieldValue.delete(),
-          });
-          _currentUser = _currentUser?.copyWith(activeFrame: null);
+          await SupabaseDataService().updateUser(uid, {'active_frame': ''});
+          _currentUser = _currentUser?.copyWith(activeFrame: '');
           notifyListeners();
         }
       }
@@ -172,10 +282,30 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void toggleFollowedRoom(String roomId, bool follow) {
+    if (_currentUser == null) return;
+    final list = List<String>.from(_currentUser!.followedRooms);
+    if (follow && !list.contains(roomId)) {
+      list.add(roomId);
+    } else if (!follow && list.contains(roomId)) {
+      list.remove(roomId);
+    }
+    _currentUser = _currentUser!.copyWith(followedRooms: list);
+    notifyListeners();
+    try {
+      final uid = _currentUser!.uid;
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setStringList('followed_rooms_$uid', list);
+      }).catchError((_) {});
+    } catch (_) {}
+  }
+
   void deductCoinsLocally(int amount) {
     if (_currentUser == null) return;
     final newCoins = (_currentUser!.coins - amount).clamp(0, 999999999);
     _currentUser = _currentUser!.copyWith(coins: newCoins);
+    _optimisticCoins = newCoins;
+    _lastLocalCoinsUpdateMs = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
   }
 
@@ -183,6 +313,16 @@ class UserProvider extends ChangeNotifier {
     if (_currentUser == null || amount <= 0) return;
     final newCoins = _currentUser!.coins + amount;
     _currentUser = _currentUser!.copyWith(coins: newCoins);
+    _optimisticCoins = newCoins;
+    _lastLocalCoinsUpdateMs = DateTime.now().millisecondsSinceEpoch;
+    notifyListeners();
+  }
+
+  void updateCoinsImmediately(int newBalance) {
+    if (_currentUser == null) return;
+    _currentUser = _currentUser!.copyWith(coins: newBalance);
+    _optimisticCoins = newBalance;
+    _lastLocalCoinsUpdateMs = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
   }
 
@@ -237,6 +377,8 @@ class UserProvider extends ChangeNotifier {
   void clearUser() {
     stopListening();
     _currentUser = null;
+    _isLoading = false;
+    _optimisticCoins = null;
     notifyListeners();
   }
 }
