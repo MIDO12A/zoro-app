@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../config/r.dart';
 import '../../../providers/user_provider.dart';
 import '../models/task_model.dart';
 import '../services/task_service.dart';
+import '../../../screens/mall/mall_screen.dart';
+import '../../../screens/wallet/wallet_main_screen.dart';
+import '../../../screens/login/edit_profile_screen.dart';
+import '../../../utils/app_action_navigator.dart';
 
 /// شاشة مركز المهام (Task Center) — مطابقة تماماً لتصميم act_tasks.xml و frag_task.xml و item_task.xml
 class DailyTasksScreen extends StatefulWidget {
@@ -42,6 +47,10 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final uid = userProvider.currentUser?.uid ?? '';
 
+    if (uid.isNotEmpty) {
+      await TaskService().recordActionByType(uid, 'login');
+    }
+
     final banner = await TaskService().fetchEventBanner();
     final list = await TaskService().fetchTasks(uid);
 
@@ -55,7 +64,25 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
   }
 
   List<TaskModel> _filterByGroup(String group) {
+    if (group == 'daily') {
+      return _tasks.where((t) => t.group == 'daily').toList();
+    }
+    if (group == 'host') {
+      return _tasks.where((t) => t.group == 'host' || t.group == 'growth' || t.titleAr.contains('مضيف') || t.descriptionAr.contains('مضيف')).toList();
+    }
+    if (group == 'agency') {
+      return _tasks.where((t) => t.group == 'agency' || t.group == 'lucky' || t.titleAr.contains('وكيل') || t.descriptionAr.contains('وكيل')).toList();
+    }
     return _tasks.where((t) => t.group == group).toList();
+  }
+
+  Future<void> _claimAll() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final uid = userProvider.currentUser?.uid ?? '';
+    if (uid.isEmpty) return;
+
+    await TaskService().claimAllAvailableRewards(context, uid, _tasks);
+    await _loadData();
   }
 
   void _handleTaskAction(TaskModel task) {
@@ -70,20 +97,31 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
 
     if (task.isCompleted) return;
 
-    Navigator.of(context).pop();
-    switch (task.actionRoute) {
-      case 'room':
-        break;
-      case 'gift':
-      case 'lucky_gift':
-        break;
+    final route = task.actionRoute.toLowerCase().trim();
+    switch (route) {
       case 'recharge':
+      case 'wallet':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const WalletMainScreen()));
         break;
       case 'store':
+      case 'mall':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const MallScreen()));
         break;
       case 'profile':
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const EditProfileScreen()));
+        break;
+      case 'room':
+      case 'gift':
+      case 'lucky_gift':
+        // Pop task screen so the user returns to current voice room or room list
+        Navigator.of(context).pop();
         break;
       default:
+        if (route.isNotEmpty && route != 'none') {
+          AppActionNavigator.handleAction(context, actionValue: route);
+        } else {
+          Navigator.of(context).pop();
+        }
         break;
     }
   }
@@ -92,7 +130,6 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final user = userProvider.currentUser;
-    final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       backgroundColor: Colors.white, // @color/white من act_tasks.xml
@@ -103,10 +140,9 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
             top: 0,
             left: 0,
             right: 0,
-            child: Image.asset(
+            child: R.loadAsset(
               'assets/images/bg_room_info_title.png',
               fit: BoxFit.fitWidth,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
             ),
           ),
 
@@ -220,22 +256,9 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
     return Stack(
       children: [
         Positioned.fill(
-          child: Image.asset(
+          child: R.loadAsset(
             'assets/images/ic_daily_task_top.png',
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Image.asset(
-              'assets/images/float_task.png',
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF00DEFF), Color(0xFF3AFF92)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-              ),
-            ),
           ),
         ),
         Container(
@@ -278,73 +301,114 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
     );
   }
 
-  /// رصيد المستخدم من العملات ونقاط الخبرة
+  /// رصيد المستخدم من العملات ونقاط الخبرة وزر استلام الكل
   Widget _buildUserHeader(dynamic user) {
     final coins = user?.coins ?? 0;
     final exp = user?.experience ?? 0;
+    final canClaimAny = _tasks.any((t) => t.canClaim);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 15),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFF9FAFC),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFFEAEFF5)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Row(
-            children: [
-              Image.asset(
-                'assets/images/ic_min_coins.png',
-                width: 22,
-                height: 22,
-                errorBuilder: (_, __, ___) => const Text('🪙', style: TextStyle(fontSize: 18)),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('العملات الذهبية', style: TextStyle(fontSize: 11, color: Color(0xFF888888))),
-                  Text(
-                    '$coins',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFFFFB606),
+          Expanded(
+            child: Row(
+              children: [
+                R.loadAsset(
+                  'assets/images/ic_min_coins.png',
+                  width: 22,
+                  height: 22,
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('العملات الذهبية', style: TextStyle(fontSize: 11, color: Color(0xFF888888))),
+                    Text(
+                      '$coins',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFFFB606),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
           Container(width: 1, height: 26, color: const Color(0xFFE2E7ED)),
-          Row(
-            children: [
-              Image.asset(
-                'assets/images/sunlight_task.png',
-                width: 22,
-                height: 22,
-                errorBuilder: (_, __, ___) => const Text('⭐', style: TextStyle(fontSize: 18)),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('نقاط الخبرة EXP', style: TextStyle(fontSize: 11, color: Color(0xFF888888))),
-                  Text(
-                    '$exp',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF00B0FF),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Row(
+              children: [
+                R.loadAsset(
+                  'assets/images/sunlight_task.png',
+                  width: 22,
+                  height: 22,
+                ),
+                const SizedBox(width: 8),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('نقاط الخبرة EXP', style: TextStyle(fontSize: 11, color: Color(0xFF888888))),
+                    Text(
+                      '$exp',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF00B0FF),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
+          if (canClaimAny) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _claimAll,
+              child: Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF8800), Color(0xFFFFB606)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFF8800).withValues(alpha: 0.35),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.stars_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'استلام الكل',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -411,11 +475,10 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
         alignment: Alignment.center,
         child: Column(
           children: [
-            Image.asset(
+            R.loadAsset(
               'assets/images/ic_mine_task.png',
               width: 50,
               height: 50,
-              errorBuilder: (_, __, ___) => const Icon(Icons.assignment_outlined, size: 40, color: Colors.grey),
             ),
             const SizedBox(height: 10),
             const Text(
@@ -454,20 +517,11 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
           child: Row(
             children: [
               // 1. أيقونة المهمة 42x42dp (img: 42.0dp)
-              Image.asset(
+              R.loadAsset(
                 iconAsset,
                 width: 42,
                 height: 42,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0F3F8),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.stars, color: Color(0xFF00DEFF), size: 26),
-                ),
               ),
               const SizedBox(width: 12),
 
@@ -498,11 +552,10 @@ class _DailyTasksScreenState extends State<DailyTasksScreen> with SingleTickerPr
                     // العملات والمكافأة مع أيقونة ic_min_coins.png
                     Row(
                       children: [
-                        Image.asset(
+                        R.loadAsset(
                           'assets/images/ic_min_coins.png',
                           width: 14,
                           height: 14,
-                          errorBuilder: (_, __, ___) => const Text('🪙', style: TextStyle(fontSize: 10)),
                         ),
                         const SizedBox(width: 4),
                         Text(
