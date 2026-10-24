@@ -6,6 +6,7 @@ import '../screens/room/widgets/svga_player.dart';
 import '../screens/room/widgets/vap_player.dart';
 import '../core/cache/encrypted_image_provider.dart';
 import '../core/widgets/cached_image.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 enum AssetType { svga, vap, mp4, webp, gif, png, other }
 
@@ -47,7 +48,13 @@ bool isVideoType(String? url) {
 bool isImageType(String? url) {
   if (url == null || url.isEmpty) return false;
   final t = detectAssetType(url);
-  return t == AssetType.webp || t == AssetType.gif || t == AssetType.png;
+  if (t == AssetType.webp || t == AssetType.gif || t == AssetType.png) return true;
+  if (t != AssetType.svga && t != AssetType.vap && t != AssetType.mp4) {
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('assets/')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 class R {
@@ -126,8 +133,26 @@ class R {
   static const String unionRate1Ic = '$_m/union_rate_1_ic.webp';
   static const String commonDiamondIc = '$_m/common_diamond_ic.webp';
   static const String commonNext3Ic = '$_m/common_next_3_ic.webp';
-  static const String commonNext5 = '$_m/common_next_5.webp';
   static const String backWhite2 = '$_m/back_white_2.webp';
+
+  // Hayuki Original Agency & Recharge assets (100% identical)
+  static const String hykBgNimTransfer = 'assets/images/agency/bg_nim_transfer.png';
+  static const String hykBgNimTransfer1Info = 'assets/images/agency/bg_nim_transfer_1_info.png';
+  static const String hykTxtTransferTitle = 'assets/images/agency/txt_transfer_title.png';
+  static const String hykFrameBgTransferSure = 'assets/images/agency/hyk_frame_bg_transfer_sure_enabled.png';
+  static const String hykIcNimTransfer = 'assets/images/agency/ic_nim_transfer.png';
+  static const String hykIcSalaryPanel1 = 'assets/images/agency/ic_salary_panel_1.png';
+  static const String hykIcSalaryPanel2 = 'assets/images/agency/ic_salary_panel2.png';
+  static const String hykIcTransferTo = 'assets/images/agency/ic_transfer_to.png';
+  static const String hykIcAgencyBroadcast = 'assets/images/agency/ic_agency_broadcast.png';
+  static const String hykIcAgencyLevelBg = 'assets/images/agency/ic_agency_level_bg.png';
+  static const String hykIcFlag = 'assets/images/agency/ic_flag.png';
+  static const String hykIcNameBg = 'assets/images/agency/ic_name_bg.png';
+  static const String hykIcBackDarkRight = 'assets/images/agency/ic_back_dark_right.png';
+  static const String hykIcCommonLineDot = 'assets/images/agency/ic_common_line_dot.png';
+  static const String hykIcRankBannerBg = 'assets/images/agency/ic_rank_banner_bg.png';
+  static const String hykIcEdit = 'assets/images/agency/ic_edit.png';
+  static const String hykIcHelpWhite = 'assets/images/agency/ic_help_white.png';
 
   // Drawable shapes (XML shape drawables – used as widget equivalents in code)
   static const String roomPackageGiftBg = 'assets/drawable/room_package_gift_bg.xml';
@@ -213,7 +238,8 @@ class R {
   // Tab assets
   static const String tabDiscoverNor = '$_m/tab_discover_nor.webp';
   static const String tabDiscoverPre = '$_m/tab_discover_pre.webp';
-  static const String tabRankingNor = '$_m/tab_discover_nor.webp';
+  static const String tabRankingNor = 'assets/images/ic_rank_cup_gold.png';
+  static const String roomRankCupIcon = 'assets/images/ic_rank_cup_gold.png';
   static const String tabRankingPre = '$_m/tab_discover_pre.webp';
   static const String tabMessageNor = '$_m/tab_message_nor.webp';
   static const String tabMessagePre = '$_m/tab_message_pre.webp';
@@ -264,7 +290,7 @@ class R {
   static const String commonCloseIc = '$_m/common_close_ic.webp';
   static const String commonGoldIc2 = '$_m/common_gold_ic_2.webp';
   static const String commonBack2 = '$_m/common_back_2.webp';
-  static const String splashImgLogo = '$_m/splash_img_logo.webp';
+  static const String splashImgLogo = '$_m/splash_img_logo.png';
 
   // Mine / Profile icons
   static const String mineFacebookIc = '$_m/mine_facebook_ic.webp';
@@ -380,11 +406,25 @@ class R {
   /// Returns an [EncryptedImageProvider] for network URLs, cached locally with AES encryption.
   /// Returns a transparent 1x1 PNG for SVGA URLs to prevent decode errors.
   static ImageProvider cachedImage(String url) {
-    if (url.isEmpty) return transparentImage();
-    if (detectAssetType(url) == AssetType.svga) {
+    final clean = url.trim();
+    if (clean.isEmpty) return transparentImage();
+    if (detectAssetType(clean) == AssetType.svga) {
       return MemoryImage(_transparentPng);
     }
-    return EncryptedImageProvider(url);
+    if (clean.startsWith('/') || clean.startsWith('file://')) {
+      final filePath = clean.startsWith('file://') ? clean.replaceFirst('file://', '') : clean;
+      return FileImage(File(filePath));
+    }
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      return CachedNetworkImageProvider(clean);
+    }
+    if (clean.startsWith('assets/')) {
+      return AssetImage(clean);
+    }
+    if (clean.contains('.')) {
+      return AssetImage('assets/$clean');
+    }
+    return transparentImage();
   }
 
   // Constructor helpers
@@ -420,23 +460,43 @@ class R {
       return VapPlayer(url: path, width: width, height: height, fit: fit, loops: loops, onFinished: onFinished);
     }
     if (isNetworkUrl(path)) {
-      return Image(
-        image: EncryptedImageProvider(path),
+      return CachedNetImage(
+        path,
         width: width,
         height: height,
         fit: fit,
         color: color,
-        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white38),
+        placeholder: (_, __) => Container(
+          width: width,
+          height: height,
+          color: Colors.transparent,
+        ),
+        error: (ctx, err, _) {
+          final lower = path.toLowerCase();
+          if (lower.contains('avatar') || lower.contains('photo') || lower.contains('head') || lower.contains('user')) {
+            return Image.asset(R.avaBoy, width: width, height: height, fit: fit);
+          }
+          return Container(
+            width: width,
+            height: height,
+            color: Colors.transparent,
+          );
+        },
       );
     }
-    if (path.startsWith('file://')) {
+    if (path.startsWith('/') || path.startsWith('file://')) {
+      final filePath = path.startsWith('file://') ? path.replaceFirst('file://', '') : path;
       return Image.file(
-        File(path.replaceFirst('file://', '')),
+        File(filePath),
         width: width,
         height: height,
         fit: fit,
         color: color,
-        errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white38),
+        errorBuilder: (_, __, ___) => Container(
+          width: width,
+          height: height,
+          color: Colors.transparent,
+        ),
       );
     }
     return image(
@@ -497,7 +557,8 @@ class R {
 
     final overrideUrl = DynamicConfigService().getAssetOverride(assetPath);
     if (overrideUrl != null && overrideUrl.isNotEmpty) {
-      if (detectAssetType(overrideUrl) == AssetType.svga) {
+      final ovType = detectAssetType(overrideUrl);
+      if (ovType == AssetType.svga) {
         return SvgaPlayer(
           assetPath: overrideUrl,
           width: width,
@@ -505,6 +566,14 @@ class R {
           fit: fit,
           loops: loops,
           onFinished: onSvgaFinished,
+        );
+      }
+      if (ovType == AssetType.vap || ovType == AssetType.mp4) {
+        return VapPlayer(
+          url: overrideUrl,
+          width: width,
+          height: height,
+          fit: fit,
         );
       }
       return CachedNetImage(
@@ -531,6 +600,14 @@ class R {
         fit: fit,
         loops: loops,
         onFinished: onSvgaFinished,
+      );
+    }
+    if (localType == AssetType.vap || localType == AssetType.mp4) {
+      return VapPlayer(
+        url: assetPath,
+        width: width,
+        height: height,
+        fit: fit,
       );
     }
     return Image.asset(
@@ -579,6 +656,14 @@ class R {
         fit: fit,
       );
     }
+    if (type == AssetType.vap || type == AssetType.mp4) {
+      return VapPlayer(
+        url: assetPath,
+        width: width,
+        height: height,
+        fit: fit,
+      );
+    }
 
     if (assetPath.startsWith('http://') || assetPath.startsWith('https://')) {
       return CachedNetImage(
@@ -592,9 +677,18 @@ class R {
 
     final overrideUrl = DynamicConfigService().getAssetOverride(assetPath);
     if (overrideUrl != null && overrideUrl.isNotEmpty) {
-      if (detectAssetType(overrideUrl) == AssetType.svga) {
+      final ovType = detectAssetType(overrideUrl);
+      if (ovType == AssetType.svga) {
         return SvgaPlayer(
           assetPath: overrideUrl,
+          width: width,
+          height: height,
+          fit: fit,
+        );
+      }
+      if (ovType == AssetType.vap || ovType == AssetType.mp4) {
+        return VapPlayer(
+          url: overrideUrl,
           width: width,
           height: height,
           fit: fit,
@@ -615,12 +709,24 @@ class R {
         ),
       );
     }
+    final safeAsset = assetPath.startsWith('assets/') ? assetPath : (assetPath.contains('/') ? 'assets/$assetPath' : assetPath);
     return Image.asset(
-      assetPath,
+      safeAsset,
       width: width,
       height: height,
       fit: fit,
       color: color,
+      errorBuilder: (ctx, err, stack) {
+        final lower = assetPath.toLowerCase();
+        if (lower.contains('avatar') || lower.contains('user') || lower.contains('photo') || lower.contains('head') || lower.contains('ava')) {
+          return Image.asset(R.avaBoy, width: width, height: height, fit: fit);
+        }
+        return Container(
+          width: width,
+          height: height,
+          color: Colors.transparent,
+        );
+      },
     );
   }
 
