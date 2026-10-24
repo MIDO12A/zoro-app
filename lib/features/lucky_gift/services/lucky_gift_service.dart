@@ -44,9 +44,9 @@ class LuckyGiftService {
     _isPlayingAnim = true;
     final nextData = _broadcastQueue.removeAt(0);
 
-    // مهلة أمان قصوى لمنع التعليق
+    // مهلة أمان قصوى 8 ثوانٍ لمنع التعليق
     _queueWatchdog?.cancel();
-    _queueWatchdog = Timer(const Duration(seconds: 10), () {
+    _queueWatchdog = Timer(const Duration(seconds: 8), () {
       if (_isPlayingAnim && !_broadcastQueue.isEmpty) {
         _processNextInQueue(context);
       } else if (_isPlayingAnim) {
@@ -54,20 +54,22 @@ class LuckyGiftService {
       }
     });
 
-    // 1. إذا كان هناك فوز بمضاعف (5X فما فوق)، نشغل أنيميشن مكسب الحظ في الروم فقط لمنع تشغيل اثنين SVGA معاً
-    final bool hasWin = LuckyRoomWinSvgaOverlay.hasWinSvga(nextData.maxMultiplier);
-    if (hasWin) {
-      showRoomWinSvgaOverlay(
-        context,
-        multiplier: nextData.maxMultiplier,
-        wonCoins: nextData.totalWonCoins,
-        giftName: nextData.gift.giftNameAr.isNotEmpty ? nextData.gift.giftNameAr : nextData.gift.giftName,
-        senderName: nextData.senderName,
-        senderAvatar: nextData.senderAvatar,
-      );
-    } else if (LuckyComboSvgaOverlay.hasSvgaForCount(nextData.comboCount)) {
-      // نشغل أنيميشن رقم الكومبو فقط إذا لم يكن هناك فوز مضاعف تجنباً لتشنج الـ GPU
-      showComboSvgaOverlay(context, nextData.comboCount);
+    // 1. إذا كان المستخدم هو المرسل نفسه حصرياً، نشغل أنيميشن مكسب الحظ في الروم أو رقم الكومبو
+    final bool hasWin = LuckyRoomWinSvgaOverlay.hasWinSvga(nextData.maxMultiplier, customUrl: nextData.customSvgaUrl);
+    if (nextData.isSender) {
+      if (hasWin) {
+        showRoomWinSvgaOverlay(
+          context,
+          multiplier: nextData.maxMultiplier,
+          wonCoins: nextData.totalWonCoins,
+          giftName: nextData.gift.giftNameAr.isNotEmpty ? nextData.gift.giftNameAr : nextData.gift.giftName,
+          senderName: nextData.senderName,
+          senderAvatar: nextData.senderAvatar,
+          customSvgaUrl: nextData.customSvgaUrl,
+        );
+      } else if (LuckyComboSvgaOverlay.hasSvgaForCount(nextData.comboCount)) {
+        showComboSvgaOverlay(context, nextData.comboCount);
+      }
     }
 
     // 2. إذا كان فوزاً كبيراً بمضاعف 100X فما فوق، نعرض بانر الفوز العام الأسطوري لكافة الغرف
@@ -79,6 +81,7 @@ class LuckyGiftService {
         giftName: nextData.gift.giftNameAr,
         multiplier: nextData.maxMultiplier,
         totalWon: nextData.totalWonCoins,
+        customSvgaUrl: nextData.customSvgaUrl,
       );
     }
 
@@ -115,6 +118,7 @@ class LuckyGiftService {
     required String giftName,
     required String senderName,
     String senderAvatar = '',
+    String? customSvgaUrl,
   }) {
     _roomWinOverlay?.remove();
     if (!context.mounted) return; // FIX: لا تُنشئ overlay فوق context مفصول
@@ -126,6 +130,7 @@ class LuckyGiftService {
         giftName: giftName,
         senderName: senderName,
         senderAvatar: senderAvatar,
+        customSvgaUrl: customSvgaUrl,
         onFinished: () {
           _roomWinOverlay?.remove();
           _roomWinOverlay = null;
@@ -181,6 +186,7 @@ class LuckyGiftService {
     required String giftName,
     required int multiplier,
     required int totalWon,
+    String? customSvgaUrl,
   }) {
     if (multiplier < 100) return; // حصراً 100X فما فوق
     _bannerOverlay?.remove();
@@ -193,6 +199,7 @@ class LuckyGiftService {
         giftName: giftName,
         multiplier: multiplier,
         totalWon: totalWon,
+        customSvgaUrl: customSvgaUrl,
         onDismiss: () {
           _bannerOverlay?.remove();
           _bannerOverlay = null;
@@ -210,6 +217,7 @@ class LuckyGiftService {
     _globalSub = globalStream.listen((data) {
       final mult = data['multiplier'] is int ? data['multiplier'] as int : int.tryParse(data['multiplier']?.toString() ?? '0') ?? 0;
       if (mult < 100) return; // البانر العام يظهر فقط لـ 100X فما فوق
+      final customUrl = data['svga_url']?.toString() ?? data['svgaUrl']?.toString();
       if (context.mounted) {
         showBigWinBanner(
           context,
@@ -218,6 +226,7 @@ class LuckyGiftService {
           giftName: data['gift_name'] ?? '',
           multiplier: mult,
           totalWon: data['total_won'] ?? 0,
+          customSvgaUrl: (customUrl != null && customUrl.isNotEmpty) ? customUrl : null,
         );
       }
     });

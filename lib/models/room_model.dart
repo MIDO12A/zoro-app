@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../screens/room/models/seat_model.dart';
 
 class RoomModel {
@@ -25,6 +26,7 @@ class RoomModel {
   final int chatClearedAt;
   final bool isChatLocked;
   final String announcement;
+  final bool hasLuckyBag;
 
   RoomModel({
     required this.roomId,
@@ -51,6 +53,7 @@ class RoomModel {
     this.chatClearedAt = 0,
     this.isChatLocked = false,
     this.announcement = '',
+    this.hasLuckyBag = false,
   });
 
   RoomModel copyWith({
@@ -78,6 +81,7 @@ class RoomModel {
     int? chatClearedAt,
     bool? isChatLocked,
     String? announcement,
+    bool? hasLuckyBag,
   }) {
     return RoomModel(
       roomId: roomId ?? this.roomId,
@@ -104,6 +108,7 @@ class RoomModel {
       chatClearedAt: chatClearedAt ?? this.chatClearedAt,
       isChatLocked: isChatLocked ?? this.isChatLocked,
       announcement: announcement ?? this.announcement,
+      hasLuckyBag: hasLuckyBag ?? this.hasLuckyBag,
     );
   }
 
@@ -138,14 +143,23 @@ class RoomModel {
       ],
       totalGifts: (map['total_gifts'] ?? 0).toInt(),
       hotValue: (map['hot_value'] ?? 0).toInt(),
-      moderators: map['moderators'] != null
-          ? List<String>.from(map['moderators'] as List)
-          : const [],
+      moderators: () {
+        final m = map['moderators'];
+        if (m is List) return m.map((e) => e.toString()).toList();
+        if (m is String && m.isNotEmpty) {
+          try {
+            final decoded = jsonDecode(m);
+            if (decoded is List) return decoded.map((e) => e.toString()).toList();
+          } catch (_) {}
+        }
+        return <String>[];
+      }(),
       country: map['country']?.toString() ?? '',
       bgImage: map['bgImage']?.toString() ?? map['bg_image']?.toString() ?? '',
       chatClearedAt: (map['chat_cleared_at'] as num?)?.toInt() ?? 0,
       isChatLocked: map['is_chat_locked'] == true,
       announcement: map['announcement']?.toString() ?? map['description']?.toString() ?? '',
+      hasLuckyBag: map['has_lucky_bag'] == true || map['hasLuckyBag'] == true,
     );
   }
 
@@ -176,5 +190,6 @@ class RoomModel {
         'chat_cleared_at': chatClearedAt,
         'is_chat_locked': isChatLocked,
         'announcement': announcement,
+        'has_lucky_bag': hasLuckyBag,
       };
 }

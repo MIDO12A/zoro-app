@@ -68,6 +68,7 @@ class LuckyCardResult {
   final int wonCoins;
   final String giftName;
   final String giftIcon;
+  final String? svgaUrl;
   bool isFlipped;
 
   LuckyCardResult({
@@ -76,16 +77,18 @@ class LuckyCardResult {
     required this.wonCoins,
     required this.giftName,
     required this.giftIcon,
+    this.svgaUrl,
     this.isFlipped = false,
   });
 
-  factory LuckyCardResult.fromJson(Map<String, dynamic> json) {
+  factory LuckyCardResult.fromJson(Map<dynamic, dynamic> json) {
     return LuckyCardResult(
-      index: json['index'] ?? 0,
-      multiplier: json['multiplier'] ?? 0,
-      wonCoins: json['wonCoins'] ?? 0,
-      giftName: json['giftName'] ?? '',
-      giftIcon: json['giftIcon'] ?? '',
+      index: (json['index'] as num?)?.toInt() ?? 0,
+      multiplier: (json['multiplier'] as num?)?.toInt() ?? 0,
+      wonCoins: (json['wonCoins'] as num?)?.toInt() ?? (json['won_coins'] as num?)?.toInt() ?? 0,
+      giftName: json['giftName']?.toString() ?? json['gift_name']?.toString() ?? '',
+      giftIcon: json['giftIcon']?.toString() ?? json['gift_icon']?.toString() ?? '',
+      svgaUrl: json['svgaUrl']?.toString() ?? json['svga_url']?.toString(),
     );
   }
 }
@@ -101,8 +104,10 @@ class LuckyGiftBroadcastData {
   final int totalWonCoins;
   final int maxMultiplier;
   final bool isBigWin;
+  final String? customSvgaUrl;
   final String comboId;
   final int comboCount;
+  final bool isSender;
 
   LuckyGiftBroadcastData({
     required this.roomId,
@@ -114,33 +119,59 @@ class LuckyGiftBroadcastData {
     required this.totalWonCoins,
     required this.maxMultiplier,
     required this.isBigWin,
+    this.customSvgaUrl,
     required this.comboId,
     required this.comboCount,
+    this.isSender = false,
   });
 
-  factory LuckyGiftBroadcastData.fromJson(Map<String, dynamic> json) {
-    final sender = json['sender'] as Map<String, dynamic>? ?? {};
-    final receiver = json['receiver'] as Map<String, dynamic>? ?? {};
-    final giftJson = json['gift'] as Map<String, dynamic>? ?? {};
-    final results = json['results'] as Map<String, dynamic>? ?? {};
-    final combo = json['combo'] as Map<String, dynamic>? ?? {};
-    
-    final cardsList = (results['cards'] as List<dynamic>? ?? [])
-        .map((c) => LuckyCardResult.fromJson(c as Map<String, dynamic>))
-        .toList();
+  factory LuckyGiftBroadcastData.fromJson(Map<dynamic, dynamic> json) {
+    final sender = (json['sender'] as Map?)?.cast<String, dynamic>() ?? {};
+    final receiver = (json['receiver'] as Map?)?.cast<String, dynamic>() ?? {};
+    final giftJson = (json['gift'] as Map?)?.cast<String, dynamic>() ?? {};
+    final results = (json['results'] as Map?)?.cast<String, dynamic>() ?? {};
+    final combo = (json['combo'] as Map?)?.cast<String, dynamic>() ?? {};
+
+    final rawCards = results['cards'] as List<dynamic>? ?? [];
+    final cardsList = <LuckyCardResult>[];
+    for (final c in rawCards) {
+      if (c is Map) {
+        cardsList.add(LuckyCardResult.fromJson(c));
+      }
+    }
+
+    final maxMult = (results['maxMultiplier'] as num?)?.toInt() ??
+        (json['multiplier'] as num?)?.toInt() ??
+        0;
+    final wonCoins = (results['totalWonCoins'] as num?)?.toInt() ??
+        (json['won_coins'] as num?)?.toInt() ??
+        0;
+
+    final parsedSvga = results['svgaUrl']?.toString() ??
+        results['svga_url']?.toString() ??
+        json['svga_url']?.toString() ??
+        json['svgaUrl']?.toString();
 
     return LuckyGiftBroadcastData(
-      roomId: json['roomId'] ?? '',
-      senderName: sender['nickname'] ?? '',
-      senderAvatar: sender['avatar'] ?? '',
-      receiverName: receiver['nickname'] ?? '',
-      gift: LuckyGiftModel.fromJson(giftJson),
+      roomId: json['roomId']?.toString() ?? json['room_id']?.toString() ?? '',
+      senderName: sender['nickname']?.toString() ?? json['sender_name']?.toString() ?? '',
+      senderAvatar: sender['avatar']?.toString() ?? json['sender_photo_url']?.toString() ?? '',
+      receiverName: receiver['nickname']?.toString() ?? json['receiver_name']?.toString() ?? '',
+      gift: LuckyGiftModel.fromJson(giftJson.isNotEmpty
+          ? giftJson
+          : {
+              'id': json['gift_id'],
+              'gift_name': json['gift_name'],
+              'gift_name_ar': json['gift_name'],
+              'gift_icon_url': json['gift_icon'],
+            }),
       cards: cardsList,
-      totalWonCoins: results['totalWonCoins'] ?? 0,
-      maxMultiplier: results['maxMultiplier'] ?? 0,
-      isBigWin: results['isBigWin'] ?? false,
-      comboId: combo['comboId'] ?? '',
-      comboCount: combo['comboCount'] ?? 1,
+      totalWonCoins: wonCoins,
+      maxMultiplier: maxMult,
+      isBigWin: results['isBigWin'] == true || maxMult >= 50,
+      customSvgaUrl: (parsedSvga != null && parsedSvga.isNotEmpty) ? parsedSvga : null,
+      comboId: combo['comboId']?.toString() ?? json['combo_id']?.toString() ?? '',
+      comboCount: (combo['comboCount'] as num?)?.toInt() ?? 1,
     );
   }
 }
