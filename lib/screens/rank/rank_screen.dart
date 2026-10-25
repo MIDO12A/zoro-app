@@ -1,9 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../config/r.dart';
+import '../../core/supabase_compat.dart';
 import '../../services/supabase_service.dart';
-import '../../services/firebase_service.dart';
 import '../../services/dynamic_config_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../user_profile/user_profile_screen.dart';
@@ -79,29 +78,63 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
 
   Future<void> _loadRankings() async {
     setState(() => _loading = true);
+    final sb = Supabase.instance.client;
     try {
-      final results = await Future.wait([
-        _api.getGlobalRankings(isWealth: true, timeframe: 'daily'),
-        _api.getGlobalRankings(isWealth: true, timeframe: 'weekly'),
-        _api.getGlobalRankings(isWealth: true, timeframe: 'monthly'),
-        
-        _api.getGlobalRankings(isWealth: false, timeframe: 'daily'),
-        _api.getGlobalRankings(isWealth: false, timeframe: 'weekly'),
-        _api.getGlobalRankings(isWealth: false, timeframe: 'monthly'),
-        
-        _api.getRoomGlobalRanking(),
+      final results = await Future.wait<dynamic>([
+        // 1. الثروة (Daily, Weekly, Monthly)
+        sb.from('daily_wealth_ranking').select('*').limit(50).catchError((_) => []),
+        sb.from('weekly_wealth_ranking').select('*').limit(50).catchError((_) => []),
+        sb.from('monthly_wealth_ranking').select('*').limit(50).catchError((_) => []),
+
+        // 2. السحر والجاذبية (Daily, Weekly, Monthly)
+        sb.from('daily_charm_ranking').select('*').limit(50).catchError((_) => []),
+        sb.from('weekly_charm_ranking').select('*').limit(50).catchError((_) => []),
+        sb.from('monthly_charm_ranking').select('*').limit(50).catchError((_) => []),
+
+        // 3. الغرف (Daily, Weekly, Monthly)
+        sb.from('daily_rooms_ranking').select('*').limit(50).catchError((_) => []),
+        sb.from('weekly_rooms_ranking').select('*').limit(50).catchError((_) => []),
+        sb.from('monthly_rooms_ranking').select('*').limit(50).catchError((_) => []),
       ]);
+
+      var wealthDaily = List<Map<String, dynamic>>.from(results[0] as List? ?? []);
+      var wealthWeekly = List<Map<String, dynamic>>.from(results[1] as List? ?? []);
+      var wealthMonthly = List<Map<String, dynamic>>.from(results[2] as List? ?? []);
+
+      var charmDaily = List<Map<String, dynamic>>.from(results[3] as List? ?? []);
+      var charmWeekly = List<Map<String, dynamic>>.from(results[4] as List? ?? []);
+      var charmMonthly = List<Map<String, dynamic>>.from(results[5] as List? ?? []);
+
+      var roomsDaily = List<Map<String, dynamic>>.from(results[6] as List? ?? []);
+      var roomsWeekly = List<Map<String, dynamic>>.from(results[7] as List? ?? []);
+      var roomsMonthly = List<Map<String, dynamic>>.from(results[8] as List? ?? []);
+
+      // حساب الترتيب الدوري الفعلي من جدول الهدايا مع احترام فترات التصفير (يومي 24س، أسبوعي من الاثنين، شهري كل شهر)
+      if (wealthDaily.isEmpty) wealthDaily = await FirebaseService().getGlobalRankings(isWealth: true, timeframe: 'daily');
+      if (wealthWeekly.isEmpty) wealthWeekly = await FirebaseService().getGlobalRankings(isWealth: true, timeframe: 'weekly');
+      if (wealthMonthly.isEmpty) wealthMonthly = await FirebaseService().getGlobalRankings(isWealth: true, timeframe: 'monthly');
+
+      if (charmDaily.isEmpty) charmDaily = await FirebaseService().getGlobalRankings(isWealth: false, timeframe: 'daily');
+      if (charmWeekly.isEmpty) charmWeekly = await FirebaseService().getGlobalRankings(isWealth: false, timeframe: 'weekly');
+      if (charmMonthly.isEmpty) charmMonthly = await FirebaseService().getGlobalRankings(isWealth: false, timeframe: 'monthly');
+
+      if (roomsDaily.isEmpty) roomsDaily = await FirebaseService().getRoomGlobalRanking(timeframe: 'daily');
+      if (roomsWeekly.isEmpty) roomsWeekly = await FirebaseService().getRoomGlobalRanking(timeframe: 'weekly');
+      if (roomsMonthly.isEmpty) roomsMonthly = await FirebaseService().getRoomGlobalRanking(timeframe: 'monthly');
+
       if (mounted) {
         setState(() {
-          _cachedRankings['wealth_daily'] = results[0];
-          _cachedRankings['wealth_weekly'] = results[1];
-          _cachedRankings['wealth_monthly'] = results[2];
-          
-          _cachedRankings['charm_daily'] = results[3];
-          _cachedRankings['charm_weekly'] = results[4];
-          _cachedRankings['charm_monthly'] = results[5];
-          
-          _cachedRankings['rooms'] = results[6];
+          _cachedRankings['wealth_daily']   = wealthDaily;
+          _cachedRankings['wealth_weekly']  = wealthWeekly;
+          _cachedRankings['wealth_monthly'] = wealthMonthly;
+
+          _cachedRankings['charm_daily']    = charmDaily;
+          _cachedRankings['charm_weekly']   = charmWeekly;
+          _cachedRankings['charm_monthly']  = charmMonthly;
+
+          _cachedRankings['rooms_daily']    = roomsDaily;
+          _cachedRankings['rooms_weekly']   = roomsWeekly;
+          _cachedRankings['rooms_monthly']  = roomsMonthly;
           _loading = false;
         });
       }
@@ -111,45 +144,69 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
   }
 
   List<Map<String, dynamic>> _getRankingData(_RankPeriod period, String type) {
+    final periodKey = period == _RankPeriod.daily ? 'daily' : period == _RankPeriod.weekly ? 'weekly' : 'monthly';
+    final key = '${type}_$periodKey';
+
     if (type == 'rooms') {
-      final list = _cachedRankings['rooms'] ?? [];
-      return list.map((e) {
+      final list = _cachedRankings[key] ?? [];
+      final withPoints = list.where((e) {
+        final p = (e['points'] as num?)?.toInt() ?? (e['amount'] as num?)?.toInt() ?? (e['total_gifts'] as num?)?.toInt() ?? 0;
+        return p > 0;
+      }).toList();
+      final targetList = withPoints.isNotEmpty ? withPoints : list;
+      return targetList.map((e) {
         final photo = (e['photoUrl'] ?? e['photo_url'] ?? e['room_photo_url'] ?? e['cover_image'] ?? e['image'] ?? e['bg_image'] ?? '').toString();
-        final roomId = (e['room_id'] ?? e['user_id'] ?? e['id'] ?? '').toString();
+        final roomId = (e['room_id'] ?? e['roomId'] ?? e['user_id'] ?? e['id'] ?? '').toString();
+        final pts = (e['points'] as num?)?.toInt() ?? (e['amount'] as num?)?.toInt() ?? (e['total_gifts'] as num?)?.toInt() ?? 0;
         return {
           'uid': e['id'] ?? e['uid'] ?? roomId,
           'name': (e['name'] ?? e['title'] ?? 'Room').toString(),
           'photoUrl': photo,
           'photo_url': photo,
-          'points': (e['points'] as num?)?.toInt() ?? 0,
+          'points': pts,
+          'amount': pts,
           'level': 1,
           'user_id': roomId,
           'room_id': roomId,
+          'custom_id': roomId,
+          'display_id': roomId,
           'host_name': (e['host_name'] ?? '').toString(),
           'password': (e['password'] ?? '').toString(),
         };
       }).toList();
     }
     
-    final periodKey = period == _RankPeriod.daily ? 'daily' : period == _RankPeriod.weekly ? 'weekly' : 'monthly';
-    final key = '${type}_$periodKey';
     final data = _cachedRankings[key] ?? [];
     
-    return data.map((e) {
+    return data.where((e) {
       final points = type == 'wealth'
-          ? (e['total_gifts_sent'] ?? 0)
-          : (e['total_gifts_received'] ?? 0);
-      final customId = (e['custom_id'] ?? e['id'] ?? e['user_id'] ?? '').toString();
-      final displayId = (customId.isNotEmpty && customId != e['uid'])
-          ? customId
-          : (e['user_id'] ?? e['id'] ?? e['uid'] ?? '').toString();
+          ? ((e['total_gifts_sent'] as num?)?.toInt() ?? (e['points'] as num?)?.toInt() ?? (e['score'] as num?)?.toInt() ?? (e['total_value'] as num?)?.toInt() ?? 0)
+          : ((e['total_gifts_received'] as num?)?.toInt() ?? (e['points'] as num?)?.toInt() ?? (e['score'] as num?)?.toInt() ?? (e['total_value'] as num?)?.toInt() ?? 0);
+      return points > 0;
+    }).map((e) {
+      final points = type == 'wealth'
+          ? ((e['total_gifts_sent'] as num?)?.toInt() ?? (e['points'] as num?)?.toInt() ?? (e['score'] as num?)?.toInt() ?? (e['total_value'] as num?)?.toInt() ?? 0)
+          : ((e['total_gifts_received'] as num?)?.toInt() ?? (e['points'] as num?)?.toInt() ?? (e['score'] as num?)?.toInt() ?? (e['total_value'] as num?)?.toInt() ?? 0);
+      final rawCustomId = (e['custom_id'] ?? e['display_id'] ?? '').toString();
+      final rawId = (e['id'] ?? e['user_id'] ?? '').toString();
+      final realUid = (e['uid'] ?? e['user_id'] ?? e['id'] ?? '').toString();
+      final displayId = rawCustomId.isNotEmpty
+          ? rawCustomId
+          : (!rawId.contains('-') && rawId.length < 20 && rawId.isNotEmpty
+              ? rawId
+              : (rawCustomId.isNotEmpty ? rawCustomId : realUid));
+      final photo = (e['photo_url'] ?? e['photoUrl'] ?? e['avatar'] ?? '').toString();
+      final name = (e['name'] ?? e['user_name'] ?? 'مستخدم').toString();
       return {
-        'uid': e['uid'] ?? '',
-        'name': (e['name'] ?? 'Unknown').toString(),
-        'photoUrl': (e['photo_url'] ?? e['photoUrl'] ?? '').toString(),
+        'uid': realUid,
+        'name': name.isNotEmpty ? name : 'مستخدم',
+        'photoUrl': photo,
+        'photo_url': photo,
         'points': points,
         'level': e['level'] ?? 1,
         'user_id': displayId,
+        'custom_id': displayId,
+        'display_id': displayId,
       };
     }).toList();
   }
@@ -187,6 +244,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
                 Expanded(
                   child: TabBarView(
                     controller: _mainTabController,
+                    physics: const NeverScrollableScrollPhysics(),
                     children: [
                       _buildRankPage('wealth', _wealthSubTabController),
                       _buildRankPage('charm', _charmSubTabController),
@@ -415,7 +473,11 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     final double width = isGold ? 130 : 100;
     final double avatarSize = isGold ? 60 : 50;
     final String photo = (item['photoUrl'] ?? item['photo_url'] ?? '').toString();
-    final String displayId = (item['user_id'] ?? item['id'] ?? '').toString();
+    final String rawCid = (item['custom_id'] ?? item['display_id'] ?? '').toString();
+    final String rawId = (item['room_id'] ?? item['user_id'] ?? item['id'] ?? '').toString();
+    final String displayId = rawCid.isNotEmpty 
+        ? rawCid 
+        : (type == 'rooms' ? rawId : (rawId.contains('-') && rawId.length > 20 ? '' : rawId));
 
     return GestureDetector(
       onTap: () {
@@ -435,7 +497,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             );
           }
         } else {
-          final uid = (item['uid'] ?? '').toString();
+          final uid = (item['uid'] ?? item['user_id'] ?? item['id'] ?? '').toString();
           if (uid.isNotEmpty) {
             Navigator.push(
               context,
@@ -562,7 +624,11 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
     final remoteBg = config.globalRankListBg;
     final localBg = 'assets/mipmap-xxhdpi/global_rank_list_bg.png';
     final String photo = (item['photoUrl'] ?? item['photo_url'] ?? '').toString();
-    final String displayId = (item['user_id'] ?? item['id'] ?? '').toString();
+    final String rawCid = (item['custom_id'] ?? item['display_id'] ?? '').toString();
+    final String rawId = (item['room_id'] ?? item['user_id'] ?? item['id'] ?? '').toString();
+    final String displayId = rawCid.isNotEmpty 
+        ? rawCid 
+        : (type == 'rooms' ? rawId : (rawId.contains('-') && rawId.length > 20 ? '' : rawId));
 
     return GestureDetector(
       onTap: () {
@@ -582,7 +648,7 @@ class _RankScreenState extends State<RankScreen> with TickerProviderStateMixin {
             );
           }
         } else {
-          final uid = (item['uid'] ?? '').toString();
+          final uid = (item['uid'] ?? item['user_id'] ?? item['id'] ?? '').toString();
           if (uid.isNotEmpty) {
             Navigator.push(
               context,

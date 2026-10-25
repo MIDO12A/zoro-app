@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../config/r.dart';
 import '../../../config/app_colors.dart';
@@ -47,6 +47,7 @@ Widget _emptyCircle(double s) => Container(
 class SeatArea extends StatelessWidget {
   final List<SeatModel> seats;
   final void Function(int index) onSeatTap;
+  final void Function(int index)? onSeatLongPress;
   final void Function()? onCharmTap;
   final bool showCharmValues;
   final Map<int, String>? seatEmojis;
@@ -58,12 +59,14 @@ class SeatArea extends StatelessWidget {
     super.key,
     required this.seats,
     required this.onSeatTap,
+    this.onSeatLongPress,
     this.onCharmTap,
     this.showCharmValues = true,
     this.seatEmojis,
     this.moderators,
     this.hostUid,
     this.seatStyle = SeatStyle.classic,
+    this.seatKeys,
   });
 
   @override
@@ -109,12 +112,12 @@ class SeatArea extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Seat 0 (Captain) in the center
+            // Seat 0 in the center (same standard size as other seats)
             if (seats.isNotEmpty)
               Positioned(
                 left: centerX - 38,
                 top: centerY - 48,
-                child: _buildCircularSeatItem(0, true),
+                child: _buildCircularSeatItem(0, false),
               ),
             // Seats 1 to 9 arranged in a circle
             for (int i = 1; i <= 9; i++)
@@ -141,19 +144,18 @@ class SeatArea extends StatelessWidget {
   Widget _buildCircularSeatItem(int idx, bool isCaptain) {
     return GestureDetector(
       onTap: () => onSeatTap(idx),
-      child: Transform.scale(
-        scale: 1.2,
-        child: _NormalSeat(
-          seat: seats[idx],
-          emoji: seatEmojis?[idx],
-          isModerator: seats[idx].user != null
-              ? moderators?.contains(seats[idx].user!.id) ?? false
-              : false,
-          seatStyle: seatStyle,
-          isCaptain: isCaptain,
-          showCharmValues: showCharmValues,
-          onCharmTap: onCharmTap,
-        ),
+      onLongPress: onSeatLongPress != null ? () => onSeatLongPress!(idx) : null,
+      child: _NormalSeat(
+        key: seatKeys?[idx] ?? ValueKey('seat_$idx'),
+        seat: seats[idx],
+        emoji: seatEmojis?[idx],
+        isModerator: seats[idx].user != null
+            ? moderators?.contains(seats[idx].user!.id) ?? false
+            : false,
+        seatStyle: seatStyle,
+        isCaptain: false,
+        showCharmValues: showCharmValues,
+        onCharmTap: onCharmTap,
       ),
     );
   }
@@ -170,18 +172,21 @@ class SeatArea extends StatelessWidget {
       rows.add(
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Expanded(child: SizedBox()),
             Expanded(
               child: Center(
                 child: GestureDetector(
                   onTap: () => onSeatTap(0),
+                  onLongPress: onSeatLongPress != null ? () => onSeatLongPress!(0) : null,
                   child: _NormalSeat(
+                    key: seatKeys?[0] ?? ValueKey('seat_${items[0].index}'),
                     seat: items[0],
                     emoji: seatEmojis?[0],
                     isModerator: items[0].user != null ? moderators?.contains(items[0].user!.id) ?? false : false,
                     seatStyle: seatStyle,
-                    isCaptain: true,
+                    isCaptain: false,
                     showCharmValues: showCharmValues,
                     onCharmTap: onCharmTap,
                   ),
@@ -193,7 +198,9 @@ class SeatArea extends StatelessWidget {
               child: Center(
                 child: GestureDetector(
                   onTap: () => onSeatTap(1),
+                  onLongPress: onSeatLongPress != null ? () => onSeatLongPress!(1) : null,
                   child: _NormalSeat(
+                    key: seatKeys?[1] ?? ValueKey('seat_${items[1].index}'),
                     seat: items[1],
                     emoji: seatEmojis?[1],
                     isModerator: items[1].user != null ? moderators?.contains(items[1].user!.id) ?? false : false,
@@ -217,13 +224,16 @@ class SeatArea extends StatelessWidget {
         rows.add(
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (int j = 0; j < rowItems.length; j++)
                 Expanded(
                   child: Center(
                     child: GestureDetector(
                       onTap: () => onSeatTap(i + j),
+                      onLongPress: onSeatLongPress != null ? () => onSeatLongPress!(i + j) : null,
                       child: _NormalSeat(
+                        key: ValueKey('seat_${rowItems[j].index}'),
                         seat: rowItems[j],
                         emoji: seatEmojis?[i + j],
                         isModerator: rowItems[j].user != null ? moderators?.contains(rowItems[j].user!.id) ?? false : false,
@@ -250,20 +260,23 @@ class SeatArea extends StatelessWidget {
       rows.add(
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (int j = 0; j < rowItems.length; j++)
               Expanded(
                 child: Center(
                   child: GestureDetector(
                     onTap: () => onSeatTap(i + j),
+                    onLongPress: onSeatLongPress != null ? () => onSeatLongPress!(i + j) : null,
                     child: _NormalSeat(
+                      key: ValueKey('seat_${rowItems[j].index}'),
                       seat: rowItems[j],
                       emoji: seatEmojis?[i + j],
                       isModerator: rowItems[j].user != null
                           ? moderators?.contains(rowItems[j].user!.id) ?? false
                           : false,
                       seatStyle: seatStyle,
-                      isCaptain: (i + j == 0),
+                      isCaptain: false,
                       showCharmValues: showCharmValues,
                       onCharmTap: onCharmTap,
                     ),
@@ -293,6 +306,7 @@ class _NormalSeat extends StatelessWidget {
   final void Function()? onCharmTap;
 
   const _NormalSeat({
+    super.key,
     required this.seat,
     this.emoji,
     this.isModerator = false,
@@ -308,7 +322,6 @@ class _NormalSeat extends StatelessWidget {
     final user = seat.user;
     final name = user?.name ?? '';
     final charm = user?.charm;
-    final avatar = user?.avatar;
     final hasFrame = seat.hasFrame || (seat.frameAsset != null && seat.frameAsset!.isNotEmpty);
     final frameAsset = seat.frameAsset;
 
@@ -317,17 +330,20 @@ class _NormalSeat extends StatelessWidget {
       builder: (context, speakingUsers, _) {
         final isSpeaking = hasUser && user?.id != null && speakingUsers.contains(user!.id);
 
-        Widget child = Column(
+        Widget child = SizedBox(
+          width: 76,
+          height: 104,
+          child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
               width: 76,
-              height: 88,
+              height: 70,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
                   Positioned(
-                    top: 6,
+                    top: 2,
                     left: 6,
                     child: _buildAvatarPart(hasUser, user, isSpeaking, hasFrame, frameAsset),
                   ),
@@ -336,7 +352,7 @@ class _NormalSeat extends StatelessWidget {
                   child: IgnorePointer(
                     child: Center(
                       child: emoji!.startsWith('http')
-                          ? Image.network(emoji!, width: 64, height: 64, fit: BoxFit.contain)
+                          ? Image.network(emoji!, width: 64, height: 64, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink())
                           : Text(
                               emoji!,
                               style: const TextStyle(fontSize: 48),
@@ -346,7 +362,7 @@ class _NormalSeat extends StatelessWidget {
                 ),
               if (!hasUser && seat.isLocked)
                 Positioned(
-                  bottom: 2,
+                  bottom: 0,
                   left: 0,
                   right: 0,
                   child: Center(
@@ -359,7 +375,7 @@ class _NormalSeat extends StatelessWidget {
                 ),
               if (hasUser && seat.isMuted)
                 Positioned(
-                  top: 34,
+                  top: 30,
                   left: 36,
                   child: R.image(
                     R.roomMicSeatMuteIc,
@@ -371,7 +387,7 @@ class _NormalSeat extends StatelessWidget {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.only(top: 5),
+          padding: const EdgeInsets.only(top: 2),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -393,10 +409,8 @@ class _NormalSeat extends StatelessWidget {
                 width: isModerator ? 48 : 56,
                 child: Text(
                   hasUser
-                      ? name
-                      : (seatStyle == SeatStyle.circle
-                          ? (isCaptain ? 'Captain' : '${seat.index}')
-                          : (isCaptain ? 'Captain' : '${seat.index + 1}')),
+                      ? ((name == 'الكابتن' || name == 'الكابت' || name == 'كابتن' || name.trim().isEmpty) ? '${seat.index + 1}' : name)
+                      : '${seat.index + 1}',
                   style: const TextStyle(fontSize: 11, color: Colors.white),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -406,11 +420,11 @@ class _NormalSeat extends StatelessWidget {
             ],
           ),
         ),
-        if (hasUser && charm != null)
+        if (showCharmValues && hasUser && charm != null)
           Padding(
             padding: const EdgeInsets.only(top: 2),
             child: GestureDetector(
-              onTap: onCharmTap,
+              onTap: (isModerator || isCaptain || (seat.user?.isOwner == true)) ? onCharmTap : null,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(4, 1, 4, 1),
                 decoration: BoxDecoration(
@@ -421,27 +435,22 @@ class _NormalSeat extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     R.image(R.roomMicCharmMaleIc, width: 9, height: 9),
-                    if (showCharmValues) ...[
-                      const SizedBox(width: 1),
-                      Text(
-                        _formatCharm(charm),
-                        style: const TextStyle(fontSize: 9, color: Colors.white),
-                      ),
-                    ],
+                    const SizedBox(width: 1),
+                    Text(
+                      _formatCharm(charm),
+                      style: const TextStyle(fontSize: 9, color: Colors.white),
+                    ),
                   ],
                 ),
               ),
             ),
-          ),
+          )
+        else
+          const SizedBox(height: 16),
       ],
-    );
+    ),
+  );
 
-    if (isCaptain) {
-      child = Transform.scale(
-        scale: 1.15,
-        child: child,
-      );
-    }
     return child;
       },
     );
@@ -552,53 +561,29 @@ class _NormalSeat extends StatelessWidget {
         ),
       );
     } else if (seatStyle == SeatStyle.heart) {
-      // VIP style: thick metallic gold ring
-      baseAvatar = Container(
+      // VIP style: clean circular avatar without metallic gold ring
+      baseAvatar = SizedBox(
         width: borderSize,
         height: borderSize,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFFFFF275),
-              Color(0xFFD4AF37),
-              Color(0xFF8C6200),
-              Color(0xFFFFF9C4),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: ClipOval(
+        child: Center(
           child: SizedBox(
-            width: borderSize - 8.0,
-            height: borderSize - 8.0,
+            width: borderSize,
+            height: borderSize,
             child: avatarWidget,
           ),
         ),
       );
     } else {
-      // Classic style: thin gold border (original)
+      // Classic style: clean circular avatar without golden border
       baseAvatar = SizedBox(
         width: borderSize,
         height: borderSize,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            avatarWidget,
-            Container(
-              width: borderSize,
-              height: borderSize,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppColors.goldLight.withValues(alpha: 0.45),
-                  width: 1.5,
-                ),
-              ),
-            ),
-          ],
+        child: Center(
+          child: SizedBox(
+            width: borderSize,
+            height: borderSize,
+            child: avatarWidget,
+          ),
         ),
       );
     }
