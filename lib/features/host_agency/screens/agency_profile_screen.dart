@@ -356,7 +356,9 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
                               height: 117,
                               child: a.photoUrl != null && a.photoUrl!.isNotEmpty
                                   ? Image(
-                                      image: EncryptedImageProvider(a.photoUrl!),
+                                      image: (a.photoUrl!.startsWith('http') && !a.photoUrl!.endsWith('.enc'))
+                                          ? R.cachedImage(a.photoUrl!)
+                                          : EncryptedImageProvider(a.photoUrl!),
                                       fit: BoxFit.cover,
                                       errorBuilder: (_, __, ___) => _buildAvatarFallback(a.name),
                                     )
@@ -435,7 +437,7 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
                                     fit: BoxFit.contain,
                                     errorBuilder: (_, __, ___) => const Icon(Icons.badge, size: 18, color: Color(0xFFFFFFAD)),
                                   ),
-                                  text: a.agencyPublicId ?? a.id,
+                                  text: formatAgencyNumericId(a.agencyPublicId ?? a.id),
                                 ),
                               ],
                             ),
@@ -707,75 +709,32 @@ class _AgencyProfileScreenState extends State<AgencyProfileScreen> {
   }
 
   Widget _buildActionButton(AgencyCard a) {
-    // الحالة 1: عضو بالفعل في الوكالة -> بطاقة العضوية + زر الانسحاب من الوكالة
+    // الحالة 1: عضو بالفعل في الوكالة -> بطاقة العضوية فقط (الانسحاب من لوحة التحكم حصراً)
     if (a.isMember) {
-      return Row(
-        children: [
-          Expanded(
-            flex: 3,
-            child: Container(
-              height: 48,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E3A24),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0xFF2E7D32), width: 1),
-              ),
-              alignment: Alignment.center,
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.check_circle_rounded, color: Color(0xFF4CAF50), size: 18),
-                  SizedBox(width: 6),
-                  Text(
-                    'أنت عضو',
-                    style: TextStyle(
-                      color: Color(0xFF4CAF50),
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+      return Container(
+        width: double.infinity,
+        height: 48,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E3A24),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: const Color(0xFF2E7D32), width: 1),
+        ),
+        alignment: Alignment.center,
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_rounded, color: Color(0xFF4CAF50), size: 20),
+            SizedBox(width: 8),
+            Text(
+              'أنت عضو في هذه الوكالة ✅',
+              style: TextStyle(
+                color: Color(0xFF4CAF50),
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 4,
-            child: GestureDetector(
-              onTap: _joining ? null : _leaveAgency,
-              child: Container(
-                height: 48,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3B1E22),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFE53935), width: 1),
-                ),
-                alignment: Alignment.center,
-                child: _joining
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.exit_to_app, color: Color(0xFFFF5252), size: 18),
-                          SizedBox(width: 6),
-                          Text(
-                            'الانسحاب من الوكالة',
-                            style: TextStyle(
-                              color: Color(0xFFFF5252),
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       );
     }
 
