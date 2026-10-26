@@ -94,7 +94,7 @@ class _AgencyOwnerWalletScreenState extends State<AgencyOwnerWalletScreen>
         .onPostgresChanges(
           event:  PostgresChangeEvent.insert,
           schema: 'public',
-          table:  'agency_owner_ledger',
+          table:  'agency_diamond_ledger',
           filter: PostgresChangeFilter(
             type:  PostgresChangeFilterType.eq,
             column: 'agency_id',
@@ -123,9 +123,19 @@ class _AgencyOwnerWalletScreenState extends State<AgencyOwnerWalletScreen>
         idempotencyKey: idempKey,
       );
       if (mounted) {
+        if (res['success'] == false) {
+          _show(res['error']?.toString() ?? 'فشل التبادل');
+          return;
+        }
         final coins = res['coins'] ?? 0;
         _show('✅ تم التبادل: ${_fmt(amount)} ألماس → ${_fmt(coins)} كوينز', ok: true);
         _exchangeCtrl.clear();
+        final uid = Supabase.instance.client.auth.currentUser?.id;
+        if (uid != null) {
+          try {
+            await context.read<UserProvider>().loadUser(uid);
+          } catch (_) {}
+        }
         await _load();
       }
     } catch (e) {
@@ -331,23 +341,7 @@ class _AgencyOwnerWalletScreenState extends State<AgencyOwnerWalletScreen>
             value: '${_fmt(w.earnedTotal)} 💎',
             color: Colors.purple.shade700,
           ),
-          const SizedBox(height: 20),
-
-          if (r != null) ...[
-            const Text('معدلات المحرك الحالية',
-                style: TextStyle(color: Colors.white70, fontFamily: 'Tajawal',
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
-            _rateRow('ألماس → كوينز',
-                '1 ألماس = ${r.diamondToCoinRate} كوينز'),
-            _rateRow('ألماس → دولار',
-                '1000 ألماس = \$${(r.diamondToUsdRate * 1000).toStringAsFixed(2)}'),
-            _rateRow('رسوم السحب', '${r.withdrawalFeePct.toStringAsFixed(0)}%'),
-            _rateRow('الحد الأدنى للسحب', '${_fmt(r.minDiamondsToWithdraw)} ألماس'),
-            _rateRow('حصتك من الهدايا', '${r.agencySharePct}% (وكالة) + ${r.hostSharePct}% (مضيف)'),
-          ],
-
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
           // أزرار سريعة
           Row(children: [
             Expanded(child: _quickBtn('تبادل بكوينز', Icons.currency_exchange,
@@ -831,7 +825,7 @@ class _OwnerTransferToAgentTabState extends State<_OwnerTransferToAgentTab> {
   }
 
   Future<void> _search(String q) async {
-    if (q.trim().length < 2) { setState(() => _results = []); return; }
+    if (q.trim().isEmpty) { setState(() => _results = []); return; }
     setState(() => _searching = true);
     try {
       final res = await AgencyRepository.searchRechargeAgents(q);
