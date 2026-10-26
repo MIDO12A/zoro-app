@@ -1,53 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'dart:async';
-import 'dart:developer' as developer;
-import 'firebase_options.dart';
+
 import 'l10n/app_localizations.dart';
 import 'services/dynamic_config_service.dart';
 import 'services/error_reporting_service.dart';
 import 'services/level_service.dart';
-import 'services/firebase_service.dart';
 import 'services/media_cache_service.dart'; // ✅ للـ warmup المبكر
 import 'services/room_state_service.dart';
+import 'services/supabase_auth_service.dart';
+import 'services/supabase_service.dart';
 import 'providers/user_provider.dart';
 import 'providers/locale_provider.dart';
 import 'screens/splash/splash_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/login/setup_profile_screen.dart';
 import 'screens/main_screen/main_screen.dart';
-import 'screens/room/room_screen.dart';
+import 'screens/room/room_screen.dart' hide Positioned;
 import 'config/r.dart';
-import 'config/app_colors.dart';
+
 import 'core/ui/in_app_toast.dart';
 import 'features/host_agency/widgets/agency_notification_handler.dart';
+import 'services/global_banner_service.dart';
+import 'widgets/global_banner_overlay.dart';
 
+
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Guard against [core/duplicate-app]: on Android the google-services plugin
-  // may already have created the [DEFAULT] app before Dart runs.
-  try {
-    Firebase.app();
-  } catch (_) {
-    // No default app exists yet — initialize it
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } catch (e) {
-      debugPrint('Firebase.initializeApp: $e');
-    }
-  }
-  FirebaseAuth.instance.authStateChanges().listen((data) {
-    developer.log('AUTH STATE CHANGE: ${data?.uid ?? 'none'}');
-  });
-
-  FirebaseService().init();
+await SupabaseAuthService().init();
+  SupabaseService().init();
   LevelService().init();
   await DynamicConfigService().init();
   ErrorReportingService().init();
@@ -55,10 +40,12 @@ void main() async {
   // ✅ تهيئة كاش الوسائط ← يحمّل فهرس القرص قبل أي طلب هدايا أو SVGA
   // هذا يضمن أن الملفات المُحمَّلة سابقاً تُستخدَم فوراً بدون إعادة تحميل من الإنترنت
   await MediaCacheService().init();
+  await RoomScreen.initPrefs();
 
   final localeProvider = LocaleProvider();
   await localeProvider.init();
 
+  GlobalBannerService.instance.init();
   WakelockPlus.enable();
   runApp(ZeroApp(localeProvider: localeProvider));
 }
@@ -90,6 +77,7 @@ class _ZeroAppState extends State<ZeroApp> {
               final config = DynamicConfigService();
               return AgencyNotificationHandler(
                 child: MaterialApp(
+                navigatorKey: rootNavigatorKey,
                 scaffoldMessengerKey: KayanInAppToast.messengerKey,
                 title: config.appName,
                 debugShowCheckedModeBanner: false,
@@ -108,7 +96,9 @@ class _ZeroAppState extends State<ZeroApp> {
                   final isRtl = localeProvider.locale?.languageCode == 'ar';
                   return Directionality(
                     textDirection: isRtl ? TextDirection.rtl : TextDirection.ltr,
-                    child: child!,
+                    child: GlobalBannerOverlay(
+                      child: GlobalFloatingRoomOverlay(child: child!),
+                    ),
                   );
                 },
                 theme: ThemeData(
@@ -148,66 +138,109 @@ class _AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<_AuthGate> {
-  User? _user;
+  String? _uid;
 
   @override
   void initState() {
     super.initState();
-    _user = FirebaseAuth.instance.currentUser;
-    if (_user != null) _loadExistingUser();
-    FirebaseAuth.instance.authStateChanges().listen((u) {
+    _uid = SupabaseAuthService().currentUid;
+    if (_uid != null) _loadExistingUser();
+
+    SupabaseAuthService().authStateChanges.listen((uid) {
       if (!mounted) return;
-      if (u != null) {
-        _handleNewSignIn(u);
+      if (uid != null) {
+        _handleNewSignIn(uid);
       } else {
-        setState(() => _user = null);
+        setState(() => _uid = null);
       }
     });
-  }
+
+}
 
   Future<void> _loadExistingUser() async {
-    final u = _user;
-    if (u == null) return;
-    final userData = await FirebaseService().getUser(u.uid);
+    final uid = _uid;
+    if (uid == null) return;
+    final userData = await SupabaseService().getUser(uid);
     if (userData == null && mounted) {
+      final supaAuthUser = SupabaseAuthService().currentUser;
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (_) => SetupProfileScreen(
-            uid: u.uid,
-            email: u.email ?? '',
-            photoUrl: u.photoURL ?? '',
+            uid: uid,
+            email: supaAuthUser?.email ?? '',
+            photoUrl: supaAuthUser?.photoUrl ?? '',
+            phone: supaAuthUser?.phoneNumber ?? '',
           ),
         ),
         (route) => false,
       );
     } else if (mounted) {
-      await Provider.of<UserProvider>(context, listen: false).loadUser(u.uid);
+      await Provider.of<UserProvider>(context, listen: false).loadUser(uid);
     }
   }
 
-  Future<void> _handleNewSignIn(User u) async {
-    setState(() => _user = u);
-    final userData = await FirebaseService().getUser(u.uid);
+  Future<void> _handleNewSignIn(String uid) async {
+    setState(() => _uid = uid);
+    final userData = await SupabaseService().getUser(uid);
     if (userData == null && mounted) {
+      final supaAuthUser = SupabaseAuthService().currentUser;
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
           builder: (_) => SetupProfileScreen(
-            uid: u.uid,
-            email: u.email ?? '',
-            photoUrl: u.photoURL ?? '',
+            uid: uid,
+            email: supaAuthUser?.email ?? '',
+            photoUrl: supaAuthUser?.photoUrl ?? '',
+            phone: supaAuthUser?.phoneNumber ?? '',
           ),
         ),
         (route) => false,
       );
     } else if (mounted) {
-      await Provider.of<UserProvider>(context, listen: false).loadUser(u.uid);
+
+
+
+
+      await Provider.of<UserProvider>(context, listen: false).loadUser(uid);
     }
   }
 
-  void _onBubbleTap() {
-    final svc = MinimizedRoomService();
+  @override
+  Widget build(BuildContext context) {
+    return _uid == null ? const LoginScreen() : const MainScreen();
+  }
+}
+
+class GlobalFloatingRoomOverlay extends StatefulWidget {
+  final Widget child;
+  const GlobalFloatingRoomOverlay({super.key, required this.child});
+
+  @override
+  State<GlobalFloatingRoomOverlay> createState() => _GlobalFloatingRoomOverlayState();
+}
+
+class _GlobalFloatingRoomOverlayState extends State<GlobalFloatingRoomOverlay>
+    with SingleTickerProviderStateMixin {
+  Offset? _position;
+  late AnimationController _animCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onBubbleTap(MinimizedRoomService svc) {
     if (svc.roomId == null) return;
     final roomId = svc.roomId!;
     final roomName = svc.roomName ?? '';
@@ -215,56 +248,142 @@ class _AuthGateState extends State<_AuthGate> {
     final roomPassword = svc.roomPassword ?? '';
     final hotValue = svc.hotValue ?? '0';
     final gameDesc = svc.gameDesc ?? '';
+
+    final seatIndex = svc.seatIndex;
+    final wasOnSeat = svc.isOnSeat;
+    final wasMicMuted = svc.isMicMuted;
+
     if (!RoomScreen.pushGuard(roomId)) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RoomScreen(
-          roomName: roomName,
-          hostName: hostName,
-          roomId: roomId,
-          roomPassword: roomPassword,
-          hotValue: hotValue,
-          gameDesc: gameDesc,
-          isReentry: true,
+
+    final navContext = rootNavigatorKey.currentContext;
+    if (navContext != null) {
+      Navigator.of(navContext).push(
+        MaterialPageRoute(
+          builder: (_) => RoomScreen(
+            roomName: roomName,
+            hostName: hostName,
+            roomId: roomId,
+            roomPassword: roomPassword,
+            hotValue: hotValue,
+            gameDesc: gameDesc,
+            isReentry: true,
+            initialSeatIndex: seatIndex,
+            wasOnSeat: wasOnSeat,
+            wasMicMuted: wasMicMuted,
+          ),
         ),
-      ),
-    );
-    svc.deactivate();
+      );
+    }
   }
 
-  void _onBubbleExit() {
-    final svc = MinimizedRoomService();
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final uid = userProvider.currentUser?.uid;
-    if (uid != null) svc.exitRoom(uid);
+  Future<void> _onBubbleExit(MinimizedRoomService svc) async {
+    final navContext = rootNavigatorKey.currentContext;
+    String? uid;
+    if (navContext != null) {
+      try {
+        final userProvider = Provider.of<UserProvider>(navContext, listen: false);
+        uid = userProvider.currentUser?.uid;
+      } catch (_) {}
+    }
+    uid ??= svc.userId ?? SupabaseAuthService().currentUid;
+    if (uid != null) {
+      await svc.exitRoom(uid);
+    } else {
+      svc.deactivate();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final body = _user == null ? const LoginScreen() : const MainScreen();
     return ListenableBuilder(
       listenable: MinimizedRoomService(),
       builder: (context, _) {
         final svc = MinimizedRoomService();
+        if (!svc.isActive) {
+          return widget.child;
+        }
+
+        final size = MediaQuery.of(context).size;
+        final padding = MediaQuery.of(context).padding;
+
+        // Default position: top right
+        _position ??= Offset(
+          size.width - 76,
+          padding.top + 70,
+        );
+
+        // Keep inside screen bounds when screen size or orientation changes
+        final clampedX = _position!.dx.clamp(8.0, (size.width - 76.0).clamp(8.0, double.infinity));
+        final clampedY = _position!.dy.clamp(padding.top + 8.0, (size.height - padding.bottom - 76.0).clamp(padding.top + 8.0, double.infinity));
+        final curPos = Offset(clampedX, clampedY);
+
         return Stack(
+          textDirection: TextDirection.ltr,
           children: [
-            body,
-            if (svc.isActive)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 60,
-                right: 12,
-                child: GestureDetector(
-                  onTap: _onBubbleTap,
+            widget.child,
+            Positioned(
+              left: curPos.dx,
+              top: curPos.dy,
+              child: GestureDetector(
+                onPanUpdate: (details) {
+                  setState(() {
+                    final newX = (_position!.dx + details.delta.dx)
+                        .clamp(8.0, size.width - 76.0);
+                    final newY = (_position!.dy + details.delta.dy)
+                        .clamp(padding.top + 8.0, size.height - padding.bottom - 76.0);
+                    _position = Offset(newX, newY);
+                  });
+                },
+                child: Material(
+                  type: MaterialType.transparency,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: AppColors.cardBg,
-                        child: ClipOval(
-                          child: SizedBox(
-                            width: 52,
-                            height: 52,
+                      // Pulsing outer glow ring indicating active room audio
+                      AnimatedBuilder(
+                        animation: _animCtrl,
+                        builder: (context, child) {
+                          final scale = 1.0 + (_animCtrl.value * 0.08);
+                          return Transform.scale(
+                            scale: scale,
+                            child: Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    const Color(0xFF10B981).withValues(alpha: 0.35 + (_animCtrl.value * 0.2)),
+                                    const Color(0xFF10B981).withValues(alpha: 0.0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      // Main room avatar button
+                      GestureDetector(
+                        onTap: () => _onBubbleTap(svc),
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          margin: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFF10B981),
+                              width: 2.2,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.45),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: ClipOval(
                             child: R.loadImage(
                               svc.roomPhoto ?? R.avaBoy,
                               fit: BoxFit.cover,
@@ -272,30 +391,68 @@ class _AuthGateState extends State<_AuthGate> {
                           ),
                         ),
                       ),
+                      // Close (X) button at top-right
                       Positioned(
-                        top: -8,
-                        right: -8,
+                        top: -2,
+                        right: -2,
                         child: GestureDetector(
-                          onTap: _onBubbleExit,
+                          onTap: () => _onBubbleExit(svc),
                           child: Container(
                             width: 22,
                             height: 22,
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
                               shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 1.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 3,
+                                ),
+                              ],
                             ),
                             child: const Icon(
                               Icons.close,
                               color: Colors.white,
-                              size: 12,
+                              size: 13,
                             ),
                           ),
                         ),
                       ),
+                      // Mic toggle button at bottom-right (if user is on seat)
+                      if (svc.isOnSeat)
+                        Positioned(
+                          bottom: -2,
+                          right: -2,
+                          child: GestureDetector(
+                            onTap: () => svc.toggleMic(),
+                            child: Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                color: svc.isMicMuted ? const Color(0xFFEF4444) : const Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.35),
+                                    blurRadius: 3,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                svc.isMicMuted ? Icons.mic_off : Icons.mic,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
               ),
+            ),
           ],
         );
       },
