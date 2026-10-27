@@ -11,6 +11,9 @@ class StoreItemModel {
   final String? photoKey;
   final String? defaultImage;
   final bool isHidden;
+  final String? customId;
+  final String? colorEffect;
+  final bool isAvailable;
 
   StoreItemModel({
     required this.itemId,
@@ -25,22 +28,28 @@ class StoreItemModel {
     this.photoKey,
     this.defaultImage,
     this.isHidden = false,
+    this.customId,
+    this.colorEffect,
+    this.isAvailable = true,
   });
 
   factory StoreItemModel.fromMap(Map<String, dynamic> map) {
     return StoreItemModel(
-      itemId: map['item_id']?.toString() ?? map['itemId']?.toString() ?? '',
+      itemId: map['item_id']?.toString() ?? map['itemId']?.toString() ?? map['id']?.toString() ?? '',
       name: map['name']?.toString() ?? '',
       category: map['category']?.toString() ?? '',
-      iconAsset: map['icon_asset']?.toString() ?? map['iconAsset']?.toString() ?? '',
+      iconAsset: map['icon_asset']?.toString() ?? map['iconAsset']?.toString() ?? map['icon_url']?.toString() ?? map['iconUrl']?.toString() ?? '',
       price: (map['price'] ?? 0).toInt(),
-      svgaAsset: map['svga_asset']?.toString() ?? map['svgaAsset']?.toString(),
-      videoAsset: map['video_asset']?.toString() ?? map['videoAsset']?.toString(),
+      svgaAsset: map['svga_asset']?.toString() ?? map['svgaAsset']?.toString() ?? map['animation_asset']?.toString() ?? map['animation_url']?.toString() ?? map['svga_url']?.toString(),
+      videoAsset: map['video_asset']?.toString() ?? map['videoAsset']?.toString() ?? map['video_url']?.toString() ?? map['mp4_url']?.toString(),
       isPremium: (map['is_premium'] ?? map['isPremium']) as bool? ?? false,
       nameKey: map['name_key']?.toString() ?? map['nameKey']?.toString() ?? map['name_keys']?.toString(),
       photoKey: map['photo_key']?.toString() ?? map['photoKey']?.toString() ?? map['photo_keys']?.toString(),
       defaultImage: map['default_image']?.toString() ?? map['defaultImage']?.toString(),
       isHidden: map['is_hidden'] as bool? ?? map['isHidden'] as bool? ?? map['hide_from_store'] as bool? ?? map['is_event_only'] as bool? ?? false,
+      customId: map['custom_id']?.toString() ?? map['customId']?.toString() ?? map['special_id']?.toString(),
+      colorEffect: map['color_effect']?.toString() ?? map['colorEffect']?.toString(),
+      isAvailable: map['is_available'] as bool? ?? map['isAvailable'] as bool? ?? (map['is_sold'] != true),
     );
   }
 
@@ -70,5 +79,11 @@ class StoreItemModel {
         if (defaultImage != null) 'defaultImage': defaultImage,
         'is_hidden': isHidden,
         'isHidden': isHidden,
+        if (customId != null) 'custom_id': customId,
+        if (customId != null) 'customId': customId,
+        if (colorEffect != null) 'color_effect': colorEffect,
+        if (colorEffect != null) 'colorEffect': colorEffect,
+        'is_available': isAvailable,
+        'isAvailable': isAvailable,
       };
 }
