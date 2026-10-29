@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/supabase_auth_service.dart';
+import '../../services/supabase_data_service.dart';
 import '../../config/r.dart';
 import '../../core/supabase_compat.dart';
+import '../../config/supabase_config.dart';
 import '../../core/widgets/cached_image.dart';
 import '../../models/gift_model.dart' as gm;
 import '../../models/message_model.dart';
@@ -18,6 +22,7 @@ import '../../services/dynamic_config_service.dart';
 import '../../services/supabase_service.dart';
 import '../../services/level_service.dart';
 import '../follow/follow_recent_screen.dart';
+import '../message/message_reply_detail_screen.dart';
 import '../login/edit_profile_screen.dart';
 import '../level/level_screen.dart';
 import '../room/room_screen.dart';
@@ -26,6 +31,7 @@ import '../room/widgets/svga_player.dart';
 import '../room/widgets/vap_player.dart';
 import '../../features/cp/cp_service.dart';
 import '../../features/cp/cp_space_screen.dart';
+import '../../widgets/user_id_widget.dart';
 import '../../features/host_agency/screens/agency_profile_screen.dart';
 import '../../features/host_agency/host_agency_screen.dart';
 
@@ -110,6 +116,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Map<String, Map<String, dynamic>> _badgesMap = {};
   Map<String, Map<String, dynamic>> _necklacesMap = {};
 
+  final PageController _bannerController = PageController();
+  Timer? _bannerTimer;
+
   // Stats
   int _followingCount = 0;
   int _fansCount = 0;
@@ -130,25 +139,86 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     _loadData();
   }
 
+  @override
+  void dispose() {
+    _bannerTimer?.cancel();
+    _bannerController.dispose();
+    super.dispose();
+  }
+
+  void _ensureBannerTimer(int count) {
+    if (count <= 1) {
+      _bannerTimer?.cancel();
+      _bannerTimer = null;
+      return;
+    }
+    if (_bannerTimer != null && _bannerTimer!.isActive) return;
+    _bannerTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_bannerController.hasClients) return;
+      int next = _currentBannerIndex + 1;
+      if (next >= count) next = 0;
+      _bannerController.animateToPage(
+        next,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+      );
+    });
+  }
+
   Future<void> _loadData() async {
     try {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       final currentUser = userProvider.currentUser;
-      final uid = widget.targetUid ?? currentUser?.uid;
+      String? resolvedCurrentUid = currentUser?.uid ?? SupabaseAuthService().currentUid;
+      if (resolvedCurrentUid == null || resolvedCurrentUid.isEmpty) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          resolvedCurrentUid = prefs.getString('supabase_auth_uid') ?? prefs.getString('user_id');
+        } catch (_) {}
+      }
 
-      if (uid == null) {
+      final uid = widget.targetUid ?? resolvedCurrentUid;
+
+      if (uid == null || uid.isEmpty) {
         if (mounted) setState(() => _loading = false);
         return;
       }
 
+      final isExplicitlyOtherUser = widget.targetUid != null &&
+          widget.targetUid!.trim().isNotEmpty &&
+          widget.targetUid!.trim() != resolvedCurrentUid &&
+          (currentUser == null || currentUser.customId.isEmpty || widget.targetUid!.trim() != currentUser.customId);
+
       UserModel? targetUser;
-      if (widget.targetUid != null && widget.targetUid != currentUser?.uid) {
+      if (isExplicitlyOtherUser) {
         targetUser = await _supabase.getUser(uid);
-        if (currentUser != null) {
-          final following = await _supabase.isFollowing(currentUser.uid, uid);
+        if (targetUser == null) {
+          try {
+            targetUser = await SupabaseAuthService().getUserFromSupabase(uid);
+          } catch (_) {}
+        }
+        if (targetUser == null) {
+          try {
+            targetUser = await SupabaseDataService().getUser(uid);
+          } catch (_) {}
+        }
+        if (targetUser == null) {
+          try {
+            final res = await SupabaseConfig.client
+                .from('users')
+                .select()
+                .eq('custom_id', uid)
+                .maybeSingle();
+            if (res != null) {
+              targetUser = UserModel.fromMap(Map<String, dynamic>.from(res));
+            }
+          } catch (_) {}
+        }
+        if (currentUser != null && targetUser != null) {
+          final following = await _supabase.isFollowing(currentUser.uid, targetUser.uid);
           if (mounted) setState(() => _isFollowing = following);
           _supabase.recordProfileVisit(
-            visitedUid: uid,
+            visitedUid: targetUser.uid,
             visitorUid: currentUser.uid,
             visitorName: currentUser.name,
             visitorPhoto: currentUser.photoUrl,
@@ -156,14 +226,103 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         }
       } else {
         targetUser = currentUser ?? await _supabase.getUser(uid);
+        if (targetUser == null) {
+          try {
+            targetUser = await SupabaseAuthService().getUserFromSupabase(uid);
+          } catch (_) {}
+        }
+        if (targetUser == null) {
+          try {
+            targetUser = await SupabaseDataService().getUser(uid);
+          } catch (_) {}
+        }
+        if (targetUser != null && targetUser.photoUrl.isEmpty) {
+          final supaPhoto = SupabaseAuthService().currentUser?.photoUrl;
+          if (supaPhoto != null && supaPhoto.isNotEmpty) {
+            targetUser = targetUser.copyWith(photoUrl: supaPhoto);
+          }
+        }
       }
 
       if (targetUser != null) {
-        // Fetch all store items
-        List<StoreItemModel> allStoreItems = [];
+        // Immediately render the profile screen so the user never sees 'user not found'
+        if (mounted) {
+          setState(() {
+            _user = targetUser;
+            _loading = false;
+          });
+        }
+
+        if (mounted) {
+          final userProv = Provider.of<UserProvider>(context, listen: false);
+          final myUid = userProv.currentUser?.uid;
+          if (myUid != null && myUid.isNotEmpty && myUid != targetUser.uid) {
+            final myUser = userProv.currentUser;
+            unawaited(_supabase.recordProfileVisit(
+              visitedUid: targetUser.uid,
+              visitorUid: myUid,
+              visitorName: myUser?.name,
+              visitorPhoto: myUser?.photoUrl,
+            ));
+          }
+        }
+
         try {
-          allStoreItems = await _supabase.getStoreItems();
-        } catch (_) {}
+          final queryUid = targetUser.uid.isNotEmpty ? targetUser.uid : uid;
+          final storeItemsFuture = _supabase.getStoreItems().catchError((_) => <StoreItemModel>[]);
+          final badgesFuture = _supabase.getBadgesCatalog().catchError((_) => <Map<String, dynamic>>[]);
+          final necklacesFuture = _supabase.getNecklacesCatalog().catchError((_) => <Map<String, dynamic>>[]);
+          final giftsCatalogFuture = _supabase.getGiftsCatalog().catchError((_) => <String, gm.GiftModel>{});
+          final receivedGiftsFuture = _supabase.getReceivedGifts(queryUid).catchError((_) => <gm.SentGiftModel>[]);
+          final followingFuture = _supabase.getFollowing(queryUid).catchError((_) => <Map<String, dynamic>>[]);
+          final fansFuture = _supabase.getFans(queryUid).catchError((_) => <Map<String, dynamic>>[]);
+          final visitorsFuture = _supabase.getVisitors(queryUid).catchError((_) => <Map<String, dynamic>>[]);
+          final roomMemberFuture = Supabase.instance.client
+              .from('room_members')
+              .select('room_id')
+              .eq('uid', queryUid)
+              .maybeSingle()
+              .catchError((_) => null);
+          final cpFuture = CpService.getMyData(queryUid).catchError((_) => <String, dynamic>{});
+          final agencyMemberFuture = Supabase.instance.client
+              .from('host_agency_members')
+              .select('agency_id, role, status')
+              .eq('user_id', queryUid)
+              .eq('status', 'active')
+              .maybeSingle()
+              .catchError((_) => null);
+          final backpackFuture = SupabaseDataService().getUserBackpack(queryUid).catchError((_) => <Map<String, dynamic>>[]);
+          final activeRoomFuture = _supabase.getUserCurrentRoomId(queryUid).catchError((_) => null);
+
+        final results = await Future.wait<dynamic>([
+          storeItemsFuture,
+          badgesFuture,
+          necklacesFuture,
+          giftsCatalogFuture,
+          receivedGiftsFuture,
+          followingFuture,
+          fansFuture,
+          visitorsFuture,
+          roomMemberFuture,
+          cpFuture,
+          agencyMemberFuture,
+          backpackFuture,
+          activeRoomFuture,
+        ]);
+
+        final allStoreItems = results[0] as List<StoreItemModel>;
+        final bList = results[1] as List<Map<String, dynamic>>;
+        final nList = results[2] as List<Map<String, dynamic>>;
+        final giftCatalog = results[3] as Map<String, gm.GiftModel>;
+        final gifts = results[4] as List<gm.SentGiftModel>;
+        final fList = results[5] as List<dynamic>;
+        final fansList = results[6] as List<dynamic>;
+        final vList = results[7] as List<dynamic>;
+        final roomMember = results[8] as Map<String, dynamic>?;
+        final cpResult = results[9] as Map<String, dynamic>;
+        final memberRow = results[10] as Map<String, dynamic>?;
+        final backpackList = results[11] as List<Map<String, dynamic>>;
+        final activeRoomDetected = results[12] as String?;
 
         // Resolve activeFrame path
         String? resolvedFrame = targetUser.activeFrame;
@@ -178,31 +337,27 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       : (match.animationUrl != null && match.animationUrl!.isNotEmpty)
                           ? match.animationUrl
                           : match.iconAsset;
-              resolvedFrame = (anim != null && anim.isNotEmpty) ? anim : null;
+              resolvedFrame = (anim != null && anim.isNotEmpty) ? anim : resolvedFrame;
             } else {
-              resolvedFrame = null;
+              if (resolvedFrame.contains('.svga') || resolvedFrame.contains('.webp') || resolvedFrame.contains('.png')) {
+                resolvedFrame = resolvedFrame.startsWith('assets/') ? resolvedFrame : 'assets/$resolvedFrame';
+              }
             }
           }
         }
 
-        // Fetch Badges & Necklaces Catalogs
+        // Badges & Necklaces Catalogs
         Map<String, Map<String, dynamic>> badgesMap = {};
-        try {
-          final bList = await _supabase.getBadgesCatalog();
-          for (final b in bList) {
-            final id = b['id']?.toString() ?? '';
-            if (id.isNotEmpty) badgesMap[id] = b;
-          }
-        } catch (_) {}
+        for (final b in bList) {
+          final id = b['id']?.toString() ?? '';
+          if (id.isNotEmpty) badgesMap[id] = b;
+        }
 
         Map<String, Map<String, dynamic>> necklacesMap = {};
-        try {
-          final nList = await _supabase.getNecklacesCatalog();
-          for (final n in nList) {
-            final id = n['id']?.toString() ?? '';
-            if (id.isNotEmpty) necklacesMap[id] = n;
-          }
-        } catch (_) {}
+        for (final n in nList) {
+          final id = n['id']?.toString() ?? '';
+          if (id.isNotEmpty) necklacesMap[id] = n;
+        }
 
         // Resolve activeNecklace path
         String? resolvedNecklace = targetUser.activeNecklace;
@@ -212,7 +367,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             resolvedNecklace = n['svga_url']?.toString() ?? n['image_url']?.toString() ?? resolvedNecklace;
           }
         }
-        // If no active necklace, but user has VIP item of type necklace
         if (resolvedNecklace == null || resolvedNecklace.isEmpty) {
           final vipNecklace = targetUser.ownedVipItems.where((m) => m['type'] == 'necklace').firstOrNull;
           if (vipNecklace != null && (vipNecklace['url'] ?? '').isNotEmpty) {
@@ -220,72 +374,150 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           }
         }
 
-        // Fetch store items to match owned frames & rides
-        final ownedSet = targetUser.ownedItems.toSet();
-        final frames = allStoreItems.where((i) => i.category == 'frame' && (ownedSet.contains(i.itemId) || i.svgaAsset == targetUser?.activeFrame)).toList();
-        final rides = allStoreItems.where((i) => (i.category == 'car' || i.category == 'entrance') && (ownedSet.contains(i.itemId) || i.svgaAsset == targetUser?.activeCar || i.svgaAsset == targetUser?.activeEntrance)).toList();
+        // Store items to match owned frames & rides (merged with user_backpack & ownedLevelFrames & VIP items)
+        final u = targetUser;
+        final uFrame = u.activeFrame;
+        final uCar = u.activeCar;
+        final uEntrance = u.activeEntrance;
+        final uVipItems = u.ownedVipItems;
 
-        // Fetch gifts catalog
-        Map<String, gm.GiftModel> giftCatalog = {};
-        try {
-          giftCatalog = await _supabase.getGiftsCatalog();
-        } catch (_) {}
+        final ownedSet = u.ownedItems.toSet();
+        for (final f in u.ownedLevelFrames) {
+          if (f.isNotEmpty) ownedSet.add(f);
+        }
+        for (final b in backpackList) {
+          final bId = b['item_id']?.toString() ?? b['itemId']?.toString() ?? '';
+          if (bId.isNotEmpty) ownedSet.add(bId);
+        }
+        if (uFrame != null && uFrame.isNotEmpty) {
+          ownedSet.add(uFrame);
+        }
+        if (uCar != null && uCar.isNotEmpty) {
+          ownedSet.add(uCar);
+        }
+        if (uEntrance != null && uEntrance.isNotEmpty) {
+          ownedSet.add(uEntrance);
+        }
 
-        // Fetch received gifts
-        final gifts = await _supabase.getReceivedGifts(uid);
+        final frames = allStoreItems.where((i) => i.category == 'frame' && (
+          ownedSet.contains(i.itemId) ||
+          (uFrame != null && (i.itemId == uFrame || i.svgaAsset == uFrame)) ||
+          backpackList.any((b) => (b['item_id'] == i.itemId || b['itemId'] == i.itemId))
+        )).toList();
+
+        final rides = allStoreItems.where((i) => (i.category == 'car' || i.category == 'entrance') && (
+          ownedSet.contains(i.itemId) ||
+          (uCar != null && (i.itemId == uCar || i.svgaAsset == uCar)) ||
+          (uEntrance != null && (i.itemId == uEntrance || i.svgaAsset == uEntrance)) ||
+          backpackList.any((b) => (b['item_id'] == i.itemId || b['itemId'] == i.itemId))
+        )).toList();
+
+        // Ensure active frame appears in frames tab
+        if (uFrame != null && uFrame.isNotEmpty) {
+          final fPath = resolvedFrame ?? uFrame;
+          if (!frames.any((f) => f.itemId == uFrame || f.itemId == fPath || f.svgaAsset == fPath)) {
+            frames.insert(0, StoreItemModel(
+              itemId: uFrame,
+              category: 'frame',
+              name: 'إطار مفعّل',
+              svgaAsset: fPath.contains('.svga') ? fPath : null,
+              iconAsset: fPath,
+              price: 0,
+            ));
+          }
+        }
+
+        // Ensure active car appears in rides tab
+        if (uCar != null && uCar.isNotEmpty) {
+          final cPath = uCar;
+          if (!rides.any((r) => r.itemId == cPath || r.svgaAsset == cPath)) {
+            rides.insert(0, StoreItemModel(
+              itemId: cPath,
+              category: 'car',
+              name: 'سيارة مفعّلة',
+              svgaAsset: cPath.contains('.svga') ? cPath : null,
+              iconAsset: cPath,
+              price: 0,
+            ));
+          }
+        }
+
+        // Ensure active entrance effect appears in rides tab
+        if (uEntrance != null && uEntrance.isNotEmpty) {
+          final ePath = uEntrance;
+          if (!rides.any((r) => r.itemId == ePath || r.svgaAsset == ePath)) {
+            rides.insert(0, StoreItemModel(
+              itemId: ePath,
+              category: 'entrance',
+              name: 'تأثير دخول',
+              svgaAsset: ePath.contains('.svga') ? ePath : null,
+              iconAsset: ePath,
+              price: 0,
+            ));
+          }
+        }
+
+        // Add VIP items to frames & rides
+        for (final vip in uVipItems) {
+          final vType = vip['type']?.toString();
+          final vUrl = vip['url']?.toString() ?? '';
+          final vName = vip['name']?.toString() ?? vip['title']?.toString() ?? '';
+          if (vType == 'frame' && vUrl.isNotEmpty) {
+            if (!frames.any((f) => f.iconAsset == vUrl || f.svgaAsset == vUrl)) {
+              frames.add(StoreItemModel(
+                itemId: 'vip_frame_${frames.length}',
+                category: 'frame',
+                name: vName.isNotEmpty ? vName : 'إطار VIP',
+                svgaAsset: vUrl.contains('.svga') ? vUrl : null,
+                iconAsset: vUrl,
+                price: 0,
+              ));
+            }
+          } else if ((vType == 'car' || vType == 'entrance') && vUrl.isNotEmpty) {
+            if (!rides.any((r) => r.iconAsset == vUrl || r.svgaAsset == vUrl)) {
+              rides.add(StoreItemModel(
+                itemId: 'vip_ride_${rides.length}',
+                category: vType!,
+                name: vName.isNotEmpty ? vName : (vType == 'car' ? 'سيارة VIP' : 'دخولية VIP'),
+                svgaAsset: vUrl.contains('.svga') ? vUrl : null,
+                iconAsset: vUrl,
+                price: 0,
+              ));
+            }
+          }
+        }
+
         final aggList = _aggregateGifts(gifts, giftCatalog);
         final supporters = _extractSupporters(gifts);
 
         // Fetch counts
-        int followings = targetUser.following;
-        int fans = targetUser.followers;
-        int visitors = targetUser.visitors;
-        try {
-          final fList = await _supabase.getFollowing(uid);
-          followings = fList.length;
-        } catch (_) {}
-        try {
-          final fansList = await _supabase.getFans(uid);
-          fans = fansList.length;
-        } catch (_) {}
-        try {
-          final vList = await _supabase.getVisitors(uid);
-          visitors = vList.length;
-        } catch (_) {}
+        int followings = fList.isNotEmpty ? fList.length : targetUser.following;
+        int fans = fansList.isNotEmpty ? fansList.length : targetUser.followers;
+        int visitors = vList.isNotEmpty ? vList.length : targetUser.visitors;
 
         // Check if user is in an active room
-        String? activeRoomId;
-        try {
-          final client = Supabase.instance.client;
-          final roomMember = await client
-              .from('room_members')
-              .select('room_id')
-              .eq('user_id', uid)
-              .maybeSingle();
+        String? activeRoomId = activeRoomDetected;
+        if (activeRoomId == null || activeRoomId.isEmpty) {
           if (roomMember != null && roomMember['room_id'] != null) {
             activeRoomId = roomMember['room_id'].toString();
           }
-        } catch (_) {}
+        }
+        if (activeRoomId == null || activeRoomId.isEmpty) {
+          if (targetUser.hostedRoomId != null && targetUser.hostedRoomId!.isNotEmpty && targetUser.hostedRoomId != 'null') {
+            activeRoomId = targetUser.hostedRoomId;
+          }
+        }
 
         // Fetch CP / Relationship Data
         Map<String, dynamic>? cpInfo;
-        try {
-          final cpResult = await CpService.getMyData(uid);
-          if (cpResult['has_cp'] == true) {
-            cpInfo = cpResult['couple'] as Map<String, dynamic>?;
-          }
-        } catch (_) {}
+        if (cpResult['has_cp'] == true) {
+          cpInfo = cpResult['couple'] as Map<String, dynamic>?;
+        }
 
         // Fetch Agency Data
         Map<String, dynamic>? agencyInfo;
-        try {
-          final memberRow = await Supabase.instance.client
-              .from('host_agency_members')
-              .select('agency_id, role, status')
-              .eq('user_id', uid)
-              .eq('status', 'active')
-              .maybeSingle();
-          if (memberRow != null && memberRow['agency_id'] != null) {
+        if (memberRow != null && memberRow['agency_id'] != null) {
+          try {
             final agRow = await Supabase.instance.client
                 .from('host_agencies')
                 .select('id, name, photo_url, tier')
@@ -300,8 +532,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                 'role': memberRow['role'],
               };
             }
-          }
-        } catch (_) {}
+          } catch (_) {}
+        }
 
         if (mounted) {
           setState(() {
@@ -323,9 +555,12 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             _loading = false;
           });
         }
-      } else {
-        if (mounted) setState(() => _loading = false);
+      } catch (err) {
+        debugPrint('[UserProfile] Secondary catalog fetch non-fatal error: $err');
       }
+    } else {
+      if (mounted) setState(() => _loading = false);
+    }
     } catch (e) {
       debugPrint('[UserProfile] loadData error: $e');
       if (mounted) setState(() => _loading = false);
@@ -443,8 +678,20 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   bool get _isMe {
     final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    final myUid = currentUser?.uid ?? SupabaseAuthService().currentUid;
+    final myCustomId = currentUser?.customId;
+
+    // إذا تم تمرير targetUid وكان لمعرف مستخدم آخر، فإنه ليس ملفي قطعياً
+    if (widget.targetUid != null && widget.targetUid!.trim().isNotEmpty) {
+      final t = widget.targetUid!.trim();
+      final isTargetMe = (myUid != null && myUid.isNotEmpty && t == myUid) ||
+          (myCustomId != null && myCustomId.isNotEmpty && t == myCustomId);
+      if (!isTargetMe) return false;
+    }
+
     if (_user == null || currentUser == null) return false;
-    return _user!.uid == currentUser.uid;
+    if (_user!.uid.isEmpty || (myUid == null || myUid.isEmpty)) return false;
+    return _user!.uid == myUid || (_user!.customId.isNotEmpty && myCustomId != null && _user!.customId == myCustomId);
   }
 
   Color _getNickNameColor(int vipLevel) {
@@ -552,13 +799,21 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   void _navigateToChat() {
     if (_user == null) return;
+    final currentUser = Provider.of<UserProvider>(context, listen: false).currentUser;
+    if (currentUser == null) return;
+    final myUid = currentUser.uid;
+    final targetUid = _user!.uid;
+    if (myUid.isEmpty || targetUid.isEmpty) return;
+    final sorted = [myUid, targetUid]..sort();
+    final convId = '${sorted[0]}_${sorted[1]}';
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          targetUid: _user!.uid,
-          targetName: _user!.name,
-          targetPhotoUrl: _user!.photoUrl,
+        builder: (_) => MessageReplyDetailScreen(
+          conversationId: convId,
+          otherUid: targetUid,
+          otherName: _user!.name,
+          otherPhotoUrl: _user!.photoUrl,
         ),
       ),
     );
@@ -570,13 +825,16 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  void _joinLiveRoom() {
-    if (_currentRoomId != null) {
-      navigateToRoom(
+  void _joinLiveRoom() async {
+    if (_currentRoomId != null && _currentRoomId!.isNotEmpty) {
+      final room = await _supabase.getRoom(_currentRoomId!);
+      if (!mounted) return;
+      await navigateToRoom(
         context,
-        roomName: 'غرفة صوتية',
-        hostName: _user?.name ?? '',
+        roomName: room?.name ?? 'غرفة صوتية',
+        hostName: room?.hostName ?? _user?.name ?? '',
         roomId: _currentRoomId!,
+        hostUid: room?.hostUid ?? _user?.uid,
       );
     }
   }
@@ -950,8 +1208,30 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             onPressed: () => Navigator.pop(context),
           ),
         ),
-        body: const Center(
-          child: Text('المستخدم غير موجود', style: TextStyle(color: Colors.white70)),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.person_off_rounded, size: 64, color: Colors.white38),
+              const SizedBox(height: 14),
+              const Text('المستخدم غير متاح حالياً', style: TextStyle(color: Colors.white70, fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 18),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFD54F),
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                ),
+                onPressed: () {
+                  setState(() => _loading = true);
+                  _loadData();
+                },
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('إعادة المحاولة', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -960,23 +1240,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final List<String> photos = [];
     if (user.album.isNotEmpty) {
       photos.addAll(user.album);
-    } else {
-      if (user.profileBgUrl != null && user.profileBgUrl!.isNotEmpty) {
-        photos.add(user.profileBgUrl!);
-      }
-      if (user.photoUrl.isNotEmpty && !photos.contains(user.photoUrl)) {
-        photos.add(user.photoUrl);
-      }
+    }
+    if (user.profileBgUrl != null && user.profileBgUrl!.isNotEmpty && !photos.contains(user.profileBgUrl)) {
+      photos.add(user.profileBgUrl!);
+    }
+    final supaUid = SupabaseAuthService().currentUid;
+    final isMe = user.uid == supaUid;
+    final supaPhoto = SupabaseAuthService().currentUser?.photoUrl;
+    final effectivePhoto = user.photoUrl.isNotEmpty
+        ? user.photoUrl
+        : (isMe ? (supaPhoto?.isNotEmpty == true ? supaPhoto! : '') : '');
+    if (effectivePhoto.isNotEmpty && !photos.contains(effectivePhoto)) {
+      photos.add(effectivePhoto);
     }
     if (photos.isEmpty) {
-      photos.add('');
+      photos.add('assets/images/default_header.png');
     }
+    _ensureBannerTimer(photos.length);
 
-    final hasVip = user.ownedVipItems.isNotEmpty ||
-        (_resolvedNecklacePath != null && _resolvedNecklacePath!.isNotEmpty) ||
-        (user.activeNecklace != null && user.activeNecklace!.isNotEmpty) ||
-        (user.rechargeLevel > 1) ||
-        (user.rechargeExp > 0);
 
     return Scaffold(
       backgroundColor: const Color(0xFF16151A),
@@ -992,20 +1273,38 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
               children: [
                 // Banner PageView
                 PageView.builder(
+                  controller: _bannerController,
                   itemCount: photos.length,
                   onPageChanged: (index) => setState(() => _currentBannerIndex = index),
                   itemBuilder: (context, index) {
                     final photo = photos[index];
-                    return CachedImg(
-                      photo,
-                      fit: BoxFit.cover,
-                      width: screenWidth,
-                      height: screenWidth,
-                      placeholder: (_, __) => Container(color: const Color(0xFF16151A)),
-                      error: (_, __, ___) => Container(
-                        color: const Color(0xFF16151A),
-                        child: const Icon(Icons.person, size: 80, color: Colors.white24),
-                      ),
+                    if (photo.startsWith('http://') || photo.startsWith('https://')) {
+                      return CachedNetworkImage(
+                        imageUrl: photo,
+                        fit: BoxFit.cover,
+                        width: screenWidth,
+                        height: screenWidth,
+                        placeholder: (_, __) => Container(color: const Color(0xFF16151A)),
+                        errorWidget: (_, __, ___) => Container(
+                          color: const Color(0xFF16151A),
+                          child: const Icon(Icons.person, size: 80, color: Colors.white24),
+                        ),
+                      );
+                    } else if (photo.isNotEmpty) {
+                      return Image.asset(
+                        photo,
+                        fit: BoxFit.cover,
+                        width: screenWidth,
+                        height: screenWidth,
+                        errorBuilder: (_, __, ___) => Container(
+                          color: const Color(0xFF16151A),
+                          child: const Icon(Icons.person, size: 80, color: Colors.white24),
+                        ),
+                      );
+                    }
+                    return Container(
+                      color: const Color(0xFF16151A),
+                      child: const Icon(Icons.person, size: 80, color: Colors.white24),
                     );
                   },
                 ),
@@ -1118,14 +1417,8 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               child: _buildRankLevelView(user),
                             ),
 
-                            // Active Necklace (القلادة تحت المستويات - لا تظهر هنا إذا كان لديه VIP لمنع التكرار)
-                            if (!hasVip &&
-                                ((_resolvedNecklacePath != null && _resolvedNecklacePath!.isNotEmpty) ||
-                                 (user.activeNecklace != null && user.activeNecklace!.isNotEmpty)))
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                                child: _buildNecklaceView(_resolvedNecklacePath ?? user.activeNecklace!),
-                              ),
+                            // Active Necklaces row (القلادات تحت المستويات - تاخذ 4 قلادات جنب بعض)
+                            _buildNecklacesRow(user),
 
                             // Medals & Badges row (UserMedalView تحت القلادات مباشرة)
                             if (user.ownedBadges.isNotEmpty || user.ownedLevelBadges.isNotEmpty)
@@ -1214,17 +1507,19 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                   ),
                                   const SizedBox(width: 8),
 
-                                  // Country flag / badge
+                                  // Country flag
                                   if (user.country.isNotEmpty)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(2),
-                                        color: Colors.white12,
-                                      ),
-                                      child: Text(
-                                        user.country.toUpperCase(),
-                                        style: const TextStyle(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.w600),
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(3),
+                                      child: Image.network(
+                                        'https://flagcdn.com/w40/${UserIdWidget.resolveCountryCode(user.country)}.png',
+                                        width: 20,
+                                        height: 14,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) => Text(
+                                          UserIdWidget.countryCodeToEmoji(UserIdWidget.resolveCountryCode(user.country)),
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
                                       ),
                                     ),
                                 ],
@@ -1232,50 +1527,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                               const SizedBox(height: 6),
 
                               // ID View with Copy icon
-                              GestureDetector(
-                                onTap: _copyUserId,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black26,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Image.asset(
-                                        'assets/images/profile/common_user_id_ic.webp',
-                                        width: 14,
-                                        height: 14,
-                                        errorBuilder: (_, __, ___) => const Icon(
-                                          Icons.tag,
-                                          size: 12,
-                                          color: Colors.white70,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        user.customId.isNotEmpty ? user.customId : user.uid.substring(0, 8),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white70,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Image.asset(
-                                        'assets/images/profile/common_id_copy_ic.webp',
-                                        width: 14,
-                                        height: 14,
-                                        errorBuilder: (_, __, ___) => const Icon(
-                                          Icons.copy,
-                                          size: 12,
-                                          color: Colors.white70,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              UserIdWidget(
+                                idText: user.customId.isNotEmpty ? user.customId : user.uid.substring(0, 8),
+                                countryCode: user.country,
+                                fontSize: 12,
+                                onCopied: _copyUserId,
                               ),
                             ],
                           ),
@@ -1526,6 +1782,14 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
   Widget _buildAvatarView(UserModel user) {
     final frame = _resolvedFramePath ?? user.activeFrame;
     final hasFrame = frame != null && frame.isNotEmpty;
+    final supaUid = SupabaseAuthService().currentUid;
+    final isMe = user.uid == supaUid;
+    final supaPhoto = SupabaseAuthService().currentUser?.photoUrl;
+    final effectivePhoto = user.photoUrl.isNotEmpty
+        ? user.photoUrl
+        : (isMe ? (supaPhoto?.isNotEmpty == true ? supaPhoto! : '') : '');
+    final isMale = user.gender != 'female';
+
     return SizedBox(
       width: 122,
       height: 122,
@@ -1539,50 +1803,68 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 4),
-              color: Colors.white,
+              color: const Color(0xFF2A2830),
             ),
             clipBehavior: Clip.antiAlias,
-            child: user.photoUrl.isNotEmpty
-                ? CachedImg(
-                    user.photoUrl,
-                    width: 92,
-                    height: 92,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(color: Colors.white12),
-                    error: (_, __, ___) => Image.asset(
-                      'assets/images/default_header.png',
-                      width: 92,
-                      height: 92,
-                      fit: BoxFit.cover,
-                    ),
-                  )
+            child: effectivePhoto.isNotEmpty
+                ? (effectivePhoto.startsWith('http://') || effectivePhoto.startsWith('https://'))
+                    ? CachedNetworkImage(
+                        imageUrl: effectivePhoto,
+                        width: 92,
+                        height: 92,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Image.asset(
+                          isMale ? R.avaBoy : R.avaGirl,
+                          width: 92,
+                          height: 92,
+                          fit: BoxFit.cover,
+                        ),
+                        errorWidget: (_, __, ___) => Image.asset(
+                          'assets/images/default_header.png',
+                          width: 92,
+                          height: 92,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            isMale ? R.avaBoy : R.avaGirl,
+                            width: 92,
+                            height: 92,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      )
+                    : Image.asset(
+                        effectivePhoto,
+                        width: 92,
+                        height: 92,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Image.asset(
+                          isMale ? R.avaBoy : R.avaGirl,
+                          fit: BoxFit.cover,
+                          width: 92,
+                          height: 92,
+                        ),
+                      )
                 : Image.asset(
                     'assets/images/default_header.png',
                     width: 92,
                     height: 92,
                     fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Image.asset(
+                      isMale ? R.avaBoy : R.avaGirl,
+                      fit: BoxFit.cover,
+                      width: 92,
+                      height: 92,
+                    ),
                   ),
           ),
 
-          // Outer frame: active SVGA frame or default mine_avatar_ic.webp
+          // Outer frame: active SVGA frame
           if (hasFrame)
             Positioned.fill(
               child: IgnorePointer(
                 child: SvgaFrame(
                   svgaPath: frame,
                   size: 122,
-                ),
-              ),
-            )
-          else
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Image.asset(
-                  'assets/mipmap-xxhdpi/mine_avatar_ic.webp',
-                  width: 122,
-                  height: 122,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
                 ),
               ),
             ),
@@ -1597,11 +1879,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     final wealthCfg = lvlService.getLevelConfig('wealth', user.wealthLevel);
     final gemsCfg = lvlService.getLevelConfig('gems', user.gemsLevel);
 
-    final hasVip = user.ownedVipItems.isNotEmpty ||
-        (_resolvedNecklacePath != null && _resolvedNecklacePath!.isNotEmpty) ||
-        (user.activeNecklace != null && user.activeNecklace!.isNotEmpty) ||
-        (user.rechargeLevel > 1) ||
-        (user.rechargeExp > 0);
 
     return GestureDetector(
       onTap: () {
@@ -1614,13 +1891,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // VIP / Necklace Badge - Only if user has VIP!
-          if (hasVip)
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: _buildVipNecklaceBadge(user),
-            ),
-
           // Wealth Level Badge
           Padding(
             padding: const EdgeInsets.only(left: 8),
@@ -1693,50 +1963,95 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     );
   }
 
-  /// VIP Necklace badge beside the level (قلادة VIP SVGA فقط بدون صندوق برتقالي وبدون نص VIP)
-  Widget _buildVipNecklaceBadge(UserModel user) {
-    String necklace = _resolvedNecklacePath ?? user.activeNecklace ?? '';
-    if (necklace.isEmpty) {
-      final lvl = user.rechargeLevel.clamp(1, 5);
-      necklace = 'assets/svga/v${lvl}_left_bottom.svga';
-    } else if (_necklacesMap.containsKey(necklace)) {
-      final item = _necklacesMap[necklace]!;
-      necklace = item['svga_url']?.toString() ?? item['image_url']?.toString() ?? necklace;
+  /// Necklaces row directly under the levels row (تاخذ حتى 4 قلادات جنب بعض)
+  Widget _buildNecklacesRow(UserModel user) {
+    final List<String> necklaces = [];
+    final seen = <String>{};
+
+    void addNecklace(String? path) {
+      if (path == null || path.isEmpty || path == 'null') return;
+      String resolved = path;
+      if (_necklacesMap.containsKey(path)) {
+        final item = _necklacesMap[path]!;
+        resolved = item['svga_url']?.toString() ?? item['image_url']?.toString() ?? path;
+      }
+      if (resolved.isNotEmpty && seen.add(resolved)) {
+        necklaces.add(resolved);
+      }
     }
 
-    return SizedBox(
-      width: 28,
-      height: 28,
-      child: SvgaFrame(
-        svgaPath: necklace,
-        size: 28,
-        fit: BoxFit.contain,
-      ),
-    );
-  }
-
-  /// Active Necklace (القلادات تحت المستويات)
-  Widget _buildNecklaceView(String necklaceAsset) {
-    String path = necklaceAsset;
-    if (_necklacesMap.containsKey(path)) {
-      final item = _necklacesMap[path]!;
-      path = item['svga_url']?.toString() ?? item['image_url']?.toString() ?? path;
+    // 1. Active equipped necklace
+    if (_resolvedNecklacePath != null && _resolvedNecklacePath!.isNotEmpty) {
+      addNecklace(_resolvedNecklacePath);
+    } else if (user.activeNecklace != null && user.activeNecklace!.isNotEmpty) {
+      addNecklace(user.activeNecklace);
     }
 
-    return Container(
-      height: 48,
-      width: 140,
-      decoration: BoxDecoration(
-        color: const Color(0xFF222028),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0x33FFD770)),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: SvgaFrame(
-          svgaPath: path,
-          size: 48,
-          fit: BoxFit.contain,
+    // 2. Recharge Agent Necklace (خاص بوكيل الشحن فقط)
+    final isRechargeAgent = user.isRechargeAgent ||
+        (user.rechargeAgencyName != null && user.rechargeAgencyName!.isNotEmpty);
+    if (isRechargeAgent) {
+      final config = DynamicConfigService.instance;
+      final rechargeNecklace = config.rechargeAgentNecklaceSvga.isNotEmpty
+          ? config.rechargeAgentNecklaceSvga
+          : config.rechargeAgentNecklaceImg;
+      if (rechargeNecklace.isNotEmpty) {
+        addNecklace(rechargeNecklace);
+      }
+    }
+
+    // 3. Agency Leader / Agent Necklace (Auto-injected if Agency Owner)
+    final isAgencyOwner = _agencyData != null && (_agencyData!['role'] == 'owner' || _agencyData!['owner_id']?.toString() == user.uid);
+    if (isAgencyOwner) {
+      final config = DynamicConfigService.instance;
+      final leaderNecklace = config.agencyLeaderNecklaceSvga.isNotEmpty
+          ? config.agencyLeaderNecklaceSvga
+          : config.agencyLeaderNecklaceImg;
+      if (leaderNecklace.isNotEmpty) {
+        addNecklace(leaderNecklace);
+      }
+    }
+
+    // 4. Agency Host Necklace (Auto-injected if Agency Host)
+    if (_agencyData != null) {
+      final config = DynamicConfigService.instance;
+      final hostNecklace = config.agencyHostNecklaceSvga.isNotEmpty
+          ? config.agencyHostNecklaceSvga
+          : config.agencyHostNecklaceImg;
+      if (hostNecklace.isNotEmpty) {
+        addNecklace(hostNecklace);
+      }
+    }
+
+    // 5. Owned Necklaces
+    for (final n in user.ownedNecklaces) {
+      addNecklace(n);
+    }
+
+    final displayList = necklaces.take(4).toList();
+    if (displayList.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            for (int i = 0; i < displayList.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              SizedBox(
+                width: 72,
+                height: 72,
+                child: SvgaFrame(
+                  key: ValueKey('necklace_${i}_${displayList[i]}'),
+                  svgaPath: displayList[i],
+                  size: 72,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ],
+          ],
         ),
       ),
     );
@@ -1767,7 +2082,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
     if (resolvedMedals.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 48,
+      height: 62,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: resolvedMedals.length.clamp(0, 10),
@@ -1780,18 +2095,18 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           return Tooltip(
             message: m['name'] ?? '',
             child: SizedBox(
-              width: 46,
-              height: 46,
+              width: 60,
+              height: 60,
               child: isSvga
                   ? SvgaFrame(
                       svgaPath: url,
-                      size: 46,
+                      size: 60,
                       fit: BoxFit.contain,
                     )
                   : CachedImg(
                       url,
-                      width: 46,
-                      height: 46,
+                      width: 60,
+                      height: 60,
                       fit: BoxFit.contain,
                       error: (_, __, ___) => const SizedBox.shrink(),
                     ),
@@ -2675,7 +2990,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final convId = '${sorted[0]}_${sorted[1]}';
     _messagesSub = _firebaseService.privateMessagesStream(convId).listen((msgs) {
       if (mounted) {
-        setState(() => _messages = msgs);
+        final pendingTemp = _messages.where((m) => m.msgId.startsWith('temp_') &&
+            !msgs.any((s) => s.text == m.text && s.senderUid == m.senderUid)).toList();
+        final combined = [...msgs, ...pendingTemp];
+        combined.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        setState(() => _messages = combined);
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
       }
     });
@@ -2700,6 +3019,20 @@ class _ChatScreenState extends State<ChatScreen> {
     final user = userProvider.currentUser;
     if (user == null) return;
 
+    final tempMsg = MessageModel(
+      msgId: 'temp_${DateTime.now().millisecondsSinceEpoch}',
+      senderUid: user.uid,
+      senderName: user.name,
+      senderPhotoUrl: user.photoUrl,
+      text: text,
+      type: 'text',
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+    );
+    setState(() {
+      _messages.add(tempMsg);
+    });
+    _scrollToBottom();
+
     try {
       await _firebaseService.sendPrivateMessage(
         senderId: user.uid,
@@ -2713,14 +3046,20 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (e) {
       debugPrint('sendPrivateMessage error: $e');
       if (mounted) {
+        final errorMsg = e.toString().contains('Exception: ') 
+            ? e.toString().replaceAll(RegExp(r'^.*Exception: '), '') 
+            : 'فشل إرسال الرسالة، يرجى المحاولة مرة أخرى';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to send message')),
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
         );
       }
     }
   }
 
   Future<void> _pickImage() async {
+    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
+    if (user == null) return;
+
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
@@ -2730,9 +3069,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     setState(() => _sendingImage = true);
     try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-      final user = userProvider.currentUser;
-      if (user == null) return;
 
       final imageUrl = await CloudinaryService().uploadImage(
         File(image.path),
@@ -2883,8 +3219,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     error: (_, __, ___) => Container(
                       width: 200,
                       height: 200,
-                      color: Colors.white54,
-                      child: const Icon(Icons.broken_image),
+                      color: Colors.white12,
+                      child: const Icon(Icons.image, color: Colors.white24, size: 36),
                     ),
                   ),
                 ),
