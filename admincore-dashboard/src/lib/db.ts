@@ -496,8 +496,8 @@ export async function updateUser(uid: string, data: Partial<UserModel>) {
 
           await client.from('host_agency_members').update({
             diamonds: newDia,
-            diamonds_balance: newBal,
-            diamonds_available: newBal,
+            diamonds_balance: newDia,
+            diamonds_available: newDia,
             diamonds_earned_monthly: newMonthly,
             diamonds_earned_cumulative: newCum,
           }).eq('id', member.id);
@@ -587,8 +587,8 @@ export async function adjustUserDiamonds(
           .from('host_agency_members')
           .update({
             diamonds: newDiamonds,
-            diamonds_balance: newBal,
-            diamonds_available: newBal,
+            diamonds_balance: newDiamonds,
+            diamonds_available: newDiamonds,
             diamonds_earned_monthly: newMonthly,
             diamonds_earned_cumulative: newCum,
           })
@@ -912,9 +912,26 @@ export async function addGift(id: string, data: GiftModel) {
 }
 
 export async function deleteGift(id: string) {
-
   try {
-    await supabase.from('gifts').delete().eq('id', id);
+    // 1. Unlink historical sent_gifts so foreign key constraint does not block deletion with 409 Conflict
+    try {
+      await supabase.from('sent_gifts').update({ gift_id: null }).eq('gift_id', id);
+    } catch (_) {}
+
+    // 2. Clean from backpack or temporary tables
+    try {
+      await supabase.from('backpack_items').delete().eq('gift_id', id);
+    } catch (_) {}
+    try {
+      await supabase.from('room_gifts').delete().eq('gift_id', id);
+    } catch (_) {}
+
+    // 3. Delete the gift itself
+    const { error } = await supabase.from('gifts').delete().eq('id', id);
+    if (error) {
+      console.warn('deleteGift error:', error);
+      throw error;
+    }
   } catch (e) {
     console.warn('deleteGift failed:', e);
   }
@@ -1963,8 +1980,8 @@ export async function getHostAgencyMembers(agencyId?: string): Promise<HostAgenc
         coins: Number(u?.coins || 0),
         diamonds_earned_monthly: monthlyDiamonds,
         diamondsEarnedMonthly: monthlyDiamonds,
-        diamonds_balance: Number(m.diamonds_balance || m.diamonds || u?.diamonds || 0),
-        diamondsBalance: Number(m.diamonds_balance || m.diamonds || u?.diamonds || 0),
+        diamonds_balance: Number(u?.diamonds ?? m.diamonds_balance ?? m.diamonds ?? 0),
+        diamondsBalance: Number(u?.diamonds ?? m.diamonds_balance ?? m.diamonds ?? 0),
         joined_at: joinedDate,
         joinedAt: joinedDate,
       };
